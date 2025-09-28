@@ -63,3 +63,11 @@ yarn-error.log*
 # Build artifacts
 dist/
 build/
+
+# Demo and test files
+demo/
+对话.txt
+*.txt
+
+# Deprecated/redundant files
+server/src/main/resources/static/

@@ -59,8 +59,11 @@ run-agent.bat http://your-server:8080 your-register-token
 ```
 
 ### 3. 访问Web界面
-- **主界面**: http://localhost:8080
+- **前端页面**: 直接打开 `web/index.html` (推荐使用HTTP服务器)
+- **API接口**: http://localhost:8080/api/*
 - **数据库控制台**: http://localhost:8080/h2-console (开发环境)
+
+**注意**: 项目采用前后端分离架构，前端文件在 `web/` 目录下独立部署。
 
 ## 🛠️ 技术栈
 
