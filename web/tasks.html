@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任务管理 - LightScript 管理平台</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/tasks.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <div class="navbar-brand">
+                <h1>LightScript 管理平台</h1>
+            </div>
+            <div class="navbar-nav">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="dashboard.html" class="nav-link">仪表盘</a>
+                <a href="agents.html" class="nav-link">客户端管理</a>
+                <a href="tasks.html" class="nav-link active">任务管理</a>
+                <a href="scripts.html" class="nav-link">脚本管理</a>
+                <div class="nav-user">
+                    <span v-if="userInfo.username">{{ userInfo.username }}</span>
+                    <el-button type="text" @click="logout" v-if="userInfo.username">退出</el-button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="container">
+                <div class="page-header">
+                    <h2>任务管理</h2>
+                    <p>创建、监控和管理脚本执行任务</p>
+                </div>
+
+                <!-- 工具栏 -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <el-input 
+                            v-model="searchKeyword" 
+                            placeholder="搜索任务..." 
+                            prefix-icon="el-icon-search"
+                            style="width: 300px;"
+                            @input="handleSearch">
+                        </el-input>
+                        <el-select v-model="statusFilter" placeholder="状态筛选" style="width: 120px; margin-left: 10px;">
+                            <el-option label="全部" value=""></el-option>
+                            <el-option label="等待中" value="PENDING"></el-option>
+                            <el-option label="运行中" value="RUNNING"></el-option>
+                            <el-option label="成功" value="SUCCESS"></el-option>
+                            <el-option label="失败" value="FAILED"></el-option>
+                            <el-option label="超时" value="TIMEOUT"></el-option>
+                        </el-select>
+                        <el-date-picker
+                            v-model="dateRange"
+                            type="daterange"
+                            range-separator="至"
+                            start-placeholder="开始日期"
+                            end-placeholder="结束日期"
+                            style="margin-left: 10px;">
+                        </el-date-picker>
+                    </div>
+                    <div class="toolbar-right">
+                        <el-button type="primary" @click="refreshTasks">
+                            <i class="el-icon-refresh"></i> 刷新
+                        </el-button>
+                        <el-button type="success" @click="showCreateTaskDialog = true">
+                            <i class="el-icon-plus"></i> 创建任务
+                        </el-button>
+                        <el-button type="warning" @click="showBatchTaskDialog = true">
+                            <i class="el-icon-s-promotion"></i> 批量任务
+                        </el-button>
+                    </div>
+                </div>
+
+                <!-- 任务列表 -->
+                <div class="tasks-table">
+                    <el-table :data="filteredTasks" style="width: 100%" v-loading="loading">
+                        <el-table-column prop="taskId" label="任务ID" width="200">
+                            <template #default="scope">
+                                <el-link type="primary" @click="viewTaskDetail(scope.row)">
+                                    {{ scope.row.taskId.substring(0, 16) }}...
+                                </el-link>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="agentId" label="客户端" width="150">
+                            <template #default="scope">
+                                {{ getAgentName(scope.row.agentId) }}
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="scriptLang" label="脚本类型" width="100">
+                            <template #default="scope">
+                                <el-tag size="small">{{ scope.row.scriptLang }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="status" label="状态" width="100">
+                            <template #default="scope">
+                                <el-tag :type="getTaskStatusType(scope.row.status)" size="small">
+                                    {{ getTaskStatusText(scope.row.status) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="createdBy" label="创建者" width="100"></el-table-column>
+                        
+                        <el-table-column prop="createdAt" label="创建时间" width="160">
+                            <template #default="scope">
+                                {{ formatDateTime(scope.row.createdAt) }}
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="finishedAt" label="完成时间" width="160">
+                            <template #default="scope">
+                                {{ scope.row.finishedAt ? formatDateTime(scope.row.finishedAt) : '-' }}
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column label="操作" width="200">
+                            <template #default="scope">
+                                <el-button size="small" @click="viewTaskDetail(scope.row)">详情</el-button>
+                                <el-button size="small" type="primary" @click="viewTaskLogs(scope.row)">日志</el-button>
+                                <el-button 
+                                    size="small" 
+                                    type="danger" 
+                                    @click="cancelTask(scope.row)"
+                                    v-if="scope.row.status === 'PENDING' || scope.row.status === 'RUNNING'">
+                                    取消
+                                </el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+
+                <!-- 分页 -->
+                <div class="pagination">
+                    <el-pagination
+                        v-model:current-page="currentPage"
+                        v-model:page-size="pageSize"
+                        :page-sizes="[10, 20, 50, 100]"
+                        :total="totalTasks"
+                        layout="total, sizes, prev, pager, next, jumper"
+                        @size-change="handleSizeChange"
+                        @current-change="handleCurrentChange">
+                    </el-pagination>
+                </div>
+            </div>
+        </div>
+
+        <!-- 创建任务对话框 -->
+        <el-dialog v-model="showCreateTaskDialog" title="创建任务" width="600px">
+            <el-form :model="createTaskForm" label-width="100px">
+                <el-form-item label="选择客户端">
+                    <el-select v-model="createTaskForm.agentId" placeholder="请选择客户端" style="width: 100%;">
+                        <el-option 
+                            v-for="agent in onlineAgents" 
+                            :key="agent.agentId" 
+                            :label="agent.hostname + ' (' + agent.osType + ')'" 
+                            :value="agent.agentId">
+                        </el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="脚本类型">
+                    <el-select v-model="createTaskForm.scriptLang" placeholder="请选择脚本类型">
+                        <el-option label="Bash" value="bash"></el-option>
+                        <el-option label="PowerShell" value="powershell"></el-option>
+                        <el-option label="CMD" value="cmd"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="脚本内容">
+                    <el-input 
+                        v-model="createTaskForm.scriptContent" 
+                        type="textarea" 
+                        :rows="8" 
+                        placeholder="请输入脚本内容">
+                    </el-input>
+                </el-form-item>
+                <el-form-item label="超时时间">
+                    <el-input-number 
+                        v-model="createTaskForm.timeoutSec" 
+                        :min="1" 
+                        :max="3600"
+                        controls-position="right">
+                    </el-input-number>
+                    <span style="margin-left: 10px; color: #999;">秒</span>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showCreateTaskDialog = false">取消</el-button>
+                <el-button type="primary" @click="submitCreateTask" :loading="createTaskLoading">创建</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 批量任务对话框 -->
+        <el-dialog v-model="showBatchTaskDialog" title="批量创建任务" width="600px">
+            <el-form :model="batchTaskForm" label-width="100px">
+                <el-form-item label="选择客户端">
+                    <el-checkbox-group v-model="batchTaskForm.selectedAgents">
+                        <el-checkbox 
+                            v-for="agent in onlineAgents" 
+                            :key="agent.agentId" 
+                            :label="agent.agentId">
+                            {{ agent.hostname }} ({{ agent.osType }})
+                        </el-checkbox>
+                    </el-checkbox-group>
+                </el-form-item>
+                <el-form-item label="脚本类型">
+                    <el-select v-model="batchTaskForm.scriptLang" placeholder="请选择脚本类型">
+                        <el-option label="Bash" value="bash"></el-option>
+                        <el-option label="PowerShell" value="powershell"></el-option>
+                        <el-option label="CMD" value="cmd"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="脚本内容">
+                    <el-input 
+                        v-model="batchTaskForm.scriptContent" 
+                        type="textarea" 
+                        :rows="8" 
+                        placeholder="请输入脚本内容">
+                    </el-input>
+                </el-form-item>
+                <el-form-item label="超时时间">
+                    <el-input-number 
+                        v-model="batchTaskForm.timeoutSec" 
+                        :min="1" 
+                        :max="3600"
+                        controls-position="right">
+                    </el-input-number>
+                    <span style="margin-left: 10px; color: #999;">秒</span>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showBatchTaskDialog = false">取消</el-button>
+                <el-button type="primary" @click="submitBatchTask" :loading="batchTaskLoading">创建</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 任务详情对话框 -->
+        <el-dialog v-model="showTaskDetailDialog" title="任务详情" width="700px">
+            <div v-if="selectedTask" class="task-detail">
+                <el-descriptions :column="2" border>
+                    <el-descriptions-item label="任务ID">{{ selectedTask.taskId }}</el-descriptions-item>
+                    <el-descriptions-item label="客户端">{{ getAgentName(selectedTask.agentId) }}</el-descriptions-item>
+                    <el-descriptions-item label="脚本类型">{{ selectedTask.scriptLang }}</el-descriptions-item>
+                    <el-descriptions-item label="状态">
+                        <el-tag :type="getTaskStatusType(selectedTask.status)">
+                            {{ getTaskStatusText(selectedTask.status) }}
+                        </el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="创建者">{{ selectedTask.createdBy }}</el-descriptions-item>
+                    <el-descriptions-item label="超时时间">{{ selectedTask.timeoutSec }}秒</el-descriptions-item>
+                    <el-descriptions-item label="创建时间">{{ formatDateTime(selectedTask.createdAt) }}</el-descriptions-item>
+                    <el-descriptions-item label="完成时间">
+                        {{ selectedTask.finishedAt ? formatDateTime(selectedTask.finishedAt) : '-' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="退出码" v-if="selectedTask.exitCode !== null">
+                        {{ selectedTask.exitCode }}
+                    </el-descriptions-item>
+                </el-descriptions>
+                
+                <div style="margin-top: 20px;">
+                    <h4>脚本内容</h4>
+                    <el-input 
+                        :model-value="selectedTask.scriptContent" 
+                        type="textarea" 
+                        :rows="6" 
+                        readonly>
+                    </el-input>
+                </div>
+                
+                <div style="margin-top: 20px;" v-if="selectedTask.summary">
+                    <h4>执行摘要</h4>
+                    <p>{{ selectedTask.summary }}</p>
+                </div>
+            </div>
+        </el-dialog>
+
+        <!-- 任务日志对话框 -->
+        <el-dialog v-model="showLogsDialog" title="任务日志" width="900px">
+            <div class="logs-container">
+                <div class="logs-toolbar">
+                    <el-button size="small" @click="refreshLogs">刷新日志</el-button>
+                    <el-button size="small" @click="clearLogs">清空显示</el-button>
+                    <el-switch v-model="autoRefreshLogs" active-text="自动刷新"></el-switch>
+                </div>
+                <div class="logs-content">
+                    <pre v-for="log in taskLogs" :key="log.id" :class="'log-' + log.stream">{{ formatLogContent(log) }}</pre>
+                    <div v-if="taskLogs.length === 0" class="no-logs">暂无日志</div>
+                </div>
+            </div>
+        </el-dialog>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/tasks.js"></script>
+</body>
+</html>

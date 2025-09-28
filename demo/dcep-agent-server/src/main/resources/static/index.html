@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title id="title">首页</title>
+<meta name="viewport"
+	content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="stylesheet" href="../layui/css/layui.css">
+</head>
+<body>
+	<div style="width: 90%; margin: 10px auto;">
+		<form class="layui-form layui-form-pane" action="">
+			<div class="layui-form-item">
+				<label class="layui-form-label" style="width: 200px">文件/目录名：</label>
+				<div class="layui-input-inline" style="width: 600px">
+					<input type="text" id="filename" lay-verify="required"
+						placeholder="请输入文件或目录名" autocomplete="off" class="layui-input">
+				</div>
+				<button id="comfirBtn" type="button"
+					class="layui-btn layui-btn-normal">确定</button>
+			</div>
+		</form>
+	</div>
+	<div id="page" style="width: 90%; margin: 10px auto;">
+		<table class="layui-table" id="table1">
+			<colgroup>
+				<col>
+				<col>
+				<col>
+				<col>
+			</colgroup>
+			<thead>
+				<tr>
+					<th>文件名</th>
+					<th>类型</th>
+					<th>最后修改时间</th>
+					<th>大小</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td></td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+	<!-- 你的HTML代码 -->
+
+	<script src="../layui/layui.js"></script>
+	<script src="../js/jquery-3.4.1.min.js"></script>
+	<script>
+		//一般直接写在一个js文件中
+		$.ajax({
+			type : "get", //提交方式
+			url : "serverIp",//路径
+			data : "",
+			success : function(result) {//返回数据根据结果进行相应的处理
+				if (result.code == 0) {
+					//alert(result.data);
+					document.title = result.data;
+				} else {
+					layer.msg(result.msg);
+				}
+			}
+		});
+
+		var parentPath = "";//上级目录
+		var listFiles = function(dir) {
+			//layer.msg(dir);
+			$("#filename").val(dir);
+			if (dir.lastIndexOf("/") > 0) {
+				parentPath = dir.substring(0, dir.lastIndexOf("/"));
+				if (strCharPosition(parentPath, "/") <= 0) {
+					parentPath += "/";
+				}
+			} else {
+				parentPath = dir;
+			}
+			//layer.msg(parentPath);
+			$.ajax({
+				type : "get", //提交方式 
+				url : "file/list",//路径 
+				data : "filePath=" + dir,
+				success : function(result) {//返回数据根据结果进行相应的处理
+					//layer.msg(result);
+					if (result.code == 0) {
+						//layer.msg('success');
+						//var dataJson= $.parseJSON(result.data);
+						var files = result.data;
+						reloadTable(files);
+					} else {
+						layer.msg(result.msg);
+					}
+				}
+			});
+		}
+
+		var reloadTable = function(files) {
+			var testTbl = document.getElementById('table1');//$("#table1");
+			//$("#table1 tbody").html("");
+			$("#table1 tr:not(:first)").empty("");
+			if (parentPath != "") {
+				var newTr = testTbl.insertRow();
+				var newTd0 = newTr.insertCell();
+				var newTd1 = newTr.insertCell();
+				var newTd2 = newTr.insertCell();
+				var newTd3 = newTr.insertCell();
+				//var newTd3 = newTr.insertCell();
+				newTd0.innerHTML = '<a href="javascript:listFiles(\''
+						+ parentPath + '\')">..</a>'
+			}
+			if (files.length > 0) {
+				for (var i = 0; i < files.length; i++) {
+					var newTr = testTbl.insertRow();
+					//添加列
+					var newTd0 = newTr.insertCell();
+					var newTd1 = newTr.insertCell();
+					var newTd2 = newTr.insertCell();
+					var newTd3 = newTr.insertCell();
+					//var newTd3 = newTr.insertCell();
+					if (files[i].type == "D") {
+						newTd0.innerHTML = '<a href="javascript:listFiles(\''
+								+ files[i].fullName + '\')">'
+								+ files[i].fullName + '</a>';
+					} else {
+						newTd0.innerHTML = '<a href="file/down?filePath='
+							+ files[i].fullName + '&fileName='  + files[i].name + '">'
+							 + files[i].fullName + '</a>';
+					}
+					newTd1.innerText = files[i].type == "D" ? "目录" : "文件";
+					if(files[i].name.endsWith(".log")) {
+						newTd1.innerHTML = '<a href="logview?filePath=' + files[i].fullName + '">日志</a>'
+					}
+					newTd2.innerText = files[i].lastModified;
+					newTd3.innerText = files[i].size;
+				}
+			}
+
+		}
+
+		layui.use([ 'layer', 'form' ], function() {
+			//var layer = layui.layer ,form = layui.form;
+			//layer.msg('Hello World2');
+			//listFiles("d:/");
+		});
+
+		//检测一个字符在字符串中出现次数，参数字符串，一个字符，返回字符串出现的次数
+		function strCharPosition(str, cha) {
+			var pos;
+			var arr = [];
+			pos = str.indexOf(cha);
+			while (pos > -1) {
+				arr.push(pos);
+				pos = str.indexOf(cha, pos + 1);
+			}
+			return arr.length;
+		};
+
+		$("#comfirBtn").click(function() {
+			//alert($("#filename").val());
+			listFiles($("#filename").val());
+		});
+		
+	</script>
+
+</body>
+</html>

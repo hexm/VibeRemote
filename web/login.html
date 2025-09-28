@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户登录 - LightScript 管理平台</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+    <div id="app">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <h2>LightScript 管理平台</h2>
+                    <p>分布式脚本执行管理系统</p>
+                </div>
+                
+                <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef" class="login-form">
+                    <el-form-item prop="username">
+                        <el-input 
+                            v-model="loginForm.username" 
+                            placeholder="用户名" 
+                            prefix-icon="el-icon-user"
+                            size="large">
+                        </el-input>
+                    </el-form-item>
+                    
+                    <el-form-item prop="password">
+                        <el-input 
+                            v-model="loginForm.password" 
+                            type="password" 
+                            placeholder="密码" 
+                            prefix-icon="el-icon-lock"
+                            size="large"
+                            @keyup.enter="handleLogin">
+                        </el-input>
+                    </el-form-item>
+                    
+                    <el-form-item>
+                        <el-checkbox v-model="rememberMe">记住我</el-checkbox>
+                    </el-form-item>
+                    
+                    <el-form-item>
+                        <el-button 
+                            type="primary" 
+                            size="large" 
+                            style="width: 100%;" 
+                            :loading="loginLoading"
+                            @click="handleLogin">
+                            登录
+                        </el-button>
+                    </el-form-item>
+                </el-form>
+                
+                <div class="login-footer">
+                    <p>默认账号：admin / admin123</p>
+                    <p>普通用户：user / user123</p>
+                </div>
+            </div>
+            
+            <!-- 背景装饰 -->
+            <div class="bg-decoration">
+                <div class="bg-circle bg-circle-1"></div>
+                <div class="bg-circle bg-circle-2"></div>
+                <div class="bg-circle bg-circle-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/login.js"></script>
+</body>
+</html>

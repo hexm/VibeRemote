@@ -1,0 +1,338 @@
+/* 客户端管理页面样式 */
+
+/* 客户端表格 */
+.agents-table {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    border: 1px solid #f0f0f0;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.agents-table .el-table {
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+}
+
+/* 客户端信息显示 */
+.agent-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.agent-info strong {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.agent-id {
+    font-size: 12px;
+    color: #999;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* 操作系统标签 */
+.el-tag--primary {
+    background: #e3f2fd;
+    color: #1976d2;
+    border: none;
+}
+
+.el-tag--success {
+    background: #e8f5e8;
+    color: #2e7d32;
+    border: none;
+}
+
+/* 状态标签 */
+.el-tag--danger {
+    background: #ffebee;
+    color: #c62828;
+    border: none;
+}
+
+/* 选中的客户端 */
+.selected-agents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 32px;
+    padding: 8px;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    background: #fafafa;
+}
+
+.selected-agents .el-tag {
+    margin: 0;
+}
+
+.selected-agents:empty::before {
+    content: '请选择客户端...';
+    color: #c0c4cc;
+    font-size: 14px;
+}
+
+/* 客户端详情 */
+.agent-detail .el-descriptions {
+    margin-top: 0;
+}
+
+.agent-detail .el-descriptions__label {
+    font-weight: 600;
+    color: #333;
+}
+
+.agent-detail .el-descriptions__content {
+    color: #666;
+}
+
+/* 批量任务表单 */
+.batch-task-form .el-form-item__label {
+    font-weight: 600;
+}
+
+.batch-task-form .el-textarea__inner {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* 搜索和筛选 */
+.toolbar .el-input {
+    border-radius: 8px;
+}
+
+.toolbar .el-select {
+    border-radius: 8px;
+}
+
+.toolbar .el-input__inner,
+.toolbar .el-select .el-input__inner {
+    border: 1px solid #e4e7ed;
+    transition: all 0.3s ease;
+}
+
+.toolbar .el-input__inner:focus,
+.toolbar .el-select .el-input__inner:focus {
+    border-color: #409EFF;
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+}
+
+/* 表格行悬停效果 */
+.agents-table .el-table__row:hover {
+    background-color: #f8f9fa !important;
+}
+
+/* 在线状态指示器 */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-indicator::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s infinite;
+}
+
+.status-online::before {
+    background: #67C23A;
+}
+
+.status-offline::before {
+    background: #F56C6C;
+    animation: none;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* CPU和内存显示 */
+.resource-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.resource-bar {
+    width: 60px;
+    height: 4px;
+    background: #f0f0f0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.resource-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.resource-bar-fill.low {
+    background: #67C23A;
+}
+
+.resource-bar-fill.medium {
+    background: #E6A23C;
+}
+
+.resource-bar-fill.high {
+    background: #F56C6C;
+}
+
+/* 操作按钮组 */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.action-buttons .el-button {
+    padding: 5px 12px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+    .agents-table .el-table__column--selection {
+        width: 40px !important;
+    }
+    
+    .agent-info strong {
+        font-size: 13px;
+    }
+    
+    .agent-id {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 768px) {
+    .toolbar {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .toolbar-left {
+        flex-direction: column;
+        width: 100%;
+        gap: 10px;
+    }
+    
+    .toolbar-left .el-input,
+    .toolbar-left .el-select {
+        width: 100% !important;
+    }
+    
+    .toolbar-right {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .agents-table .el-table {
+        font-size: 13px;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .action-buttons .el-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .selected-agents {
+        flex-direction: column;
+        gap: 6px;
+    }
+    
+    .agent-info {
+        gap: 2px;
+    }
+    
+    .agent-info strong {
+        font-size: 12px;
+    }
+    
+    .agent-id {
+        font-size: 10px;
+    }
+}
+
+/* 空状态 */
+.empty-agents {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+}
+
+.empty-agents i {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.5;
+}
+
+.empty-agents h3 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    color: #666;
+}
+
+.empty-agents p {
+    margin: 0 0 20px 0;
+    font-size: 14px;
+}
+
+/* 加载状态 */
+.agents-loading {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+}
+
+.agents-loading .el-icon-loading {
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+/* 批量操作提示 */
+.batch-tip {
+    background: #f0f9ff;
+    border: 1px solid #b3d8ff;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    color: #0369a1;
+    font-size: 14px;
+}
+
+.batch-tip i {
+    margin-right: 8px;
+    color: #409EFF;
+}

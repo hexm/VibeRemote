@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title th:text="${serverIp}"></title>
+</head>
+<body>
+<p th:text=" ${logFileName} " />
+<pre th:text="${content}"></pre>
+<!-- <p th:text=" ${content} " />  -->
+<!-- <xmp th:text="${content}"></xmp> -->
+<!--
+<textarea id="logtext" th:text="${content}"  style="width:100%; height: 100%; position:absolute; top: 0; left: 0; z-index: 2;"></textarea>
+-->
+<script src="../js/jquery-3.4.1.min.js"></script>
+<script src="../js/auto-line-number.js"></script>
+<script>
+    // $("#logtext").setTextareaCount({
+    //     width: "30px",
+    //     bgColor: "#3e4ef9",
+    //     color: "#FFF",
+    //     display: "inline-block"
+    // });
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表盘 - LightScript 管理平台</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <div class="navbar-brand">
+                <h1>LightScript 管理平台</h1>
+            </div>
+            <div class="navbar-nav">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="dashboard.html" class="nav-link active">仪表盘</a>
+                <a href="agents.html" class="nav-link">客户端管理</a>
+                <a href="tasks.html" class="nav-link">任务管理</a>
+                <a href="scripts.html" class="nav-link">脚本管理</a>
+                <div class="nav-user">
+                    <span v-if="userInfo.username">{{ userInfo.username }}</span>
+                    <el-button type="text" @click="logout" v-if="userInfo.username">退出</el-button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="container">
+                <div class="page-header">
+                    <h2>系统仪表盘</h2>
+                    <p>实时监控系统运行状态和统计信息</p>
+                </div>
+
+                <!-- 统计卡片 -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon online">
+                            <i class="el-icon-monitor"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-number">{{ stats.onlineAgents || 0 }}</div>
+                            <div class="stat-label">在线客户端</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon offline">
+                            <i class="el-icon-warning-outline"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-number">{{ stats.offlineAgents || 0 }}</div>
+                            <div class="stat-label">离线客户端</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon running">
+                            <i class="el-icon-loading"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-number">{{ stats.runningTasks || 0 }}</div>
+                            <div class="stat-label">运行中任务</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon completed">
+                            <i class="el-icon-check"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-number">{{ stats.completedTasks || 0 }}</div>
+                            <div class="stat-label">已完成任务</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图表区域 -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>客户端状态分布</h3>
+                        </div>
+                        <div class="chart-content">
+                            <div id="agentStatusChart" style="height: 300px;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>任务执行趋势</h3>
+                        </div>
+                        <div class="chart-content">
+                            <div id="taskTrendChart" style="height: 300px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 最近活动 -->
+                <div class="activity-section">
+                    <div class="section-header">
+                        <h3>最近活动</h3>
+                        <el-button type="text" @click="refreshData">刷新</el-button>
+                    </div>
+                    
+                    <el-table :data="recentActivities" style="width: 100%">
+                        <el-table-column prop="time" label="时间" width="180">
+                            <template #default="scope">
+                                {{ formatDateTime(scope.row.time) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="type" label="类型" width="120">
+                            <template #default="scope">
+                                <el-tag :type="getActivityType(scope.row.type)">
+                                    {{ scope.row.type }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="description" label="描述"></el-table-column>
+                        <el-table-column prop="status" label="状态" width="100">
+                            <template #default="scope">
+                                <el-tag :type="getStatusType(scope.row.status)" size="small">
+                                    {{ scope.row.status }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightScript 管理平台 - 首页</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <div class="navbar-brand">
+                <h1>LightScript 管理平台</h1>
+            </div>
+            <div class="navbar-nav">
+                <a href="index.html" class="nav-link active">首页</a>
+                <a href="dashboard.html" class="nav-link">仪表盘</a>
+                <a href="agents.html" class="nav-link">客户端管理</a>
+                <a href="tasks.html" class="nav-link">任务管理</a>
+                <a href="scripts.html" class="nav-link">脚本管理</a>
+                <div class="nav-user">
+                    <span v-if="userInfo.username">{{ userInfo.username }}</span>
+                    <el-button type="text" @click="logout" v-if="userInfo.username">退出</el-button>
+                    <a href="login.html" v-else class="nav-link">登录</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="hero-section">
+                <div class="hero-content">
+                    <h2>分布式脚本执行管理平台</h2>
+                    <p>统一管理多台服务器，批量执行脚本任务，实时监控执行状态</p>
+                    <div class="hero-actions">
+                        <el-button type="primary" size="large" @click="goToDashboard">进入管理后台</el-button>
+                        <el-button size="large" @click="viewDocumentation">查看文档</el-button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 功能特性 -->
+            <div class="features-section">
+                <div class="container">
+                    <h3>核心功能</h3>
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="el-icon-monitor"></i>
+                            </div>
+                            <h4>客户端管理</h4>
+                            <p>实时监控客户端状态，支持Windows和Linux系统</p>
+                            <el-button type="text" @click="goToAgents">管理客户端 →</el-button>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="el-icon-document"></i>
+                            </div>
+                            <h4>任务管理</h4>
+                            <p>创建和管理脚本任务，支持批量执行和实时监控</p>
+                            <el-button type="text" @click="goToTasks">管理任务 →</el-button>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="el-icon-edit"></i>
+                            </div>
+                            <h4>脚本管理</h4>
+                            <p>管理脚本模板，支持Bash、PowerShell、CMD脚本</p>
+                            <el-button type="text" @click="goToScripts">管理脚本 →</el-button>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="el-icon-data-line"></i>
+                            </div>
+                            <h4>实时监控</h4>
+                            <p>查看系统统计信息，监控任务执行状态和日志</p>
+                            <el-button type="text" @click="goToDashboard">查看仪表盘 →</el-button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快速开始 -->
+            <div class="quickstart-section">
+                <div class="container">
+                    <h3>快速开始</h3>
+                    <div class="quickstart-steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h4>启动服务器</h4>
+                                <p>运行后端服务，启动Web管理界面</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h4>部署客户端</h4>
+                                <p>在目标机器上部署Agent程序</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h4>创建任务</h4>
+                                <p>通过Web界面创建和管理脚本任务</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="container">
+                <p>&copy; 2024 LightScript 管理平台. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/index.js"></script>
+</body>
+</html>
