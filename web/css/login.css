@@ -1,5 +1,17 @@
 /* 登录页面样式 */
 
+/* 移除所有可能的双重边框 */
+.login-form * {
+    outline: none !important;
+}
+
+.login-form .el-form-item,
+.login-form .el-form-item__content,
+.login-form .el-input {
+    border: none !important;
+    box-shadow: none !important;
+}
+
 .login-container {
     min-height: 100vh;
     display: flex;
@@ -50,24 +62,49 @@
 
 .login-form .el-form-item {
     margin-bottom: 20px;
+    border: none !important;
+    outline: none !important;
+}
+
+.login-form .el-form-item__content {
+    line-height: normal;
+    border: none !important;
+    outline: none !important;
+}
+
+.login-form .el-form-item__error {
+    padding-top: 4px;
+    border: none !important;
 }
 
 .login-form .el-input {
     height: 50px;
 }
 
-.login-form .el-input__inner {
-    height: 50px;
-    border-radius: 12px;
-    border: 2px solid #e6e6e6;
-    padding-left: 45px;
-    font-size: 16px;
-    transition: all 0.3s ease;
+.login-form .el-input__wrapper {
+    padding: 0 !important;
+    border-radius: 12px !important;
+    border: 2px solid #e6e6e6 !important;
+    box-shadow: none !important;
+    background-color: #fff !important;
+    transition: all 0.3s ease !important;
+    outline: none !important;
 }
 
-.login-form .el-input__inner:focus {
-    border-color: #409EFF;
-    box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1);
+.login-form .el-input__wrapper:hover {
+    border-color: #c0c4cc !important;
+}
+
+.login-form .el-input.is-focus .el-input__wrapper {
+    border-color: #409EFF !important;
+    box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1) !important;
+}
+
+.login-form .el-input__inner {
+    height: 46px;
+    padding-left: 40px;
+    font-size: 16px;
+    border: none;
 }
 
 .login-form .el-input__prefix {
@@ -217,9 +254,13 @@
 }
 
 /* 错误状态 */
+.login-form .el-form-item.is-error .el-input__wrapper {
+    border-color: #f56c6c !important;
+    box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.1) !important;
+}
+
 .login-form .el-form-item.is-error .el-input__inner {
-    border-color: #f56c6c;
-    box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.1);
+    border: none !important;
 }
 
 /* 动画效果 */

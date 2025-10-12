@@ -67,6 +67,23 @@ body {
     border-left: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+.nav-user span {
+    color: white;
+    font-weight: 500;
+}
+
+.nav-user .el-button--text {
+    color: white !important;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    transition: all 0.3s ease;
+}
+
+.nav-user .el-button--text:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
 /* 主内容区 */
 .main-content {
     min-height: calc(100vh - 60px);

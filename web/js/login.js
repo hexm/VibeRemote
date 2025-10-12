@@ -25,10 +25,12 @@ const app = createApp({
                             password: loginForm.value.password,
                         });
                         const token = response.data.token;
+                        const username = response.data.username;
                         localStorage.setItem('jwt_token', token);
+                        localStorage.setItem('username', username);
                         window.location.href = '/index.html';
                     } catch (error) {
-                        ElMessage.error(error.response?.data?.message || '登录失败');
+                        ElMessage.error(error.response?.data?.error || '登录失败');
                     } finally {
                         loginLoading.value = false;
                     }
