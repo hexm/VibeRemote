@@ -1,5 +1,7 @@
 package com.example.lightscript.server.web;
 
+import com.example.lightscript.server.exception.BusinessException;
+import com.example.lightscript.server.exception.ErrorCode;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.TaskService;
@@ -25,28 +27,23 @@ public class AgentController {
 
 	@PostMapping("/register")
 	public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest req) {
-		try {
-			RegisterResponse response = agentService.register(req);
-			return ResponseEntity.ok(response);
-		} catch (IllegalArgumentException e) {
-			return ResponseEntity.status(403).build();
-		}
+		RegisterResponse response = agentService.register(req);
+		return ResponseEntity.ok(response);
 	}
 
 	@PostMapping("/heartbeat")
 	public ResponseEntity<Void> heartbeat(@Valid @RequestBody HeartbeatRequest req) {
 		boolean success = agentService.updateHeartbeat(req.getAgentId(), req.getAgentToken(), req);
-		if (success) {
-			return ResponseEntity.ok().build();
-		} else {
-			return ResponseEntity.status(403).build();
+		if (!success) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
+		return ResponseEntity.ok().build();
 	}
 
 	@GetMapping("/tasks/pull")
 	public ResponseEntity<PullTasksResponse> pull(@RequestParam String agentId, @RequestParam String agentToken, @RequestParam(defaultValue = "10") int max) {
 		if (!agentService.validateAgent(agentId, agentToken)) {
-			return ResponseEntity.status(403).build();
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
 		PullTasksResponse rsp = new PullTasksResponse();
 		rsp.setTasks(taskService.pullTasks(agentId, Math.min(Math.max(max, 1), 50)));
@@ -56,7 +53,7 @@ public class AgentController {
 	@PostMapping("/tasks/{taskId}/log")
 	public ResponseEntity<Void> log(@PathVariable String taskId, @Valid @RequestBody LogChunkRequest req) {
 		if (!agentService.validateAgent(req.getAgentId(), req.getAgentToken())) {
-			return ResponseEntity.status(403).build();
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
 		taskService.appendLog(taskId, req);
 		return ResponseEntity.ok().build();
@@ -65,7 +62,7 @@ public class AgentController {
 	@PostMapping("/tasks/{taskId}/finish")
 	public ResponseEntity<Void> finish(@PathVariable String taskId, @Valid @RequestBody FinishRequest req) {
 		if (!agentService.validateAgent(req.getAgentId(), req.getAgentToken())) {
-			return ResponseEntity.status(403).build();
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
 		taskService.finishTask(taskId, req);
 		return ResponseEntity.ok().build();
@@ -74,7 +71,7 @@ public class AgentController {
 	@PostMapping("/debug/enqueue")
 	public ResponseEntity<Map<String, String>> debugEnqueue(@RequestParam String agentId, @RequestParam String agentToken, @RequestBody TaskSpec spec) {
 		if (!agentService.validateAgent(agentId, agentToken)) {
-			return ResponseEntity.status(403).build();
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
 		String taskId = taskService.createTask(agentId, spec, "debug");
 		return ResponseEntity.ok(Map.of("taskId", taskId));

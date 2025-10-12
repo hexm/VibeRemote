@@ -1,8 +1,11 @@
 package com.example.lightscript.server.service;
 
 import com.example.lightscript.server.entity.Agent;
+import com.example.lightscript.server.exception.BusinessException;
+import com.example.lightscript.server.exception.ErrorCode;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.repository.AgentRepository;
+import com.example.lightscript.server.util.LogUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +33,7 @@ public class AgentService {
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
         if (!registerToken.equals(request.getRegisterToken())) {
-            throw new IllegalArgumentException("Invalid register token");
+            throw new BusinessException(ErrorCode.INVALID_REGISTER_TOKEN);
         }
         
         Agent agent = new Agent();
@@ -49,7 +52,8 @@ public class AgentService {
         response.setAgentId(agent.getAgentId());
         response.setAgentToken(agent.getAgentToken());
         
-        log.info("Agent registered: {} ({})", agent.getHostname(), agent.getAgentId());
+        LogUtil.logAgent("REGISTER", agent.getAgentId(), agent.getHostname(), 
+                String.format("OS: %s, IP: %s", agent.getOsType(), agent.getIp()));
         return response;
     }
     
@@ -110,7 +114,8 @@ public class AgentService {
             if ("ONLINE".equals(agent.getStatus())) {
                 agent.setStatus("OFFLINE");
                 agentRepository.save(agent);
-                log.warn("Agent {} ({}) marked as OFFLINE", agent.getHostname(), agent.getAgentId());
+                LogUtil.logAgent("STATUS_CHANGE", agent.getAgentId(), agent.getHostname(), 
+                        "ONLINE -> OFFLINE (heartbeat timeout)");
             }
         }
     }
