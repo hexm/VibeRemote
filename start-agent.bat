@@ -1,44 +1,50 @@
 @echo off
+chcp 65001 >nul
 echo ========================================
-echo LightScript 客户端启动脚本
+echo LightScript Agent Startup Script
 echo ========================================
 echo.
 
-REM 检查 Java 环境
+REM Check Java environment
 java -version >nul 2>&1
 if errorlevel 1 (
-    echo 错误: 未找到 Java 环境，请安装 JDK 1.8 或更高版本
+    echo ERROR: Java not found. Please install JDK 1.8 or higher
     pause
     exit /b 1
 )
 
-REM 检查客户端 jar 文件
-if not exist "agent\target\agent-*-jar-with-dependencies.jar" (
-    echo 错误: 未找到客户端 jar 文件，请先运行 mvn clean package
+REM Check agent jar file
+if not exist "agent\target\agent-0.1.0-SNAPSHOT-jar-with-dependencies.jar" (
+    echo ERROR: Agent jar file not found. Please run: mvn clean package
     pause
     exit /b 1
 )
 
-REM 设置环境变量
-set /p SERVER_URL="请输入服务器地址 (默认: http://localhost:8080): "
-if "%SERVER_URL%"=="" set SERVER_URL=http://localhost:8080
+REM Set default values
+set SERVER_URL=http://localhost:8080
+set REGISTER_TOKEN=dev-register-token
 
-set /p REGISTER_TOKEN="请输入注册令牌 (默认: dev-register-token): "
-if "%REGISTER_TOKEN%"=="" set REGISTER_TOKEN=dev-register-token
+REM Get user input for server URL
+set /p INPUT_SERVER="Enter server URL (default: %SERVER_URL%): "
+if not "%INPUT_SERVER%"=="" set SERVER_URL=%INPUT_SERVER%
 
-set LS_SERVER=%SERVER_URL%
-set LS_REGISTER_TOKEN=%REGISTER_TOKEN%
+REM Get user input for register token
+set /p INPUT_TOKEN="Enter register token (default: %REGISTER_TOKEN%): "
+if not "%INPUT_TOKEN%"=="" set REGISTER_TOKEN=%INPUT_TOKEN%
 
 echo.
-echo 配置信息:
-echo 服务器地址: %LS_SERVER%
-echo 注册令牌: %LS_REGISTER_TOKEN%
+echo Configuration:
+echo Server URL: %SERVER_URL%
+echo Register Token: %REGISTER_TOKEN%
 echo.
-echo 正在启动 LightScript 客户端...
-echo 按 Ctrl+C 停止客户端
+echo Starting LightScript Agent...
+echo Press Ctrl+C to stop the agent
 echo ========================================
 
+REM Start the agent with parameters
 cd agent\target
-java -jar agent-*-jar-with-dependencies.jar
+java -jar agent-0.1.0-SNAPSHOT-jar-with-dependencies.jar "%SERVER_URL%" "%REGISTER_TOKEN%"
 
+echo.
+echo Agent stopped.
 pause
