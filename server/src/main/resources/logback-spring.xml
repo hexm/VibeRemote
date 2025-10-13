@@ -3,9 +3,17 @@
     <!-- 控制台输出 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
+        <!-- 过滤掉一些不重要的日志 -->
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <evaluator class="ch.qos.logback.classic.boolex.OnMarkerEvaluator">
+                <marker>CONSOLE_IGNORE</marker>
+            </evaluator>
+            <onMismatch>NEUTRAL</onMismatch>
+            <onMatch>DENY</onMatch>
+        </filter>
     </appender>
 
     <!-- 文件输出 -->
@@ -70,13 +78,17 @@
         <appender-ref ref="CONSOLE"/>
     </logger>
 
-    <!-- SQL日志 -->
-    <logger name="org.hibernate.SQL" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE"/>
+    <!-- 完全关闭SQL调试日志 -->
+    <logger name="org.hibernate.SQL" level="OFF" additivity="false"/>
+    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="OFF" additivity="false"/>
+    <logger name="org.hibernate.type" level="OFF" additivity="false"/>
+    <logger name="org.hibernate" level="WARN" additivity="false">
+        <appender-ref ref="FILE"/>
     </logger>
     
-    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE" additivity="false">
-        <appender-ref ref="CONSOLE"/>
+    <!-- 关闭Spring Web的调试日志 -->
+    <logger name="org.springframework.web" level="WARN" additivity="false">
+        <appender-ref ref="FILE"/>
     </logger>
 
     <!-- 根日志记录器 -->
@@ -88,9 +100,13 @@
 
     <!-- 开发环境配置 -->
     <springProfile name="dev">
-        <root level="DEBUG">
+        <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
+        <!-- 开发环境只显示业务日志的DEBUG级别 -->
+        <logger name="com.example.lightscript.server" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
     </springProfile>
 
     <!-- 生产环境配置 -->

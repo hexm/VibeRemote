@@ -43,7 +43,9 @@ echo ========================================
 
 REM Start the agent with parameters
 cd agent\target
-java -jar agent-0.1.0-SNAPSHOT-jar-with-dependencies.jar "%SERVER_URL%" "%REGISTER_TOKEN%"
+
+echo Starting agent with UTF-8 encoding...
+java -Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -jar agent-0.1.0-SNAPSHOT-jar-with-dependencies.jar "%SERVER_URL%" "%REGISTER_TOKEN%"
 
 echo.
 echo Agent stopped.

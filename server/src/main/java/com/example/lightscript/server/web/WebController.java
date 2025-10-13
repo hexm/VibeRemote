@@ -13,7 +13,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,18 +87,20 @@ public class WebController {
     @PostMapping("/tasks/create")
     public ResponseEntity<Map<String, String>> createTask(
             @RequestParam String agentId,
-            @RequestBody TaskSpec taskSpec,
-            Principal principal) {
-        String taskId = taskService.createTask(agentId, taskSpec, principal.getName());
+            @RequestBody TaskSpec taskSpec) {
+        // 使用固定的创建者，避免Principal相关问题
+        String createdBy = "web-user";
+        String taskId = taskService.createTask(agentId, taskSpec, createdBy);
         return ResponseEntity.ok(Map.of("taskId", taskId));
     }
     
     @PostMapping("/tasks/batch")
     public ResponseEntity<Map<String, Object>> createBatchTasks(
             @RequestParam List<String> agentIds,
-            @RequestBody TaskSpec taskSpec,
-            Principal principal) {
-        List<String> taskIds = taskService.createBatchTasks(agentIds, taskSpec, principal.getName());
+            @RequestBody TaskSpec taskSpec) {
+        // 使用固定的创建者，避免Principal相关问题
+        String createdBy = "web-user";
+        List<String> taskIds = taskService.createBatchTasks(agentIds, taskSpec, createdBy);
         Map<String, Object> result = new HashMap<>();
         result.put("taskIds", taskIds);
         result.put("count", taskIds.size());
