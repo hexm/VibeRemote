@@ -47,6 +47,8 @@ public class AgentModels {
 		private Integer timeoutSec;
 		private Map<String, String> env;
 	}
+	
+	@Data
 	public static class PullTasksResponse {
 		private List<TaskSpec> tasks;
 	}

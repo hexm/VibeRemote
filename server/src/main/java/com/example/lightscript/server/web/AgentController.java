@@ -40,6 +40,15 @@ public class AgentController {
 		return ResponseEntity.ok().build();
 	}
 
+	@PostMapping("/offline")
+	public ResponseEntity<Void> offline(@RequestParam String agentId, @RequestParam String agentToken) {
+		boolean success = agentService.markOffline(agentId, agentToken);
+		if (!success) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		return ResponseEntity.ok().build();
+	}
+
 	@GetMapping("/tasks/pull")
 	public ResponseEntity<PullTasksResponse> pull(@RequestParam String agentId, @RequestParam String agentToken, @RequestParam(defaultValue = "10") int max) {
 		if (!agentService.validateAgent(agentId, agentToken)) {

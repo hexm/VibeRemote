@@ -75,6 +75,20 @@ class AgentApi {
 		}
 	}
 
+	void offline(String agentId, String agentToken) throws Exception {
+		String url = String.format("%s/api/agent/offline?agentId=%s&agentToken=%s", 
+				baseUrl, agentId, agentToken);
+		HttpRequest req = HttpRequest.newBuilder()
+				.uri(URI.create(url))
+				.timeout(Duration.ofSeconds(3))
+				.POST(HttpRequest.BodyPublishers.noBody())
+				.build();
+		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200) {
+			throw new RuntimeException("Offline notification failed: HTTP " + resp.statusCode());
+		}
+	}
+
 	Map<String, Object> pull(String agentId, String agentToken, int max) throws Exception {
 		String url = String.format("%s/api/agent/tasks/pull?agentId=%s&agentToken=%s&max=%d", baseUrl, agentId, agentToken, max);
 		HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();

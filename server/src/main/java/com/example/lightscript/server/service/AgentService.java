@@ -32,7 +32,11 @@ public class AgentService {
     
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
+        log.info("[Agent] Registration attempt from {} ({})", 
+                request.getHostname(), request.getOsType());
+        
         if (!registerToken.equals(request.getRegisterToken())) {
+            log.warn("[Agent] Registration failed - Invalid token from {}", request.getHostname());
             throw new BusinessException(ErrorCode.INVALID_REGISTER_TOKEN);
         }
         
@@ -52,7 +56,7 @@ public class AgentService {
             agent.setStatus("ONLINE");
             agent = agentRepository.save(agent);
             
-            log.info("Agent re-registered: {} ({}), ID kept: {}", 
+            log.info("[Agent] Re-registered: {} ({}) - AgentId: {}", 
                     agent.getHostname(), agent.getOsType(), agent.getAgentId());
         } else {
             // 不存在，尝试创建新Agent
@@ -70,7 +74,7 @@ public class AgentService {
                 agent = agentRepository.save(agent);
                 isNewRegistration = true;
                 
-                log.info("New agent registered: {} ({}), ID: {}", 
+                log.info("[Agent] NEW registration: {} ({}) - AgentId: {}", 
                         agent.getHostname(), agent.getOsType(), agent.getAgentId());
                         
             } catch (Exception e) {
@@ -116,6 +120,7 @@ public class AgentService {
             Agent agent = agentOpt.get();
             agent.setLastHeartbeat(LocalDateTime.now());
             agent.setStatus("ONLINE");
+            log.debug("[Agent] Heartbeat received from {} ({})", agent.getHostname(), agentId);
             if (request.getCpuLoad() != null) {
                 agent.setCpuLoad(request.getCpuLoad());
             }
@@ -130,6 +135,23 @@ public class AgentService {
     
     public boolean validateAgent(String agentId, String agentToken) {
         return agentRepository.findByAgentIdAndAgentToken(agentId, agentToken).isPresent();
+    }
+    
+    @Transactional
+    public boolean markOffline(String agentId, String agentToken) {
+        Optional<Agent> agentOpt = agentRepository.findByAgentIdAndAgentToken(agentId, agentToken);
+        if (agentOpt.isPresent()) {
+            Agent agent = agentOpt.get();
+            agent.setStatus("OFFLINE");
+            agent.setLastHeartbeat(LocalDateTime.now());
+            agentRepository.save(agent);
+            log.info("[Agent] {} ({}) marked as OFFLINE - Agent shutdown notification received", 
+                    agent.getHostname(), agentId);
+            LogUtil.logAgent("STATUS_CHANGE", agent.getAgentId(), agent.getHostname(), 
+                    "ONLINE -> OFFLINE (agent shutdown)");
+            return true;
+        }
+        return false;
     }
     
     public Optional<Agent> getAgent(String agentId) {
@@ -159,16 +181,30 @@ public class AgentService {
     @Scheduled(fixedRate = 60000) // 每分钟检查一次
     @Transactional
     public void checkOfflineAgents() {
+        log.debug("[Scheduled] Checking offline agents...");
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(2); // 2分钟没有心跳认为离线
         List<Agent> offlineAgents = agentRepository.findOfflineAgents(threshold);
         
+        if (!offlineAgents.isEmpty()) {
+            log.info("[Scheduled] Found {} agents with no heartbeat since {}", 
+                    offlineAgents.size(), threshold);
+        }
+        
+        int offlineCount = 0;
         for (Agent agent : offlineAgents) {
             if ("ONLINE".equals(agent.getStatus())) {
                 agent.setStatus("OFFLINE");
                 agentRepository.save(agent);
+                log.warn("[Agent] {} ({}) marked as OFFLINE - Last heartbeat: {}", 
+                        agent.getHostname(), agent.getAgentId(), agent.getLastHeartbeat());
                 LogUtil.logAgent("STATUS_CHANGE", agent.getAgentId(), agent.getHostname(), 
                         "ONLINE -> OFFLINE (heartbeat timeout)");
+                offlineCount++;
             }
+        }
+        
+        if (offlineCount > 0) {
+            log.info("[Scheduled] Marked {} agents as OFFLINE", offlineCount);
         }
     }
 }

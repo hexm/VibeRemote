@@ -2,8 +2,18 @@ package com.example.lightscript.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.http.HttpClient;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -11,8 +21,19 @@ import java.util.concurrent.Executors;
 
 public class AgentMain {
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static FileChannel lockChannel;
+    private static FileLock lock;
 
     public static void main(String[] args) throws Exception {
+        // ===== 单实例检查：防止同一台机器启动多个Agent =====
+        if (!acquireLock()) {
+            System.err.println("========================================");
+            System.err.println("ERROR: Another Agent instance is already running on this machine!");
+            System.err.println("Please stop the existing Agent before starting a new one.");
+            System.err.println("========================================");
+            System.exit(1);
+        }
+        
         String server = args.length > 0 ? args[0] : "http://localhost:8080";
         String registerToken = args.length > 1 ? args[1] : "dev-register-token";
 
@@ -47,8 +68,20 @@ public class AgentMain {
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Agent shutting down...");
+            
+            // 主动通知服务器下线
+            try {
+                System.out.println("Notifying server of shutdown...");
+                api.offline(agentId, agentToken);
+                System.out.println("Server notified successfully");
+            } catch (Exception e) {
+                System.err.println("Failed to notify server: " + e.getMessage());
+                // 忽略错误，继续关闭流程
+            }
+            
             taskRunner.shutdown();
             taskExecutor.shutdown();
+            releaseLock(); // 释放文件锁
         }));
 
         System.out.println("Agent started. Waiting for tasks...");
@@ -132,5 +165,68 @@ public class AgentMain {
         }
         
         System.out.println("Agent main loop ended");
+    }
+    
+    /**
+     * 获取文件锁，确保单实例运行
+     * @return true 如果成功获取锁，false 如果已有其他实例在运行
+     */
+    private static boolean acquireLock() {
+        try {
+            // 锁文件位置：用户目录/.lightscript/.agent.lock
+            String userHome = System.getProperty("user.home");
+            Path lockDir = Paths.get(userHome, ".lightscript");
+            Files.createDirectories(lockDir);
+            Path lockFile = lockDir.resolve(".agent.lock");
+            
+            // 打开文件通道（读写模式）
+            lockChannel = FileChannel.open(lockFile, 
+                StandardOpenOption.CREATE, 
+                StandardOpenOption.READ, 
+                StandardOpenOption.WRITE);
+            
+            // 尝试获取排他锁（非阻塞）
+            lock = lockChannel.tryLock();
+            
+            if (lock == null) {
+                // 锁已被其他进程持有
+                lockChannel.close();
+                return false;
+            }
+            
+            // 写入当前进程信息（用于调试）
+            lockChannel.truncate(0);
+            String lockInfo = String.format("PID: %s, Started: %s", 
+                ManagementFactory.getRuntimeMXBean().getName(),
+                LocalDateTime.now()
+            );
+            lockChannel.write(ByteBuffer.wrap(lockInfo.getBytes()));
+            
+            System.out.println("Instance lock acquired: " + lockFile);
+            return true;
+            
+        } catch (IOException e) {
+            System.err.println("Failed to acquire instance lock: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * 释放文件锁
+     */
+    private static void releaseLock() {
+        try {
+            if (lock != null) {
+                lock.release();
+                lock = null;
+            }
+            if (lockChannel != null) {
+                lockChannel.close();
+                lockChannel = null;
+            }
+            System.out.println("Instance lock released");
+        } catch (IOException e) {
+            System.err.println("Failed to release lock: " + e.getMessage());
+        }
     }
 }
