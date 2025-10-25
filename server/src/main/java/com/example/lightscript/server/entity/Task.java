@@ -36,7 +36,7 @@ public class Task {
     private Map<String, String> env;
     
     @Column(name = "status", length = 20)
-    private String status = "PENDING"; // PENDING | RUNNING | SUCCESS | FAILED | TIMEOUT | CANCELLED
+    private String status = "PENDING"; // PENDING | PULLED | RUNNING | SUCCESS | FAILED | TIMEOUT | CANCELLED
     
     @Column(name = "exit_code")
     private Integer exitCode;
@@ -49,6 +49,9 @@ public class Task {
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+    
+    @Column(name = "pulled_at")
+    private LocalDateTime pulledAt;
     
     @Column(name = "started_at")
     private LocalDateTime startedAt;

@@ -43,15 +43,22 @@ const app = createApp({
         const checkLogin = () => {
             const token = localStorage.getItem('jwt_token');
             if (!token) {
-                window.location.href = '/login.html';
+                // 临时禁用登录检查 - 开发模式
+                console.warn('No JWT token found, using dev mode');
+                userInfo.value = { username: 'dev-user' };
                 return;
+                // window.location.href = '/login.html';
+                // return;
             }
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 userInfo.value = { username: payload.sub };
             } catch (e) {
-                localStorage.removeItem('jwt_token');
-                window.location.href = '/login.html';
+                // 临时禁用登录检查 - 开发模式
+                console.warn('Invalid JWT token, using dev mode');
+                userInfo.value = { username: 'dev-user' };
+                // localStorage.removeItem('jwt_token');
+                // window.location.href = '/login.html';
             }
         };
 

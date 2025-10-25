@@ -8,7 +8,9 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 @Entity
-@Table(name = "agents")
+@Table(name = "agents", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"hostname", "os_type"}, name = "uk_agent_hostname_ostype")
+})
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class Agent {

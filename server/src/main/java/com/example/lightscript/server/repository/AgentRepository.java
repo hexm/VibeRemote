@@ -15,6 +15,8 @@ public interface AgentRepository extends JpaRepository<Agent, String> {
     
     Optional<Agent> findByAgentIdAndAgentToken(String agentId, String agentToken);
     
+    Optional<Agent> findByHostnameAndOsType(String hostname, String osType);
+    
     List<Agent> findByStatus(String status);
     
     @Query("SELECT a FROM Agent a WHERE a.lastHeartbeat < :threshold")

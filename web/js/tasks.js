@@ -28,6 +28,7 @@ const app = createApp({
         const dateRange = ref([]);
         const currentPage = ref(1);
         const pageSize = ref(10);
+        const totalTasks = ref(0);
         
         // 对话框状态
         const showCreateTaskDialog = ref(false);
@@ -61,15 +62,22 @@ const app = createApp({
         const checkLogin = () => {
             const token = localStorage.getItem('jwt_token');
             if (!token) {
-                window.location.href = '/login.html';
+                // 临时禁用登录检查 - 开发模式
+                console.warn('No JWT token found, using dev mode');
+                userInfo.value = { username: 'dev-user' };
                 return;
+                // window.location.href = '/login.html';
+                // return;
             }
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 userInfo.value = { username: payload.sub };
             } catch (e) {
-                localStorage.removeItem('jwt_token');
-                window.location.href = '/login.html';
+                // 临时禁用登录检查 - 开发模式
+                console.warn('Invalid JWT token, using dev mode');
+                userInfo.value = { username: 'dev-user' };
+                // localStorage.removeItem('jwt_token');
+                // window.location.href = '/login.html';
             }
         };
 
@@ -82,7 +90,13 @@ const app = createApp({
             loading.value = true;
             try {
                 console.log('正在获取任务列表...');
-                const response = await api.get('/web/tasks');
+                // 传递分页参数
+                const response = await api.get('/web/tasks', {
+                    params: {
+                        page: currentPage.value - 1, // Spring Boot 分页从0开始
+                        size: pageSize.value
+                    }
+                });
                 console.log('API 响应:', response);
                 console.log('响应数据:', response.data);
                 
@@ -90,11 +104,14 @@ const app = createApp({
                 if (response.data && response.data.content) {
                     // Spring Boot 分页格式
                     tasks.value = Array.isArray(response.data.content) ? response.data.content : [];
+                    totalTasks.value = response.data.totalElements || 0;
                 } else if (Array.isArray(response.data)) {
                     // 直接数组格式
                     tasks.value = response.data;
+                    totalTasks.value = response.data.length;
                 } else {
                     tasks.value = [];
+                    totalTasks.value = 0;
                 }
                 console.log('设置的 tasks 数据:', tasks.value);
                 
@@ -106,6 +123,7 @@ const app = createApp({
                 console.error('错误详情:', error.response);
                 ElMessage.error('获取任务列表失败: ' + (error.response?.data?.message || error.message));
                 tasks.value = []; // 确保出错时也是空数组
+                totalTasks.value = 0;
             } finally {
                 loading.value = false;
             }
@@ -224,7 +242,9 @@ const app = createApp({
             
             try {
                 const response = await api.get(`/web/tasks/${selectedTask.value.taskId}/logs`);
+                console.log('原始日志数据:', response.data); // 调试：查看原始数据
                 taskLogs.value = response.data || [];
+                console.log('设置的日志:', taskLogs.value); // 调试：查看设置后的数据
             } catch (error) {
                 console.error('获取任务日志失败:', error);
                 ElMessage.error('获取任务日志失败');
@@ -248,7 +268,7 @@ const app = createApp({
 
         const formatLogContent = (log) => {
             const timestamp = new Date(log.timestamp).toLocaleString();
-            return `[${timestamp}] [${log.logLevel}] ${log.logContent}`;
+            return `[${timestamp}] [${log.stream}] ${log.content}`;
         };
 
         const handleSearch = () => {
@@ -256,18 +276,19 @@ const app = createApp({
         };
 
         const filteredTasks = computed(() => {
+            // 现在服务器端已经做了分页，前端只做简单的客户端过滤
             let filtered = tasks.value;
             
-            // 关键词搜索
+            // 关键词搜索（前端过滤）
             if (searchKeyword.value) {
                 filtered = filtered.filter(task => 
                     task.taskId.includes(searchKeyword.value) ||
                     task.agentId.includes(searchKeyword.value) ||
-                    task.scriptContent.includes(searchKeyword.value)
+                    (task.scriptContent && task.scriptContent.includes(searchKeyword.value))
                 );
             }
             
-            // 状态筛选
+            // 状态筛选（前端过滤）
             if (statusFilter.value) {
                 filtered = filtered.filter(task => task.status === statusFilter.value);
             }
@@ -323,9 +344,9 @@ const app = createApp({
             taskLogs,
             autoRefreshLogs,
             onlineAgents,
+            totalTasks,
             // 计算属性
             filteredTasks,
-            totalTasks: computed(() => filteredTasks.value.length),
             // 方法
             logout,
             refreshTasks: fetchTasks,
@@ -342,6 +363,7 @@ const app = createApp({
             getTaskStatusType: (status) => {
                 const map = {
                     PENDING: 'info',
+                    PULLED: 'warning',
                     RUNNING: 'primary',
                     SUCCESS: 'success',
                     FAILED: 'danger',
@@ -352,6 +374,7 @@ const app = createApp({
             getTaskStatusText: (status) => {
                 const map = {
                     PENDING: '等待中',
+                    PULLED: '已拉取',
                     RUNNING: '运行中',
                     SUCCESS: '成功',
                     FAILED: '失败',
@@ -363,8 +386,14 @@ const app = createApp({
                 const agent = onlineAgents.value.find(a => a.agentId === agentId);
                 return agent ? agent.hostname : agentId.substring(0, 8) + '...';
             },
-            handleSizeChange: (val) => { pageSize.value = val; },
-            handleCurrentChange: (val) => { currentPage.value = val; },
+            handleSizeChange: (val) => { 
+                pageSize.value = val; 
+                fetchTasks();
+            },
+            handleCurrentChange: (val) => { 
+                currentPage.value = val; 
+                fetchTasks();
+            },
         };
     },
 });

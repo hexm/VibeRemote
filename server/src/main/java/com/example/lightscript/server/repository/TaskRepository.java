@@ -30,4 +30,7 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     
     @Query("SELECT t FROM Task t WHERE t.status = 'RUNNING' AND t.startedAt < :threshold")
     List<Task> findTimeoutTasks(@Param("threshold") LocalDateTime threshold);
+    
+    @Query("SELECT t FROM Task t WHERE t.status = 'PULLED' AND t.pulledAt < :threshold")
+    List<Task> findPulledButNotAcked(@Param("threshold") LocalDateTime threshold);
 }

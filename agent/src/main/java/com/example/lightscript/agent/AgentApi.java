@@ -51,7 +51,28 @@ class AgentApi {
 				.timeout(Duration.ofSeconds(5))
 				.POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
 				.build();
-		httpClient.send(req, HttpResponse.BodyHandlers.discarding());
+		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+		// 检查响应状态码，401/403表示令牌无效
+		if (resp.statusCode() == 401 || resp.statusCode() == 403) {
+			throw new RuntimeException("Agent token invalid - Server may have restarted. Please restart Agent.");
+		}
+		if (resp.statusCode() != 200) {
+			throw new RuntimeException("Heartbeat failed: HTTP " + resp.statusCode());
+		}
+	}
+
+	void ack(String agentId, String agentToken, String taskId) throws Exception {
+		String url = String.format("%s/api/agent/tasks/%s/ack?agentId=%s&agentToken=%s", 
+				baseUrl, taskId, agentId, agentToken);
+		HttpRequest req = HttpRequest.newBuilder()
+				.uri(URI.create(url))
+				.timeout(Duration.ofSeconds(5))
+				.POST(HttpRequest.BodyPublishers.noBody())
+				.build();
+		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200) {
+			throw new RuntimeException("ACK failed: HTTP " + resp.statusCode());
+		}
 	}
 
 	Map<String, Object> pull(String agentId, String agentToken, int max) throws Exception {

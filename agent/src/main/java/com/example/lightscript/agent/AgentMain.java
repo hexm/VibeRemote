@@ -61,28 +61,53 @@ public class AgentMain {
             try {
                 // 心跳检测 - 每30秒一次
                 if (now - lastHeartbeat > 30_000) {
+                    System.out.println("Sending heartbeat...");
                     api.heartbeat(agentId, agentToken);
                     System.out.println("Heartbeat sent at " + new java.util.Date());
                     lastHeartbeat = now;
                 }
-
-                // 拉取任务
+                
+                // 拉取任务（不打印日志避免刷屏）
                 Map<String, Object> response = api.pull(agentId, agentToken, 1);
+                
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> tasks = (List<Map<String, Object>>) response.get("tasks");
 
                 if (tasks != null && !tasks.isEmpty()) {
                     for (Map<String, Object> task : tasks) {
-                        String taskId = String.valueOf(task.get("id"));
-                        String scriptType = String.valueOf(task.get("scriptType"));
+                        // 调试：打印完整的任务数据
+                        System.out.println("DEBUG: Received task data: " + task);
+                        
+                        // 使用与服务器端TaskSpec一致的字段名
+                        String taskId = String.valueOf(task.get("taskId"));
+                        String scriptLang = String.valueOf(task.get("scriptLang"));
                         String scriptContent = String.valueOf(task.get("scriptContent"));
                         Integer timeoutSec = (Integer) task.getOrDefault("timeoutSec", 300);
 
-                        System.out.println("Received task: " + taskId);
+                        System.out.println("Received task: " + taskId + " (lang: " + scriptLang + ")");
+                        
+                        // 检查是否所有必要字段都存在
+                        if (taskId == null || "null".equals(taskId) || scriptContent == null || "null".equals(scriptContent)) {
+                            System.err.println("ERROR: Invalid task data - taskId or scriptContent is null");
+                            System.err.println("  taskId: " + taskId);
+                            System.err.println("  scriptLang: " + scriptLang);
+                            System.err.println("  scriptContent: " + scriptContent);
+                            continue;
+                        }
+                        
+                        // 立即ACK确认收到任务
+                        try {
+                            api.ack(agentId, agentToken, taskId);
+                            System.out.println("Task " + taskId + " acknowledged");
+                        } catch (Exception e) {
+                            System.err.println("Failed to ACK task " + taskId + ": " + e.getMessage());
+                            // ACK失败，任务会被服务器回退到PENDING，跳过执行
+                            continue;
+                        }
                         
                         // 异步执行任务
                         taskExecutor.submit(() -> {
-                            taskRunner.runTask(taskId, scriptType, scriptContent, timeoutSec);
+                            taskRunner.runTask(taskId, scriptLang, scriptContent, timeoutSec);
                         });
                     }
                 }
@@ -90,10 +115,22 @@ public class AgentMain {
                 // 短暂休眠避免过度轮询
                 Thread.sleep(5000);
 
+            } catch (InterruptedException e) {
+                System.out.println("Agent interrupted, shutting down...");
+                Thread.currentThread().interrupt();
+                break;
             } catch (Exception e) {
                 System.err.println("Error in main loop: " + e.getMessage());
-                Thread.sleep(10000); // 出错时等待更长时间
+                e.printStackTrace(); // 打印完整堆栈
+                try {
+                    Thread.sleep(10000); // 出错时等待更长时间
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
+        
+        System.out.println("Agent main loop ended");
     }
 }

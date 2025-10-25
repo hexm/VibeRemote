@@ -59,18 +59,38 @@ public class TaskService {
                 .collect(Collectors.toList());
     }
     
+    @Transactional
     public List<TaskSpec> pullTasks(String agentId, int maxTasks) {
         List<Task> tasks = taskRepository.findByAgentIdAndStatusOrderByCreatedAtAsc(agentId, "PENDING");
         
         return tasks.stream()
                 .limit(maxTasks)
                 .peek(task -> {
-                    task.setStatus("RUNNING");
-                    task.setStartedAt(LocalDateTime.now());
+                    task.setStatus("PULLED");
+                    task.setPulledAt(LocalDateTime.now());
                     taskRepository.save(task);
+                    log.info("Task {} pulled by agent {}", task.getTaskId(), agentId);
                 })
                 .map(this::convertToTaskSpec)
                 .collect(Collectors.toList());
+    }
+    
+    @Transactional
+    public void ackTask(String taskId) {
+        Optional<Task> taskOpt = taskRepository.findById(taskId);
+        if (taskOpt.isPresent()) {
+            Task task = taskOpt.get();
+            if ("PULLED".equals(task.getStatus())) {
+                task.setStatus("RUNNING");
+                task.setStartedAt(LocalDateTime.now());
+                taskRepository.save(task);
+                log.info("Task {} acknowledged and started", taskId);
+            } else {
+                log.warn("Task {} ACK ignored, current status: {}", taskId, task.getStatus());
+            }
+        } else {
+            log.warn("Task {} not found for ACK", taskId);
+        }
     }
     
     @Transactional
@@ -133,6 +153,20 @@ public class TaskService {
     
     public long getFailedTaskCount() {
         return taskRepository.countByStatus("FAILED");
+    }
+    
+    @Scheduled(fixedRate = 60000) // 每1分钟检查一次
+    @Transactional
+    public void checkPulledTasks() {
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(2); // 2分钟没ACK
+        List<Task> stuckTasks = taskRepository.findPulledButNotAcked(threshold);
+        
+        for (Task task : stuckTasks) {
+            task.setStatus("PENDING");
+            task.setPulledAt(null);
+            taskRepository.save(task);
+            log.warn("Task {} reset to PENDING (ACK timeout, agent may not have received it)", task.getTaskId());
+        }
     }
     
     @Scheduled(fixedRate = 300000) // 每5分钟检查一次

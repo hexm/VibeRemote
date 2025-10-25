@@ -20,20 +20,22 @@ class SimpleTaskRunner {
         this.shutdown = true;
     }
 
-    void runTask(String taskId, String scriptType, String scriptContent, int timeoutSec) {
+    void runTask(String taskId, String scriptLang, String scriptContent, int timeoutSec) {
         int seq = 0;
         try {
-            api.sendLog(agentId, agentToken, taskId, ++seq, "system", "Task started");
+            api.sendLog(agentId, agentToken, taskId, ++seq, "system", "Task started (lang: " + scriptLang + ")");
             
             // 构建命令
             ProcessBuilder pb;
             if (isWindows()) {
-                if ("powershell".equalsIgnoreCase(scriptType)) {
+                if ("powershell".equalsIgnoreCase(scriptLang)) {
                     pb = new ProcessBuilder("powershell", "-Command", scriptContent);
                 } else {
+                    // 默认使用cmd，支持cmd或bat
                     pb = new ProcessBuilder("cmd", "/c", scriptContent);
                 }
             } else {
+                // Linux下默认使用bash
                 pb = new ProcessBuilder("bash", "-c", scriptContent);
             }
             
@@ -42,11 +44,18 @@ class SimpleTaskRunner {
             
             // 读取输出
             final int finalSeq = seq;
+            // Windows下使用GBK编码，Linux使用UTF-8
+            String charset = isWindows() ? "GBK" : "UTF-8";
+            
             Thread stdoutThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream(), charset))) {
                     String line;
                     int localSeq = finalSeq;
                     while ((line = reader.readLine()) != null && !shutdown) {
+                        // 过滤空行，避免服务端验证失败
+                        if (line.trim().isEmpty()) {
+                            continue;
+                        }
                         try {
                             api.sendLog(agentId, agentToken, taskId, ++localSeq, "stdout", line);
                         } catch (Exception e) {
@@ -59,10 +68,14 @@ class SimpleTaskRunner {
             });
             
             Thread stderrThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream(), charset))) {
                     String line;
                     int localSeq = finalSeq + 1000; // 避免seq冲突
                     while ((line = reader.readLine()) != null && !shutdown) {
+                        // 过滤空行，避免服务端验证失败
+                        if (line.trim().isEmpty()) {
+                            continue;
+                        }
                         try {
                             api.sendLog(agentId, agentToken, taskId, ++localSeq, "stderr", line);
                         } catch (Exception e) {

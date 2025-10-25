@@ -47,8 +47,6 @@ public class AgentModels {
 		private Integer timeoutSec;
 		private Map<String, String> env;
 	}
-
-	@Data
 	public static class PullTasksResponse {
 		private List<TaskSpec> tasks;
 	}
@@ -65,7 +63,7 @@ public class AgentModels {
 		private Integer seq;
 		@NotBlank
 		private String stream; // stdout|stderr
-		@NotBlank
+		@NotNull
 		private String data;
 	}
 

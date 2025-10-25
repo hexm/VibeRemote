@@ -50,6 +50,15 @@ public class AgentController {
 		return ResponseEntity.ok(rsp);
 	}
 
+	@PostMapping("/tasks/{taskId}/ack")
+	public ResponseEntity<Void> ack(@PathVariable String taskId, @RequestParam String agentId, @RequestParam String agentToken) {
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		taskService.ackTask(taskId);
+		return ResponseEntity.ok().build();
+	}
+
 	@PostMapping("/tasks/{taskId}/log")
 	public ResponseEntity<Void> log(@PathVariable String taskId, @Valid @RequestBody LogChunkRequest req) {
 		if (!agentService.validateAgent(req.getAgentId(), req.getAgentToken())) {

@@ -54,6 +54,7 @@ yarn-error.log*
 *.db
 *.sqlite
 *.sqlite3
+data/  # H2持久化数据目录
 
 # Temporary files
 *.swp

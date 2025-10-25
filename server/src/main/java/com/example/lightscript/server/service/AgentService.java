@@ -36,24 +36,76 @@ public class AgentService {
             throw new BusinessException(ErrorCode.INVALID_REGISTER_TOKEN);
         }
         
-        Agent agent = new Agent();
-        agent.setAgentId(UUID.randomUUID().toString());
-        agent.setAgentToken(UUID.randomUUID().toString());
-        agent.setHostname(request.getHostname());
-        agent.setOsType(request.getOsType());
-        agent.setIp(request.getIp());
-        agent.setLabels(request.getLabels());
-        agent.setLastHeartbeat(LocalDateTime.now());
-        agent.setStatus("ONLINE");
+        Agent agent;
+        boolean isNewRegistration = false;
         
-        agent = agentRepository.save(agent);
+        // 先查询是否已存在
+        Optional<Agent> existingAgent = agentRepository.findByHostnameAndOsType(
+                request.getHostname(), request.getOsType());
+        
+        if (existingAgent.isPresent()) {
+            // 已存在，复用并更新
+            agent = existingAgent.get();
+            agent.setIp(request.getIp());
+            agent.setLabels(request.getLabels());
+            agent.setLastHeartbeat(LocalDateTime.now());
+            agent.setStatus("ONLINE");
+            agent = agentRepository.save(agent);
+            
+            log.info("Agent re-registered: {} ({}), ID kept: {}", 
+                    agent.getHostname(), agent.getOsType(), agent.getAgentId());
+        } else {
+            // 不存在，尝试创建新Agent
+            try {
+                agent = new Agent();
+                agent.setAgentId(UUID.randomUUID().toString());
+                agent.setAgentToken(UUID.randomUUID().toString());
+                agent.setHostname(request.getHostname());
+                agent.setOsType(request.getOsType());
+                agent.setIp(request.getIp());
+                agent.setLabels(request.getLabels());
+                agent.setLastHeartbeat(LocalDateTime.now());
+                agent.setStatus("ONLINE");
+                
+                agent = agentRepository.save(agent);
+                isNewRegistration = true;
+                
+                log.info("New agent registered: {} ({}), ID: {}", 
+                        agent.getHostname(), agent.getOsType(), agent.getAgentId());
+                        
+            } catch (Exception e) {
+                // 并发情况下可能违反唯一约束，重新查询已存在的Agent
+                log.warn("Concurrent registration detected for {} ({}), retrying query", 
+                        request.getHostname(), request.getOsType());
+                        
+                existingAgent = agentRepository.findByHostnameAndOsType(
+                        request.getHostname(), request.getOsType());
+                        
+                if (existingAgent.isPresent()) {
+                    agent = existingAgent.get();
+                    agent.setIp(request.getIp());
+                    agent.setLabels(request.getLabels());
+                    agent.setLastHeartbeat(LocalDateTime.now());
+                    agent.setStatus("ONLINE");
+                    agent = agentRepository.save(agent);
+                    
+                    log.info("Agent re-registered after concurrent conflict: {} ({}), ID: {}", 
+                            agent.getHostname(), agent.getOsType(), agent.getAgentId());
+                } else {
+                    // 极端情况：仍然查不到，抛出原始异常
+                    throw e;
+                }
+            }
+        }
         
         RegisterResponse response = new RegisterResponse();
         response.setAgentId(agent.getAgentId());
         response.setAgentToken(agent.getAgentToken());
         
-        LogUtil.logAgent("REGISTER", agent.getAgentId(), agent.getHostname(), 
+        LogUtil.logAgent(isNewRegistration ? "REGISTER" : "RE-REGISTER", 
+                agent.getAgentId(), agent.getHostname(), 
                 String.format("OS: %s, IP: %s", agent.getOsType(), agent.getIp()));
+        
         return response;
     }
     

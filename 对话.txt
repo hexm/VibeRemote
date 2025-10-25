@@ -32,4 +32,136 @@
 1.agent的实现可以参考demo目录下的代码
 2.启动或执行脚本使用bat命令，不要使用powershell
 
-目前项目已做了简单骨架的开发，但是还有很多需要优化，请优化项目以实现以上需求和技术要求。
+目前项目已做了简单骨架的开发，但是还有很多需要优化，在现有代码和功能的基础上先写一份需求分析文档，文档放在
+项目根目录下。
+
+在以上需求分析文档的基础上，编写一份详细设计文档，目标是做好功能设计并分阶段实现功能，文档放在根目录下。
+
+登录后，访问页面http://localhost:3000/agents.html
+页面一片空白，控制台有报错：
+Uncaught TypeError: Cannot read properties of undefined (reading 'length')
+
+
+我们现在要开发一个功能架构与 XZB-1248/Spark 类似的项目，主要需求如下：
+1. 项目分服务器端和客户端，服务器端具有WEB管理界面，实现用户登录、客户端列表查看、客户端基本信息管理等功能
+2. 服务器端与客户端之间有状态检测机制
+3. 服务器可以下发脚本给客户端，客户端执行脚本后，在服务器端可以看到执行结果和执行日志
+4. 服务器端可以批量下发脚本，即一个脚本可以同时下发给多个客户端执行
+5. 客户端支持windows操作系统和linux操作系统，客户端agent不能占用过多资源
+
+技术要求如下：
+1. 服务器端使用前后端分享开发，前端使用VUE，后端使用JAVA单体应用，不需要微服务
+2. agent端尽量使用java开发，与服务器端技术一致，如果java占用资源过多，可考虑其他技术方案
+3. 服务器端数据库使用mysql，不需要使用外部缓存，以减少技术复杂度
+4. 所有程序的java版本都使用jdk1.8
+
+注意事项：
+1.agent的实现可以参考demo目录下的代码
+2.启动或执行脚本使用bat命令，不要使用powershell
+
+目前项目已做了一些开发，但是还有很多功能没有完成，在现有代码和功能的基础上：
+1. 重新写需求分析文档，文档放在项目根目录下。
+2. 写一份功能设计文档，文档放在项目根目录下。
+
+--------------------------------------------------
+三个程序都在开发环境运行起来了，在WEB界面下发了任务，但是状态一直为运行中 
+在agent控制台看到日志：
+Received task: null
+这种情况不正常，请分析原因
+
+agent重启了，但是没有接到任务，也没有执行任务
+WEB界面的任务状态也没有任务变化
+请分析原因并修复问题
+agent日志如下：
+========================================
+LightScript Agent Startup Script
+========================================
+
+Enter server URL (default: http://localhost:8080):
+Enter register token (default: dev-register-token):
+
+Configuration:
+Server URL: http://localhost:8080
+Register Token: dev-register-token
+
+Starting LightScript Agent...
+Press Ctrl+C to stop the agent
+========================================
+Starting agent with UTF-8 encoding...
+Starting LightScript Agent...
+Server: http://localhost:8080
+Register Token: dev-register-token
+Registering agent...
+Agent registered successfully!
+Agent ID: c8d4bd73-bfc9-4c67-a5cd-6ba56d2c8d78
+Agent Token: 835096a8-a174-49eb-adb2-dc6301f71931
+Agent started. Waiting for tasks...
+Heartbeat sent at Sat Oct 25 17:03:33 CST 2025
+
+先解决另一个问题，为什么我每次重启agent都会注册为一个新的agent
+而且有两个agent的状态都还是运行中
+IP，端口，主机名都没有变化，它们应该是同一个agent
+
+再明确一下，目前唯一定位一个agent的条件是什么？
+ip, port or hostname
+
+agent启动后没有心跳，日志如下：
+Enter server URL (default: http://localhost:8080):
+Enter register token (default: dev-register-token):
+
+Configuration:
+Server URL: http://localhost:8080
+Register Token: dev-register-token
+
+Starting LightScript Agent...
+Press Ctrl+C to stop the agent
+========================================
+Starting agent with UTF-8 encoding...
+Starting LightScript Agent...
+Server: http://localhost:8080
+Register Token: dev-register-token
+Registering agent...
+Agent registered successfully!
+Agent ID: 0a89f109-1bb2-4e46-9f25-abbcf6220c6b
+Agent Token: c73d759d-a447-4296-a879-917782c88274
+Agent started. Waiting for tasks...
+Heartbeat sent at Sat Oct 25 17:31:42 CST 2025
+在WEB页面也看不到agent信息
+
+agent注册的token起到什么作用，回答以下几个问题：
+1.agent首次注册的token从何而来？
+2.token发生变化后，双方如何交换信息？
+3.如果泄露了，会有什么后果？
+
+registerToken发生变化，双方如何共享信息？
+
+目前在开发环境，怎么实现server重启后agent依然可以正常交互？
+
+agentid 重启后会发生变化吗？
+
+什么会出现两个agent，而且都是在线状态？这本来是同一个agent
+
+不同意以上修改，agent应该轻量的，尽量不要承担过多的职能。
+agent重复注册的问题应该在服务器端做好控制，不是让agent来避免
+
+任务执行的流程是怎么样的？
+
+如果pending的任务，下发给agent失败后，任务状态会不会回退？
+下发失败能不能在服务端感知到
+
+现在已经成功执行了一条任务，任务执行的流程是怎么样的？
+agent多久拉取一次任务，每次拉取多少条任务？
+
+服务器端能不能主动调用agent？而不是靠agent轮循来交互信息。
+只分析代码，不要修改代码
+
+方案对比
+方案	实时性	复杂度	防火墙	Agent轻量	推荐度
+当前轮询	❌ 5秒	✅ 简单	✅ 友好	✅ 是	⭐⭐⭐
+WebSocket	✅ 毫秒	⚠️ 中等	⚠️ 一般	✅ 是	⭐⭐⭐⭐⭐
+SSE	✅ 秒级	✅ 简单	✅ 友好	✅ 是	⭐⭐⭐⭐
+Webhook	✅ 毫秒	✅ 简单	❌ 差	❌ 否	⭐
+长轮询	✅ 秒级	✅ 简单	✅ 友好	✅ 是	⭐⭐⭐⭐
+
+
+
