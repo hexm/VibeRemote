@@ -47,8 +47,16 @@
                     <p>创建、监控和管理脚本执行任务</p>
                 </div>
 
-                <!-- 工具栏 -->
-                <div class="toolbar">
+                <!-- Tab切换 -->
+                <el-tabs v-model="activeTab" @tab-click="handleTabClick" style="margin-top: 20px;">
+                    <el-tab-pane label="普通任务" name="normal">
+                    </el-tab-pane>
+                    <el-tab-pane label="批量任务" name="batch">
+                    </el-tab-pane>
+                </el-tabs>
+
+                <!-- 普通任务工具栏 -->
+                <div class="toolbar" v-if="activeTab === 'normal'">
                     <div class="toolbar-left">
                         <el-input 
                             v-model="searchKeyword" 
@@ -97,8 +105,8 @@
                     </div>
                 </div>
 
-                <!-- 任务列表 -->
-                <div class="tasks-table">
+                <!-- 普通任务列表 -->
+                <div class="tasks-table" v-if="activeTab === 'normal'">
                     <el-table :data="filteredTasks" style="width: 100%" v-loading="loading">
                         <el-table-column prop="taskId" label="任务ID" width="200">
                             <template #default="scope">
@@ -158,8 +166,8 @@
                     </el-table>
                 </div>
 
-                <!-- 分页 -->
-                <div class="pagination">
+                <!-- 普通任务分页 -->
+                <div class="pagination" v-if="activeTab === 'normal'">
                     <el-pagination
                         v-model:current-page="currentPage"
                         v-model:page-size="pageSize"
@@ -170,12 +178,120 @@
                         @current-change="handleCurrentChange">
                     </el-pagination>
                 </div>
+
+                <!-- 批量任务工具栏 -->
+                <div class="toolbar" v-if="activeTab === 'batch'">
+                    <div class="toolbar-left">
+                        <el-input 
+                            v-model="batchSearchKeyword" 
+                            placeholder="搜索批量任务..." 
+                            prefix-icon="el-icon-search"
+                            style="width: 240px;">
+                        </el-input>
+                    </div>
+                    <div class="toolbar-right">
+                        <el-button type="primary" @click="refreshBatchTasks">
+                            <i class="el-icon-refresh"></i> 刷新
+                        </el-button>
+                        <el-button type="warning" @click="showBatchTaskDialog = true">
+                            <i class="el-icon-s-promotion"></i> 创建批量任务
+                        </el-button>
+                    </div>
+                </div>
+
+                <!-- 批量任务列表 -->
+                <div class="batch-tasks-table" v-if="activeTab === 'batch'">
+                    <el-table :data="batchTasks" style="width: 100%" v-loading="batchLoading">
+                        <el-table-column prop="batchName" label="批量任务名称" width="200">
+                            <template #default="scope">
+                                <el-link type="primary" @click="viewBatchTaskDetail(scope.row)">
+                                    {{ scope.row.batchName }}
+                                </el-link>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="totalTasks" label="任务数量" width="120">
+                            <template #default="scope">
+                                <el-link type="primary" @click="viewBatchTaskDetail(scope.row)">
+                                    {{ scope.row.totalTasks || scope.row.targetAgentCount }} 个
+                                </el-link>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column label="进度" width="200">
+                            <template #default="scope">
+                                <el-progress 
+                                    :percentage="Math.round(scope.row.progress || 0)" 
+                                    :status="scope.row.status === 'COMPLETED' ? 'success' : (scope.row.status === 'FAILED' ? 'exception' : '')"
+                                    :stroke-width="16">
+                                </el-progress>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column label="状态统计" width="300">
+                            <template #default="scope">
+                                <el-tag type="success" size="small" style="margin-right: 5px;">成功: {{ scope.row.successTasks }}</el-tag>
+                                <el-tag type="danger" size="small" style="margin-right: 5px;">失败: {{ scope.row.failedTasks }}</el-tag>
+                                <el-tag type="warning" size="small" style="margin-right: 5px;">运行: {{ scope.row.runningTasks }}</el-tag>
+                                <el-tag type="info" size="small">等待: {{ scope.row.pendingTasks }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="status" label="状态" width="120">
+                            <template #default="scope">
+                                <el-tag :type="getBatchStatusType(scope.row.status)" size="small">
+                                    {{ getBatchStatusText(scope.row.status) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="createdAt" label="创建时间" width="160">
+                            <template #default="scope">
+                                {{ formatDateTime(scope.row.createdAt) }}
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column label="操作" width="150">
+                            <template #default="scope">
+                                <el-button size="small" @click="viewBatchTaskDetail(scope.row)">查看详情</el-button>
+                                <el-button 
+                                    size="small" 
+                                    type="danger" 
+                                    @click="cancelBatchTask(scope.row)"
+                                    v-if="scope.row.status === 'PENDING' || scope.row.status === 'RUNNING'">
+                                    取消
+                                </el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+
+                <!-- 批量任务分页 -->
+                <div class="pagination" v-if="activeTab === 'batch'">
+                    <el-pagination
+                        v-model:current-page="batchCurrentPage"
+                        v-model:page-size="batchPageSize"
+                        :page-sizes="[10, 20, 50]"
+                        :total="totalBatchTasks"
+                        layout="total, sizes, prev, pager, next, jumper"
+                        @size-change="handleBatchSizeChange"
+                        @current-change="handleBatchCurrentChange">
+                    </el-pagination>
+                </div>
             </div>
         </div>
 
         <!-- 创建任务对话框 -->
         <el-dialog v-model="showCreateTaskDialog" title="创建任务" width="600px">
             <el-form :model="createTaskForm" label-width="100px">
+                <el-form-item label="任务名称" required>
+                    <el-input 
+                        v-model="createTaskForm.taskName" 
+                        placeholder="请输入任务名称（必填）"
+                        maxlength="100"
+                        show-word-limit>
+                    </el-input>
+                </el-form-item>
                 <el-form-item label="选择客户端">
                     <el-select v-model="createTaskForm.agentId" placeholder="请选择客户端" style="width: 100%;">
                         <el-option 
@@ -221,6 +337,14 @@
         <!-- 批量任务对话框 -->
         <el-dialog v-model="showBatchTaskDialog" title="批量创建任务" width="600px">
             <el-form :model="batchTaskForm" label-width="100px">
+                <el-form-item label="任务名称" required>
+                    <el-input 
+                        v-model="batchTaskForm.batchName" 
+                        placeholder="请输入批量任务名称（必填）"
+                        maxlength="100"
+                        show-word-limit>
+                    </el-input>
+                </el-form-item>
                 <el-form-item label="选择客户端">
                     <el-checkbox-group v-model="batchTaskForm.selectedAgents">
                         <el-checkbox 
@@ -298,6 +422,93 @@
                 <div style="margin-top: 20px;" v-if="selectedTask.summary">
                     <h4>执行摘要</h4>
                     <p>{{ selectedTask.summary }}</p>
+                </div>
+            </div>
+        </el-dialog>
+
+        <!-- 批量任务详情对话框 -->
+        <el-dialog v-model="showBatchDetailDialog" title="批量任务详情" width="1000px">
+            <div v-if="selectedBatchTask" class="batch-task-detail">
+                <el-descriptions :column="3" border style="margin-bottom: 20px;">
+                    <el-descriptions-item label="批量任务名称">{{ selectedBatchTask.batchName }}</el-descriptions-item>
+                    <el-descriptions-item label="目标客户端数">{{ selectedBatchTask.targetAgentCount }}</el-descriptions-item>
+                    <el-descriptions-item label="创建者">{{ selectedBatchTask.createdBy }}</el-descriptions-item>
+                    <el-descriptions-item label="脚本类型">{{ selectedBatchTask.scriptLang }}</el-descriptions-item>
+                    <el-descriptions-item label="超时时间">{{ selectedBatchTask.timeoutSec }}秒</el-descriptions-item>
+                    <el-descriptions-item label="创建时间">{{ formatDateTime(selectedBatchTask.createdAt) }}</el-descriptions-item>
+                </el-descriptions>
+                
+                <el-card style="margin-bottom: 20px;">
+                    <template #header>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>执行进度</span>
+                            <el-tag :type="getBatchStatusType(selectedBatchTask.status)">
+                                {{ getBatchStatusText(selectedBatchTask.status) }}
+                            </el-tag>
+                        </div>
+                    </template>
+                    <el-progress 
+                        :percentage="Math.round(selectedBatchTask.progress || 0)" 
+                        :status="selectedBatchTask.status === 'COMPLETED' ? 'success' : (selectedBatchTask.status === 'FAILED' ? 'exception' : '')"
+                        :stroke-width="20">
+                    </el-progress>
+                    <div style="margin-top: 15px; display: flex; justify-content: space-around;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #67C23A;">{{ selectedBatchTask.successTasks }}</div>
+                            <div style="color: #999;">成功</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #F56C6C;">{{ selectedBatchTask.failedTasks }}</div>
+                            <div style="color: #999;">失败</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #E6A23C;">{{ selectedBatchTask.timeoutTasks }}</div>
+                            <div style="color: #999;">超时</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #409EFF;">{{ selectedBatchTask.runningTasks }}</div>
+                            <div style="color: #999;">运行中</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #909399;">{{ selectedBatchTask.pendingTasks }}</div>
+                            <div style="color: #999;">等待中</div>
+                        </div>
+                    </div>
+                </el-card>
+                
+                <div style="margin-top: 20px;">
+                    <h4 style="margin-bottom: 10px;">子任务列表</h4>
+                    <el-table :data="batchTaskTasks" style="width: 100%" v-loading="batchTaskTasksLoading">
+                        <el-table-column prop="taskName" label="任务名称" width="180"></el-table-column>
+                        <el-table-column prop="agentId" label="客户端" width="150">
+                            <template #default="scope">
+                                {{ getAgentName(scope.row.agentId) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="status" label="状态" width="100">
+                            <template #default="scope">
+                                <el-tag :type="getTaskStatusType(scope.row.status)" size="small">
+                                    {{ getTaskStatusText(scope.row.status) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="createdAt" label="创建时间" width="160">
+                            <template #default="scope">
+                                {{ formatDateTime(scope.row.createdAt) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="finishedAt" label="完成时间" width="160">
+                            <template #default="scope">
+                                {{ scope.row.finishedAt ? formatDateTime(scope.row.finishedAt) : '-' }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="200">
+                            <template #default="scope">
+                                <el-button size="small" @click="viewTaskDetail(scope.row)">详情</el-button>
+                                <el-button size="small" type="primary" @click="viewTaskLogs(scope.row)">日志</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
                 </div>
             </div>
         </el-dialog>

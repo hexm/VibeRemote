@@ -22,6 +22,11 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     
     Page<Task> findByCreatedByOrderByCreatedAtDesc(String createdBy, Pageable pageable);
     
+    // 批量任务相关查询
+    List<Task> findByBatchIdOrderByCreatedAtAsc(String batchId);
+    
+    Page<Task> findByBatchIdIsNullOrderByCreatedAtDesc(Pageable pageable); // 查询所有普通任务（不属于批量任务）
+    
     @Query("SELECT t FROM Task t WHERE t.status IN :statuses ORDER BY t.createdAt DESC")
     Page<Task> findByStatusInOrderByCreatedAtDesc(@Param("statuses") List<String> statuses, Pageable pageable);
     
@@ -33,4 +38,9 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     
     @Query("SELECT t FROM Task t WHERE t.status = 'PULLED' AND t.pulledAt < :threshold")
     List<Task> findPulledButNotAcked(@Param("threshold") LocalDateTime threshold);
+    
+    // 任务名称唯一性检查
+    boolean existsByTaskName(String taskName);
+    
+    Task findByTaskName(String taskName);
 }

@@ -1,4 +1,4 @@
-const { createApp, ref, onMounted, computed } = Vue;
+const { createApp, ref, onMounted, computed, watch } = Vue;
 
 const app = createApp({
     setup() {
@@ -37,6 +37,7 @@ const app = createApp({
         
         // 表单数据
         const createTaskForm = ref({
+            taskName: '',
             agentId: '',
             scriptLang: '',
             scriptContent: '',
@@ -44,6 +45,7 @@ const app = createApp({
         });
         
         const batchTaskForm = ref({
+            batchName: '',
             selectedAgents: [],
             scriptLang: '',
             scriptContent: '',
@@ -58,6 +60,23 @@ const app = createApp({
         const autoRefreshLogs = ref(false);
         const onlineAgents = ref([]);
         const agentIdFilter = ref(''); // 用于筛选特定agent的任务
+
+        // Tab状态
+        const activeTab = ref('normal');
+
+        // 批量任务相关状态
+        const batchTasks = ref([]);
+        const batchLoading = ref(false);
+        const batchSearchKeyword = ref('');
+        const batchCurrentPage = ref(1);
+        const batchPageSize = ref(20);
+        const totalBatchTasks = ref(0);
+
+        // 批量任务详情
+        const showBatchDetailDialog = ref(false);
+        const selectedBatchTask = ref(null);
+        const batchTaskTasks = ref([]);
+        const batchTaskTasksLoading = ref(false);
 
         const fetchTasks = async () => {
             loading.value = true;
@@ -120,6 +139,10 @@ const app = createApp({
         };
 
         const submitCreateTask = async () => {
+            if (!createTaskForm.value.taskName || !createTaskForm.value.taskName.trim()) {
+                ElMessage.warning('请输入任务名称');
+                return;
+            }
             if (!createTaskForm.value.agentId || !createTaskForm.value.scriptContent || !createTaskForm.value.scriptLang) {
                 ElMessage.warning('请填写完整的任务信息');
                 return;
@@ -133,9 +156,10 @@ const app = createApp({
                     timeoutSec: createTaskForm.value.timeoutSec
                 };
                 
-                // 使用查询参数传递 agentId
+                // 使用查询参数传递 agentId 和 taskName
                 const params = new URLSearchParams();
                 params.append('agentId', createTaskForm.value.agentId);
+                params.append('taskName', createTaskForm.value.taskName.trim());
                 
                 console.log('创建任务请求参数:', {
                     url: `/web/tasks/create?${params.toString()}`,
@@ -149,6 +173,7 @@ const app = createApp({
                 showCreateTaskDialog.value = false;
                 // 重置表单
                 createTaskForm.value = {
+                    taskName: '',
                     agentId: '',
                     scriptLang: '',
                     scriptContent: '',
@@ -165,8 +190,12 @@ const app = createApp({
         };
 
         const submitBatchTask = async () => {
-            if (!batchTaskForm.value.selectedAgents.length || !batchTaskForm.value.scriptContent) {
-                ElMessage.warning('请选择客户端并填写脚本内容');
+            if (!batchTaskForm.value.batchName || !batchTaskForm.value.batchName.trim()) {
+                ElMessage.warning('请输入批量任务名称');
+                return;
+            }
+            if (!batchTaskForm.value.selectedAgents.length || !batchTaskForm.value.scriptContent || !batchTaskForm.value.scriptLang) {
+                ElMessage.warning('请选择客户端并填写完整的任务信息');
                 return;
             }
             
@@ -179,19 +208,25 @@ const app = createApp({
                 };
                 
                 const params = new URLSearchParams();
+                params.append('batchName', batchTaskForm.value.batchName.trim());
                 batchTaskForm.value.selectedAgents.forEach(id => params.append('agentIds', id));
                 
-                await api.post(`/web/tasks/batch?${params.toString()}`, taskSpec);
+                await api.post(`/web/batch-tasks/create?${params.toString()}`, taskSpec);
                 ElMessage.success('批量任务创建成功');
                 showBatchTaskDialog.value = false;
                 // 重置表单
                 batchTaskForm.value = {
+                    batchName: '',
                     selectedAgents: [],
                     scriptLang: '',
                     scriptContent: '',
                     timeoutSec: 300
                 };
-                fetchTasks(); // 刷新任务列表
+                // 刷新批量任务列表
+                if (activeTab.value === 'batch') {
+                    fetchBatchTasks();
+                }
+                fetchTasks(); // 也刷新普通任务列表
             } catch (error) {
                 console.error('创建批量任务失败:', error);
                 ElMessage.error('创建批量任务失败: ' + (error.response?.data?.message || error.message));
@@ -275,6 +310,33 @@ const app = createApp({
             return filtered;
         });
 
+        // 生成默认任务名称
+        const generateDefaultTaskName = () => {
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 19).replace('T', ' ');
+            return `任务_${dateStr}`;
+        };
+
+        // 生成默认批量任务名称
+        const generateDefaultBatchName = () => {
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 19).replace('T', ' ');
+            return `批量任务_${dateStr}`;
+        };
+
+        // 监听对话框打开，自动填充默认名称
+        watch(showCreateTaskDialog, (newVal) => {
+            if (newVal && (!createTaskForm.value.taskName || createTaskForm.value.taskName.trim() === '')) {
+                createTaskForm.value.taskName = generateDefaultTaskName();
+            }
+        });
+
+        watch(showBatchTaskDialog, (newVal) => {
+            if (newVal && (!batchTaskForm.value.batchName || batchTaskForm.value.batchName.trim() === '')) {
+                batchTaskForm.value.batchName = generateDefaultBatchName();
+            }
+        });
+
         const handleUrlParams = () => {
             const urlParams = new URLSearchParams(window.location.search);
             const filterType = urlParams.get('filter');
@@ -295,6 +357,111 @@ const app = createApp({
                 // 清除URL参数，避免刷新页面时重复打开对话框
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
+        };
+
+        // ========== 批量任务相关方法 ==========
+
+        // Tab切换处理
+        const handleTabClick = (tab) => {
+            if (activeTab.value === 'batch' && batchTasks.value.length === 0) {
+                fetchBatchTasks();
+            }
+        };
+
+        // 获取批量任务列表
+        const fetchBatchTasks = async () => {
+            batchLoading.value = true;
+            try {
+                const response = await api.get('/web/batch-tasks', {
+                    params: {
+                        page: batchCurrentPage.value - 1,
+                        size: batchPageSize.value
+                    }
+                });
+                batchTasks.value = response.data.content;
+                totalBatchTasks.value = response.data.totalElements;
+            } catch (error) {
+                console.error('获取批量任务列表失败:', error);
+                ElMessage.error('获取批量任务列表失败: ' + (error.response?.data?.message || error.message));
+            } finally {
+                batchLoading.value = false;
+            }
+        };
+
+        // 刷新批量任务列表
+        const refreshBatchTasks = () => {
+            fetchBatchTasks();
+        };
+
+        // 批量任务分页处理
+        const handleBatchSizeChange = (val) => {
+            batchPageSize.value = val;
+            batchCurrentPage.value = 1;
+            fetchBatchTasks();
+        };
+
+        const handleBatchCurrentChange = (val) => {
+            batchCurrentPage.value = val;
+            fetchBatchTasks();
+        };
+
+        // 查看批量任务详情
+        const viewBatchTaskDetail = async (batchTask) => {
+            selectedBatchTask.value = batchTask;
+            showBatchDetailDialog.value = true;
+            
+            // 加载子任务列表
+            batchTaskTasksLoading.value = true;
+            try {
+                const response = await api.get(`/web/batch-tasks/${batchTask.batchId}/tasks`);
+                batchTaskTasks.value = response.data;
+            } catch (error) {
+                console.error('获取子任务失败:', error);
+                ElMessage.error('获取子任务失败: ' + (error.response?.data?.message || error.message));
+            } finally {
+                batchTaskTasksLoading.value = false;
+            }
+        };
+
+        // 取消批量任务
+        const cancelBatchTask = async (batchTask) => {
+            try {
+                await api.post(`/web/batch-tasks/${batchTask.batchId}/cancel`);
+                ElMessage.success('批量任务已取消');
+                fetchBatchTasks();
+                
+                // 如果详情对话框打开，刷新详情
+                if (showBatchDetailDialog.value && selectedBatchTask.value?.batchId === batchTask.batchId) {
+                    viewBatchTaskDetail(batchTask);
+                }
+            } catch (error) {
+                console.error('取消批量任务失败:', error);
+                ElMessage.error('取消失败: ' + (error.response?.data?.message || error.message));
+            }
+        };
+
+        // 批量任务状态文本
+        const getBatchStatusText = (status) => {
+            const map = {
+                'PENDING': '等待中',
+                'RUNNING': '运行中',
+                'COMPLETED': '已完成',
+                'PARTIAL_FAILED': '部分失败',
+                'FAILED': '失败'
+            };
+            return map[status] || status;
+        };
+
+        // 批量任务状态类型（用于el-tag的type）
+        const getBatchStatusType = (status) => {
+            const map = {
+                'PENDING': 'info',
+                'RUNNING': 'primary',
+                'COMPLETED': 'success',
+                'PARTIAL_FAILED': 'warning',
+                'FAILED': 'danger'
+            };
+            return map[status] || 'info';
         };
 
         onMounted(() => {
@@ -378,6 +545,30 @@ const app = createApp({
                 currentPage.value = val; 
                 fetchTasks();
             },
+            // 新增：Tab相关
+            activeTab,
+            handleTabClick,
+            // 新增：批量任务列表相关
+            batchTasks,
+            batchLoading,
+            batchSearchKeyword,
+            batchCurrentPage,
+            batchPageSize,
+            totalBatchTasks,
+            fetchBatchTasks,
+            refreshBatchTasks,
+            handleBatchSizeChange,
+            handleBatchCurrentChange,
+            // 新增：批量任务详情相关
+            showBatchDetailDialog,
+            selectedBatchTask,
+            batchTaskTasks,
+            batchTaskTasksLoading,
+            viewBatchTaskDetail,
+            cancelBatchTask,
+            // 新增：辅助函数
+            getBatchStatusText,
+            getBatchStatusType,
         };
     },
 });

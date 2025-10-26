@@ -42,6 +42,7 @@ public class AgentModels {
 	@Data
 	public static class TaskSpec {
 		private String taskId;
+		private String taskName; // 任务名称
 		private String scriptLang; // bash | powershell | cmd
 		private String scriptContent;
 		private Integer timeoutSec;

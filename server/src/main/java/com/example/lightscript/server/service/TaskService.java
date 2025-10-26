@@ -29,9 +29,17 @@ public class TaskService {
     
     @Transactional
     public String createTask(String agentId, TaskSpec taskSpec, String createdBy) {
+        // 验证任务名称唯一性
+        if (taskSpec.getTaskName() != null && !taskSpec.getTaskName().trim().isEmpty()) {
+            if (taskRepository.existsByTaskName(taskSpec.getTaskName())) {
+                throw new IllegalArgumentException("任务名称已存在: " + taskSpec.getTaskName());
+            }
+        }
+        
         Task task = new Task();
         task.setTaskId(taskSpec.getTaskId() != null ? taskSpec.getTaskId() : UUID.randomUUID().toString());
         task.setAgentId(agentId);
+        task.setTaskName(taskSpec.getTaskName()); // 设置任务名称
         task.setScriptLang(taskSpec.getScriptLang());
         task.setScriptContent(taskSpec.getScriptContent());
         task.setTimeoutSec(taskSpec.getTimeoutSec());
@@ -153,6 +161,25 @@ public class TaskService {
     
     public long getFailedTaskCount() {
         return taskRepository.countByStatus("FAILED");
+    }
+    
+    @Transactional
+    public void cancelTask(String taskId) {
+        Optional<Task> taskOpt = taskRepository.findById(taskId);
+        if (taskOpt.isPresent()) {
+            Task task = taskOpt.get();
+            if ("PENDING".equals(task.getStatus()) || "RUNNING".equals(task.getStatus()) || "PULLED".equals(task.getStatus())) {
+                task.setStatus("CANCELLED");
+                task.setFinishedAt(LocalDateTime.now());
+                task.setSummary("Task cancelled by user");
+                taskRepository.save(task);
+                log.info("Task {} cancelled", taskId);
+            } else {
+                log.warn("Task {} cannot be cancelled, current status: {}", taskId, task.getStatus());
+            }
+        } else {
+            log.warn("Task {} not found for cancellation", taskId);
+        }
     }
     
     @Scheduled(fixedRate = 60000) // 每1分钟检查一次

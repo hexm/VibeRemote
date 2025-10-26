@@ -20,6 +20,12 @@ public class Task {
     @Column(name = "agent_id", length = 64, nullable = false)
     private String agentId;
     
+    @Column(name = "batch_id", length = 64)
+    private String batchId; // 所属批量任务ID，null表示普通任务
+    
+    @Column(name = "task_name", length = 200)
+    private String taskName; // 任务名称
+    
     @Column(name = "script_lang", length = 20)
     private String scriptLang; // bash | powershell | cmd
     
