@@ -54,11 +54,20 @@
                             v-model="searchKeyword" 
                             placeholder="搜索任务..." 
                             prefix-icon="el-icon-search"
-                            style="width: 300px;"
+                            style="width: 240px;"
                             @input="handleSearch">
                         </el-input>
-                        <el-select v-model="statusFilter" placeholder="状态筛选" style="width: 120px; margin-left: 10px;">
-                            <el-option label="全部" value=""></el-option>
+                        <el-select v-model="agentIdFilter" placeholder="客户端筛选" clearable style="width: 200px; margin-left: 10px;">
+                            <el-option label="全部客户端" value=""></el-option>
+                            <el-option 
+                                v-for="agent in onlineAgents" 
+                                :key="agent.agentId" 
+                                :label="agent.hostname || agent.agentId.substring(0, 8) + '...'" 
+                                :value="agent.agentId">
+                            </el-option>
+                        </el-select>
+                        <el-select v-model="statusFilter" placeholder="状态筛选" clearable style="width: 120px; margin-left: 10px;">
+                            <el-option label="全部状态" value=""></el-option>
                             <el-option label="等待中" value="PENDING"></el-option>
                             <el-option label="已拉取" value="PULLED"></el-option>
                             <el-option label="运行中" value="RUNNING"></el-option>
@@ -87,22 +96,6 @@
                         </el-button>
                     </div>
                 </div>
-
-                <!-- Agent筛选提示 -->
-                <el-alert 
-                    v-if="agentIdFilter"
-                    title="正在查看特定客户端的任务"
-                    type="info"
-                    :closable="true"
-                    @close="clearAgentFilter"
-                    style="margin-top: 15px; margin-bottom: 15px;">
-                    <template #default>
-                        <span>客户端ID: <strong>{{ agentIdFilter.substring(0, 16) }}...</strong></span>
-                        <el-button type="text" size="small" @click="clearAgentFilter" style="margin-left: 10px;">
-                            <i class="el-icon-close"></i> 清除筛选
-                        </el-button>
-                    </template>
-                </el-alert>
 
                 <!-- 任务列表 -->
                 <div class="tasks-table">
@@ -188,8 +181,9 @@
                         <el-option 
                             v-for="agent in onlineAgents" 
                             :key="agent.agentId" 
-                            :label="agent.hostname + ' (' + agent.osType + ')'" 
-                            :value="agent.agentId">
+                            :label="agent.hostname + ' (' + agent.osType + ') - ' + (agent.status === 'ONLINE' ? '在线' : '离线')" 
+                            :value="agent.agentId"
+                            :disabled="agent.status !== 'ONLINE'">
                         </el-option>
                     </el-select>
                 </el-form-item>
@@ -230,7 +224,7 @@
                 <el-form-item label="选择客户端">
                     <el-checkbox-group v-model="batchTaskForm.selectedAgents">
                         <el-checkbox 
-                            v-for="agent in onlineAgents" 
+                            v-for="agent in onlineAgents.filter(a => a.status === 'ONLINE')" 
                             :key="agent.agentId" 
                             :label="agent.agentId">
                             {{ agent.hostname }} ({{ agent.osType }})

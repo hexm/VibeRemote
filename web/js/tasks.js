@@ -106,14 +106,15 @@ const app = createApp({
             try {
                 const response = await api.get('/web/agents');
                 if (response.data && response.data.content) {
-                    onlineAgents.value = response.data.content.filter(agent => agent.status === 'ONLINE');
+                    // 获取所有客户端（包括在线和离线），用于筛选下拉框
+                    onlineAgents.value = response.data.content;
                 } else if (Array.isArray(response.data)) {
-                    onlineAgents.value = response.data.filter(agent => agent.status === 'ONLINE');
+                    onlineAgents.value = response.data;
                 } else {
                     onlineAgents.value = [];
                 }
             } catch (error) {
-                console.error('获取在线客户端失败:', error);
+                console.error('获取客户端列表失败:', error);
                 onlineAgents.value = [];
             }
         };
@@ -295,10 +296,6 @@ const app = createApp({
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
         };
-        
-        const clearAgentFilter = () => {
-            agentIdFilter.value = '';
-        };
 
         onMounted(() => {
             fetchTasks();
@@ -336,7 +333,6 @@ const app = createApp({
             // 计算属性
             filteredTasks,
             // 方法
-            clearAgentFilter,
             refreshTasks: fetchTasks,
             submitCreateTask,
             submitBatchTask,
