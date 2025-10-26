@@ -51,19 +51,60 @@ public class AgentMain {
                 .build();
         AgentApi api = new AgentApi(server, client, MAPPER);
 
-        // 注册Agent
-        System.out.println("Registering agent...");
-        Map<String, Object> reg = api.register(registerToken, hostname, osType);
-        String agentId = String.valueOf(reg.get("agentId"));
-        String agentToken = String.valueOf(reg.get("agentToken"));
+        // 注册Agent（带重试机制）
+        String agentId = null;
+        String agentToken = null;
+        int retryCount = 0;
+        int retryDelay = 1000; // 初始延迟1秒
         
-        System.out.println("Agent registered successfully!");
-        System.out.println("Agent ID: " + agentId);
-        System.out.println("Agent Token: " + agentToken);
+        while (agentId == null) {
+            try {
+                System.out.println("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
+                Map<String, Object> reg = api.register(registerToken, hostname, osType);
+                agentId = String.valueOf(reg.get("agentId"));
+                agentToken = String.valueOf(reg.get("agentToken"));
+                
+                System.out.println("Agent registered successfully!");
+                System.out.println("Agent ID: " + agentId);
+                System.out.println("Agent Token: " + agentToken);
+            } catch (Exception e) {
+                retryCount++;
+                System.err.println("Failed to register agent: " + e.getMessage());
+                System.out.println("Retrying in " + (retryDelay / 1000) + " seconds...");
+                
+                try {
+                    Thread.sleep(retryDelay);
+                } catch (InterruptedException ie) {
+                    System.out.println("Registration cancelled by user");
+                    releaseLock();
+                    return;
+                }
+                
+                // 指数退避：1s -> 2s -> 5s -> 10s -> 30s (max)
+                if (retryDelay < 2000) {
+                    retryDelay = 2000;
+                } else if (retryDelay < 5000) {
+                    retryDelay = 5000;
+                } else if (retryDelay < 10000) {
+                    retryDelay = 10000;
+                } else {
+                    retryDelay = 30000; // 最大30秒
+                }
+            }
+        }
+        
+        // 使用final变量以便在lambda中使用
+        final String finalAgentId = agentId;
+        final String finalAgentToken = agentToken;
 
         // 创建任务执行器
-        SimpleTaskRunner taskRunner = new SimpleTaskRunner(api, agentId, agentToken);
+        SimpleTaskRunner taskRunner = new SimpleTaskRunner(api, finalAgentId, finalAgentToken);
         ExecutorService taskExecutor = Executors.newFixedThreadPool(2);
+        
+        // 连接状态追踪
+        final boolean[] needReRegister = {false};
+        final String[] currentAgentId = {finalAgentId};
+        final String[] currentAgentToken = {finalAgentToken};
 
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -72,7 +113,7 @@ public class AgentMain {
             // 主动通知服务器下线
             try {
                 System.out.println("Notifying server of shutdown...");
-                api.offline(agentId, agentToken);
+                api.offline(currentAgentId[0], currentAgentToken[0]);
                 System.out.println("Server notified successfully");
             } catch (Exception e) {
                 System.err.println("Failed to notify server: " + e.getMessage());
@@ -88,20 +129,89 @@ public class AgentMain {
 
         // 主循环
         long lastHeartbeat = 0L;
+        int heartbeatFailures = 0;
+        final int MAX_HEARTBEAT_FAILURES = 3; // 连续失败3次触发重连
+        
         while (!Thread.currentThread().isInterrupted()) {
             long now = System.currentTimeMillis();
 
             try {
+                // 检查是否需要重新注册
+                if (needReRegister[0]) {
+                    System.out.println("========================================");
+                    System.out.println("Connection lost. Re-registering agent...");
+                    System.out.println("========================================");
+                    
+                    retryCount = 0;
+                    retryDelay = 1000;
+                    boolean reRegistered = false;
+                    
+                    while (!reRegistered && !Thread.currentThread().isInterrupted()) {
+                        try {
+                            retryCount++;
+                            System.out.println("Re-registration attempt " + retryCount + "...");
+                            Map<String, Object> reg = api.register(registerToken, hostname, osType);
+                            currentAgentId[0] = String.valueOf(reg.get("agentId"));
+                            currentAgentToken[0] = String.valueOf(reg.get("agentToken"));
+                            
+                            // 更新任务执行器的凭证
+                            taskRunner.updateCredentials(currentAgentId[0], currentAgentToken[0]);
+                            
+                            System.out.println("Agent re-registered successfully!");
+                            System.out.println("New Agent ID: " + currentAgentId[0]);
+                            System.out.println("New Agent Token: " + currentAgentToken[0]);
+                            System.out.println("========================================");
+                            
+                            needReRegister[0] = false;
+                            heartbeatFailures = 0;
+                            lastHeartbeat = 0; // 立即发送心跳
+                            reRegistered = true;
+                            
+                        } catch (Exception e) {
+                            System.err.println("Re-registration failed: " + e.getMessage());
+                            System.out.println("Retrying in " + (retryDelay / 1000) + " seconds...");
+                            
+                            Thread.sleep(retryDelay);
+                            
+                            // 指数退避
+                            if (retryDelay < 2000) {
+                                retryDelay = 2000;
+                            } else if (retryDelay < 5000) {
+                                retryDelay = 5000;
+                            } else if (retryDelay < 10000) {
+                                retryDelay = 10000;
+                            } else {
+                                retryDelay = 30000;
+                            }
+                        }
+                    }
+                }
+                
                 // 心跳检测 - 每30秒一次
                 if (now - lastHeartbeat > 30_000) {
-                    System.out.println("Sending heartbeat...");
-                    api.heartbeat(agentId, agentToken);
-                    System.out.println("Heartbeat sent at " + new java.util.Date());
-                    lastHeartbeat = now;
+                    try {
+                        System.out.println("Sending heartbeat...");
+                        api.heartbeat(currentAgentId[0], currentAgentToken[0]);
+                        System.out.println("Heartbeat sent at " + new java.util.Date());
+                        lastHeartbeat = now;
+                        heartbeatFailures = 0; // 重置失败计数
+                    } catch (Exception e) {
+                        heartbeatFailures++;
+                        System.err.println("Heartbeat failed (" + heartbeatFailures + "/" + MAX_HEARTBEAT_FAILURES + "): " + e.getMessage());
+                        
+                        if (heartbeatFailures >= MAX_HEARTBEAT_FAILURES) {
+                            System.err.println("Max heartbeat failures reached. Triggering re-registration...");
+                            needReRegister[0] = true;
+                            heartbeatFailures = 0;
+                        } else {
+                            // 更新lastHeartbeat避免频繁重试
+                            lastHeartbeat = now;
+                        }
+                    }
                 }
                 
                 // 拉取任务（不打印日志避免刷屏）
-                Map<String, Object> response = api.pull(agentId, agentToken, 1);
+                Map<String, Object> response = api.pull(currentAgentId[0], currentAgentToken[0], 1);
                 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> tasks = (List<Map<String, Object>>) response.get("tasks");
@@ -130,10 +240,15 @@ public class AgentMain {
                         
                         // 立即ACK确认收到任务
                         try {
-                            api.ack(agentId, agentToken, taskId);
+                            api.ack(currentAgentId[0], currentAgentToken[0], taskId);
                             System.out.println("Task " + taskId + " acknowledged");
                         } catch (Exception e) {
                             System.err.println("Failed to ACK task " + taskId + ": " + e.getMessage());
+                            // Token可能失效，标记需要重新注册
+                            if (e.getMessage().contains("400") || e.getMessage().contains("401") || e.getMessage().contains("403")) {
+                                System.err.println("Authentication error detected. Will re-register...");
+                                needReRegister[0] = true;
+                            }
                             // ACK失败，任务会被服务器回退到PENDING，跳过执行
                             continue;
                         }
@@ -154,12 +269,31 @@ public class AgentMain {
                 break;
             } catch (Exception e) {
                 System.err.println("Error in main loop: " + e.getMessage());
-                e.printStackTrace(); // 打印完整堆栈
-                try {
-                    Thread.sleep(10000); // 出错时等待更长时间
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
+                
+                // 检查是否是认证相关错误
+                if (e.getMessage() != null && 
+                    (e.getMessage().contains("400") || 
+                     e.getMessage().contains("401") || 
+                     e.getMessage().contains("403") ||
+                     e.getMessage().contains("token"))) {
+                    System.err.println("Authentication error detected. Triggering re-registration...");
+                    needReRegister[0] = true;
+                    // 短暂等待后重试
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else {
+                    // 其他错误，打印堆栈并等待更长时间
+                    e.printStackTrace();
+                    try {
+                        Thread.sleep(10000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         }

@@ -6,8 +6,8 @@ import java.util.concurrent.TimeUnit;
 
 class SimpleTaskRunner {
     private final AgentApi api;
-    private final String agentId;
-    private final String agentToken;
+    private volatile String agentId;
+    private volatile String agentToken;
     private volatile boolean shutdown = false;
 
     SimpleTaskRunner(AgentApi api, String agentId, String agentToken) {
@@ -18,6 +18,15 @@ class SimpleTaskRunner {
 
     void shutdown() {
         this.shutdown = true;
+    }
+    
+    /**
+     * 更新agent凭证（在重新注册后调用）
+     */
+    synchronized void updateCredentials(String newAgentId, String newAgentToken) {
+        this.agentId = newAgentId;
+        this.agentToken = newAgentToken;
+        System.out.println("[TaskRunner] Credentials updated");
     }
 
     void runTask(String taskId, String scriptLang, String scriptContent, int timeoutSec) {

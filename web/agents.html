@@ -4,33 +4,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>客户端管理 - LightScript 管理平台</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
-    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="lib/vue/vue.global.prod.js"></script>
+    <script src="lib/element-plus/index.full.min.js"></script>
+    <script src="lib/axios/axios.min.js"></script>
+    <link rel="stylesheet" href="lib/element-plus/index.min.css">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/agents.css">
 </head>
 <body>
-    <div id="app">
-        <!-- 导航栏 -->
-        <div class="navbar">
-            <div class="navbar-brand">
-                <h1>LightScript 管理平台</h1>
-            </div>
-            <div class="navbar-nav">
-                <a href="index.html" class="nav-link">首页</a>
-                <a href="dashboard.html" class="nav-link">仪表盘</a>
-                <a href="agents.html" class="nav-link active">客户端管理</a>
-                <a href="tasks.html" class="nav-link">任务管理</a>
-                <a href="scripts.html" class="nav-link">脚本管理</a>
-                <div class="nav-user">
-                    <span v-if="userInfo.username">{{ userInfo.username }}</span>
-                    <el-button type="text" @click="logout" v-if="userInfo.username">退出</el-button>
-                </div>
+    <!-- 页面加载遮罩 -->
+    <div id="page-loader">
+        <div style="text-align: center;">
+            <div class="loader-spinner"></div>
+            <div class="loader-text">加载中...</div>
+        </div>
+    </div>
+
+    <!-- 导航栏 - 移到Vue应用外部以确保立即可交互 -->
+    <div class="navbar">
+        <div class="navbar-brand">
+            <h1>LightScript 管理平台</h1>
+        </div>
+        <div class="navbar-nav">
+            <a href="index.html" class="nav-link">首页</a>
+            <a href="dashboard.html" class="nav-link">仪表盘</a>
+            <a href="agents.html" class="nav-link active">客户端管理</a>
+            <a href="tasks.html" class="nav-link">任务管理</a>
+            <a href="scripts.html" class="nav-link">脚本管理</a>
+            <div class="nav-user">
+                <span id="navbar-username" style="display:none;"></span>
+                <button id="navbar-logout" class="logout-btn" style="display:none;">退出</button>
             </div>
         </div>
+    </div>
 
+    <div id="app">
         <!-- 主内容区 -->
         <div class="main-content">
             <div class="container">

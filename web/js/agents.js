@@ -22,7 +22,6 @@ if (typeof ElementPlus !== 'undefined' && ElementPlus.ElMessage) {
 
 const app = createApp({
     setup() {
-        const userInfo = ref({});
         const agents = ref([]);
         const loading = ref(false);
         const searchKeyword = ref('');
@@ -39,33 +38,6 @@ const app = createApp({
             scriptContent: '',
             timeoutSec: 60
         });
-
-        const checkLogin = () => {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                // 临时禁用登录检查 - 开发模式
-                console.warn('No JWT token found, using dev mode');
-                userInfo.value = { username: 'dev-user' };
-                return;
-                // window.location.href = '/login.html';
-                // return;
-            }
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                userInfo.value = { username: payload.sub };
-            } catch (e) {
-                // 临时禁用登录检查 - 开发模式
-                console.warn('Invalid JWT token, using dev mode');
-                userInfo.value = { username: 'dev-user' };
-                // localStorage.removeItem('jwt_token');
-                // window.location.href = '/login.html';
-            }
-        };
-
-        const logout = () => {
-            localStorage.removeItem('jwt_token');
-            window.location.href = '/login.html';
-        };
 
         const fetchAgents = async () => {
             loading.value = true;
@@ -115,7 +87,6 @@ const app = createApp({
         });
 
         onMounted(() => {
-            checkLogin();
             fetchAgents();
         });
 
@@ -187,7 +158,6 @@ const app = createApp({
         };
 
         return {
-            userInfo,
             agents,
             loading,
             searchKeyword,
@@ -203,7 +173,6 @@ const app = createApp({
             filteredAgents,
             totalAgents: computed(() => filteredAgents.value ? filteredAgents.value.length : 0),
             hasSelectedAgents: computed(() => selectedAgents.value && selectedAgents.value.length > 0),
-            logout,
             refreshAgents: fetchAgents,
             formatDateTime,
             handleSelectionChange,

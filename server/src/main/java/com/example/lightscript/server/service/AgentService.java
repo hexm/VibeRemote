@@ -42,6 +42,7 @@ public class AgentService {
         
         Agent agent;
         boolean isNewRegistration = false;
+        boolean wasOffline = false;
         
         // 先查询是否已存在
         Optional<Agent> existingAgent = agentRepository.findByHostnameAndOsType(
@@ -50,14 +51,23 @@ public class AgentService {
         if (existingAgent.isPresent()) {
             // 已存在，复用并更新
             agent = existingAgent.get();
+            wasOffline = "OFFLINE".equals(agent.getStatus());
+            
             agent.setIp(request.getIp());
             agent.setLabels(request.getLabels());
             agent.setLastHeartbeat(LocalDateTime.now());
             agent.setStatus("ONLINE");
+            // 生成新的token，确保服务器重启后agent可以重新建立连接
+            agent.setAgentToken(UUID.randomUUID().toString());
             agent = agentRepository.save(agent);
             
-            log.info("[Agent] Re-registered: {} ({}) - AgentId: {}", 
-                    agent.getHostname(), agent.getOsType(), agent.getAgentId());
+            log.info("[Agent] Re-registered: {} ({}) - AgentId: {} (new token generated, was offline: {})", 
+                    agent.getHostname(), agent.getOsType(), agent.getAgentId(), wasOffline);
+            
+            // 注意：不在这里立即重置任务！
+            // 原因：agent离线不代表进程崩溃，可能只是网络中断，任务还在执行
+            // 如果立即重置任务，会导致任务重复执行
+            // 由定时任务checkOfflineAgentTasks()在agent真正离线一段时间后才重置任务
         } else {
             // 不存在，尝试创建新Agent
             try {
@@ -87,14 +97,20 @@ public class AgentService {
                         
                 if (existingAgent.isPresent()) {
                     agent = existingAgent.get();
+                    wasOffline = "OFFLINE".equals(agent.getStatus());
+                    
                     agent.setIp(request.getIp());
                     agent.setLabels(request.getLabels());
                     agent.setLastHeartbeat(LocalDateTime.now());
                     agent.setStatus("ONLINE");
+                    // 生成新的token
+                    agent.setAgentToken(UUID.randomUUID().toString());
                     agent = agentRepository.save(agent);
                     
-                    log.info("Agent re-registered after concurrent conflict: {} ({}), ID: {}", 
+                    log.info("Agent re-registered after concurrent conflict: {} ({}), ID: {} (new token generated)", 
                             agent.getHostname(), agent.getOsType(), agent.getAgentId());
+                    
+                    // 不立即重置任务，避免重复执行
                 } else {
                     // 极端情况：仍然查不到，抛出原始异常
                     throw e;
@@ -130,6 +146,17 @@ public class AgentService {
             agentRepository.save(agent);
             return true;
         }
+        
+        // Token验证失败，但是agent可能还存在（服务器重启导致token失效）
+        // 记录警告日志，让agent知道需要重新注册
+        Optional<Agent> agentById = agentRepository.findById(agentId);
+        if (agentById.isPresent()) {
+            log.warn("[Agent] Heartbeat failed - Token mismatch for agent {} ({}). Agent needs to re-register.", 
+                    agentById.get().getHostname(), agentId);
+        } else {
+            log.warn("[Agent] Heartbeat failed - Unknown agent ID: {}. Agent needs to register.", agentId);
+        }
+        
         return false;
     }
     
@@ -207,4 +234,8 @@ public class AgentService {
             log.info("[Scheduled] Marked {} agents as OFFLINE", offlineCount);
         }
     }
+    
+    // 已删除handleAgentRecovery()方法
+    // 原因：agent重连时不应立即重置任务，应由定时任务延迟处理
+    // 这样可以避免短暂网络中断导致任务重复执行
 }

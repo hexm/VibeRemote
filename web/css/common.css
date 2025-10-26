@@ -12,6 +12,11 @@ body {
     line-height: 1.6;
 }
 
+/* 隐藏加载遮罩（不再使用） */
+#page-loader {
+    display: none !important;
+}
+
 /* 导航栏样式 */
 .navbar {
     background: linear-gradient(135deg, #409EFF 0%, #36a3f7 100%);
@@ -82,6 +87,28 @@ body {
 
 .nav-user .el-button--text:hover {
     background: rgba(255, 255, 255, 0.25);
+}
+
+/* 导航栏退出按钮样式 */
+.logout-btn {
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.logout-btn:active {
+    transform: scale(0.98);
 }
 
 /* 主内容区 */

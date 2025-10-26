@@ -20,7 +20,6 @@ const app = createApp({
                 success: (msg) => console.log('Success:', msg)
             };
         }
-        const userInfo = ref({});
         const tasks = ref([]);
         const loading = ref(false);
         const searchKeyword = ref('');
@@ -58,33 +57,7 @@ const app = createApp({
         const taskLogs = ref([]);
         const autoRefreshLogs = ref(false);
         const onlineAgents = ref([]);
-
-        const checkLogin = () => {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                // 临时禁用登录检查 - 开发模式
-                console.warn('No JWT token found, using dev mode');
-                userInfo.value = { username: 'dev-user' };
-                return;
-                // window.location.href = '/login.html';
-                // return;
-            }
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                userInfo.value = { username: payload.sub };
-            } catch (e) {
-                // 临时禁用登录检查 - 开发模式
-                console.warn('Invalid JWT token, using dev mode');
-                userInfo.value = { username: 'dev-user' };
-                // localStorage.removeItem('jwt_token');
-                // window.location.href = '/login.html';
-            }
-        };
-
-        const logout = () => {
-            localStorage.removeItem('jwt_token');
-            window.location.href = '/login.html';
-        };
+        const agentIdFilter = ref(''); // 用于筛选特定agent的任务
 
         const fetchTasks = async () => {
             loading.value = true;
@@ -279,6 +252,11 @@ const app = createApp({
             // 现在服务器端已经做了分页，前端只做简单的客户端过滤
             let filtered = tasks.value;
             
+            // 按agentId筛选（查看特定agent的任务）
+            if (agentIdFilter.value) {
+                filtered = filtered.filter(task => task.agentId === agentIdFilter.value);
+            }
+            
             // 关键词搜索（前端过滤）
             if (searchKeyword.value) {
                 filtered = filtered.filter(task => 
@@ -298,21 +276,31 @@ const app = createApp({
 
         const handleUrlParams = () => {
             const urlParams = new URLSearchParams(window.location.search);
+            const filterType = urlParams.get('filter');
             const agentId = urlParams.get('agentId');
             
             if (agentId) {
-                // 如果URL中有agentId参数，自动打开任务创建对话框并预选客户端
-                console.log('检测到URL参数agentId:', agentId);
-                createTaskForm.value.agentId = agentId;
-                showCreateTaskDialog.value = true;
+                if (filterType === 'agent') {
+                    // 查看任务模式：筛选显示该agent的所有任务
+                    console.log('查看Agent任务模式，agentId:', agentId);
+                    agentIdFilter.value = agentId;
+                } else {
+                    // 创建任务模式：打开任务创建对话框并预选客户端
+                    console.log('创建任务模式，agentId:', agentId);
+                    createTaskForm.value.agentId = agentId;
+                    showCreateTaskDialog.value = true;
+                }
                 
                 // 清除URL参数，避免刷新页面时重复打开对话框
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
         };
+        
+        const clearAgentFilter = () => {
+            agentIdFilter.value = '';
+        };
 
         onMounted(() => {
-            checkLogin();
             fetchTasks();
             fetchOnlineAgents().then(() => {
                 // 在获取客户端列表后处理URL参数
@@ -321,7 +309,6 @@ const app = createApp({
         });
 
         return {
-            userInfo,
             tasks,
             loading,
             searchKeyword,
@@ -345,10 +332,11 @@ const app = createApp({
             autoRefreshLogs,
             onlineAgents,
             totalTasks,
+            agentIdFilter,
             // 计算属性
             filteredTasks,
             // 方法
-            logout,
+            clearAgentFilter,
             refreshTasks: fetchTasks,
             submitCreateTask,
             submitBatchTask,

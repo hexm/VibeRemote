@@ -184,6 +184,15 @@ public class TaskService {
         }
     }
     
+    // 已删除checkOfflineAgentTasks()和handleAgentTaskRecovery()方法
+    // 原因：
+    // 1. 任务如果真的失败，会通过超时机制标记为TIMEOUT
+    // 2. 是否重新执行失败/超时的任务应该由人工决定，而不是系统自动重置
+    // 3. 自动重置任务可能导致重复执行，不符合业务需求
+    // 解决方案：
+    // - 依赖超时机制（checkTimeoutTasks）标记超时任务
+    // - 用户在Web界面查看失败/超时任务，手动决定是否重新执行
+    
     private TaskSpec convertToTaskSpec(Task task) {
         TaskSpec spec = new TaskSpec();
         spec.setTaskId(task.getTaskId());
