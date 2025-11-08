@@ -44,6 +44,12 @@ public class Task {
     @Column(name = "status", length = 20)
     private String status = "PENDING"; // PENDING | PULLED | RUNNING | SUCCESS | FAILED | TIMEOUT | CANCELLED
     
+    @Column(name = "execution_count")
+    private Integer executionCount = 0; // 执行次数，每次启动时累加
+    
+    @Column(name = "log_file_path", length = 500)
+    private String logFilePath; // 日志文件路径
+    
     @Column(name = "exit_code")
     private Integer exitCode;
     

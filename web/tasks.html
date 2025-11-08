@@ -519,11 +519,16 @@
                 <div class="logs-toolbar">
                     <el-button size="small" @click="refreshLogs">刷新日志</el-button>
                     <el-button size="small" @click="clearLogs">清空显示</el-button>
+                    <el-button size="small" type="success" @click="downloadTaskLog(selectedTask)" v-if="selectedTask">下载日志</el-button>
                     <el-switch v-model="autoRefreshLogs" active-text="自动刷新"></el-switch>
+                    <span style="margin-left: 10px; color: #999;" v-if="taskLogTotalLines > 0">
+                        共 {{ taskLogTotalLines }} 行
+                        <span v-if="taskLogHasMore">（已加载前5000行）</span>
+                    </span>
                 </div>
                 <div class="logs-content">
-                    <pre v-for="log in taskLogs" :key="log.id" :class="'log-' + log.stream">{{ formatLogContent(log) }}</pre>
-                    <div v-if="taskLogs.length === 0" class="no-logs">暂无日志</div>
+                    <pre v-if="taskLogContent">{{ taskLogContent }}</pre>
+                    <div v-else class="no-logs">暂无日志</div>
                 </div>
             </div>
         </el-dialog>

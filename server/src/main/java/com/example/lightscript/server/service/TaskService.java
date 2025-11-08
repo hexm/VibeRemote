@@ -7,13 +7,20 @@ import com.example.lightscript.server.repository.TaskRepository;
 import com.example.lightscript.server.repository.TaskLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +33,9 @@ public class TaskService {
     
     private final TaskRepository taskRepository;
     private final TaskLogRepository taskLogRepository;
+    
+    @Value("${lightscript.log.storage.path:logs/tasks}")
+    private String logStoragePath;
     
     @Transactional
     public String createTask(String agentId, TaskSpec taskSpec, String createdBy) {
@@ -91,8 +101,17 @@ public class TaskService {
             if ("PULLED".equals(task.getStatus())) {
                 task.setStatus("RUNNING");
                 task.setStartedAt(LocalDateTime.now());
+                
+                // 执行次数累加
+                task.setExecutionCount(task.getExecutionCount() + 1);
+                
+                // 生成日志文件路径
+                String logFilePath = generateLogFilePath(task);
+                task.setLogFilePath(logFilePath);
+                
                 taskRepository.save(task);
-                log.info("Task {} acknowledged and started", taskId);
+                log.info("Task {} acknowledged and started, execution count: {}, log file: {}", 
+                    taskId, task.getExecutionCount(), logFilePath);
             } else {
                 log.warn("Task {} ACK ignored, current status: {}", taskId, task.getStatus());
             }
@@ -103,13 +122,22 @@ public class TaskService {
     
     @Transactional
     public void appendLog(String taskId, LogChunkRequest request) {
-        TaskLog log = new TaskLog();
-        log.setTaskId(taskId);
-        log.setSeqNum(request.getSeq());
-        log.setStream(request.getStream());
-        log.setContent(request.getData());
+        // 获取任务信息
+        Task task = taskRepository.findById(taskId).orElse(null);
+        if (task == null) {
+            log.warn("Task {} not found for log append", taskId);
+            return;
+        }
         
-        taskLogRepository.save(log);
+        // 获取日志文件路径
+        String logFilePath = task.getLogFilePath();
+        if (logFilePath == null || logFilePath.isEmpty()) {
+            log.warn("Task {} has no log file path, skipping log append", taskId);
+            return;
+        }
+        
+        // 写入日志到文件
+        writeLogToFile(logFilePath, request);
     }
     
     @Transactional
@@ -228,5 +256,55 @@ public class TaskService {
         spec.setTimeoutSec(task.getTimeoutSec());
         spec.setEnv(task.getEnv());
         return spec;
+    }
+    
+    /**
+     * 生成日志文件路径
+     * 格式：logs/tasks/2024/01/taskId_executionCount_startTime.log
+     * 例如：logs/tasks/2024/01/abc123_1_20240115143020.log
+     */
+    private String generateLogFilePath(Task task) {
+        LocalDateTime startTime = task.getStartedAt();
+        String yearMonth = startTime.format(DateTimeFormatter.ofPattern("yyyy/MM"));
+        String dateTime = startTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        
+        String fileName = String.format("%s_%d_%s.log", 
+            task.getTaskId(),
+            task.getExecutionCount(),
+            dateTime
+        );
+        
+        return String.format("%s/%s/%s", logStoragePath, yearMonth, fileName);
+    }
+    
+    /**
+     * 写入日志到文件
+     */
+    private void writeLogToFile(String logFilePath, LogChunkRequest request) {
+        File logFile = new File(logFilePath);
+        
+        try {
+            // 确保目录存在
+            logFile.getParentFile().mkdirs();
+            
+            // 格式化日志行
+            String timestamp = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
+            String logLine = String.format("[%s] [%s] %s\n", 
+                timestamp, request.getStream(), request.getData());
+            
+            // 追加写入
+            Files.writeString(
+                logFile.toPath(), 
+                logLine, 
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND
+            );
+            
+        } catch (IOException e) {
+            log.error("Failed to write log file: {}", logFilePath, e);
+            throw new RuntimeException("写入日志文件失败: " + logFilePath, e);
+        }
     }
 }

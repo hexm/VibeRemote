@@ -57,6 +57,10 @@ const app = createApp({
         const batchTaskLoading = ref(false);
         const selectedTask = ref(null);
         const taskLogs = ref([]);
+        const taskLogContent = ref(''); // 日志内容（字符串）
+        const taskLogTotalLines = ref(0); // 总行数
+        const taskLogHasMore = ref(false); // 是否还有更多
+        const taskLogStatus = ref(''); // 任务状态
         const autoRefreshLogs = ref(false);
         const onlineAgents = ref([]);
         const agentIdFilter = ref(''); // 用于筛选特定agent的任务
@@ -250,10 +254,18 @@ const app = createApp({
             if (!selectedTask.value) return;
             
             try {
-                const response = await api.get(`/web/tasks/${selectedTask.value.taskId}/logs`);
-                console.log('原始日志数据:', response.data); // 调试：查看原始数据
-                taskLogs.value = response.data || [];
-                console.log('设置的日志:', taskLogs.value); // 调试：查看设置后的数据
+                const response = await api.get(`/web/tasks/${selectedTask.value.taskId}/logs`, {
+                    params: {
+                        offset: 0,
+                        limit: 5000
+                    }
+                });
+                // 新的响应格式
+                taskLogContent.value = response.data.content || '';
+                taskLogTotalLines.value = response.data.totalLines || 0;
+                taskLogHasMore.value = response.data.hasMore || false;
+                taskLogStatus.value = response.data.status;
+                
             } catch (error) {
                 console.error('获取任务日志失败:', error);
                 ElMessage.error('获取任务日志失败');
@@ -261,7 +273,14 @@ const app = createApp({
         };
 
         const clearLogs = () => {
-            taskLogs.value = [];
+            taskLogContent.value = '';
+            taskLogTotalLines.value = 0;
+            taskLogHasMore.value = false;
+        };
+
+        const downloadTaskLog = (task) => {
+            const url = `${api.defaults.baseURL}/web/tasks/${task.taskId}/logs/download`;
+            window.open(url, '_blank');
         };
 
         const cancelTask = async (task) => {
@@ -493,6 +512,10 @@ const app = createApp({
             batchTaskLoading,
             selectedTask,
             taskLogs,
+            taskLogContent,
+            taskLogTotalLines,
+            taskLogHasMore,
+            taskLogStatus,
             autoRefreshLogs,
             onlineAgents,
             totalTasks,
@@ -507,6 +530,7 @@ const app = createApp({
             viewTaskLogs,
             refreshLogs,
             clearLogs,
+            downloadTaskLog,
             cancelTask,
             handleSearch,
             formatDateTime,

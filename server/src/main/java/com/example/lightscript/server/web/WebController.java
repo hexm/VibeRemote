@@ -9,12 +9,20 @@ import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.BatchTaskService;
 import com.example.lightscript.server.service.TaskService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,9 +90,96 @@ public class WebController {
     }
     
     @GetMapping("/tasks/{taskId}/logs")
-    public ResponseEntity<List<TaskLog>> getTaskLogs(@PathVariable String taskId) {
-        List<TaskLog> logs = taskService.getTaskLogs(taskId);
-        return ResponseEntity.ok(logs);
+    public ResponseEntity<Map<String, Object>> getTaskLogs(
+            @PathVariable String taskId,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "5000") int limit) {
+        
+        Task task = taskService.getTask(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        
+        String logFilePath = task.getLogFilePath();
+        
+        // 任务还未启动，没有日志文件
+        if (logFilePath == null || logFilePath.isEmpty()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("content", "");
+            result.put("totalLines", 0);
+            result.put("offset", 0);
+            result.put("limit", limit);
+            result.put("hasMore", false);
+            result.put("status", task.getStatus());
+            return ResponseEntity.ok(result);
+        }
+        
+        return readLogFile(logFilePath, offset, limit, task.getStatus());
+    }
+    
+    @GetMapping("/tasks/{taskId}/logs/download")
+    public ResponseEntity<Resource> downloadTaskLog(@PathVariable String taskId) {
+        Task task = taskService.getTask(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        
+        if (task.getLogFilePath() == null || task.getLogFilePath().isEmpty()) {
+            throw new IllegalArgumentException("任务还未启动，无日志文件");
+        }
+        
+        File logFile = new File(task.getLogFilePath());
+        if (!logFile.exists()) {
+            throw new IllegalArgumentException("日志文件不存在: " + task.getLogFilePath());
+        }
+        
+        Resource resource = new FileSystemResource(logFile);
+        String filename = logFile.getName();
+        
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, 
+                "attachment; filename=\"" + filename + "\"")
+            .contentType(MediaType.TEXT_PLAIN)
+            .body(resource);
+    }
+    
+    /**
+     * 统一的日志文件读取方法
+     */
+    private ResponseEntity<Map<String, Object>> readLogFile(
+            String logFilePath, int offset, int limit, String status) {
+        
+        File logFile = new File(logFilePath);
+        
+        if (!logFile.exists()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("content", "日志文件不存在: " + logFilePath);
+            result.put("totalLines", 0);
+            result.put("offset", 0);
+            result.put("limit", limit);
+            result.put("hasMore", false);
+            result.put("status", status != null ? status : "UNKNOWN");
+            return ResponseEntity.ok(result);
+        }
+        
+        try {
+            List<String> allLines = Files.readAllLines(logFile.toPath(), StandardCharsets.UTF_8);
+            int totalLines = allLines.size();
+            int fromIndex = Math.min(offset, totalLines);
+            int toIndex = Math.min(offset + limit, totalLines);
+            
+            List<String> pageLines = allLines.subList(fromIndex, toIndex);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("content", String.join("\n", pageLines));
+            result.put("totalLines", totalLines);
+            result.put("offset", offset);
+            result.put("limit", limit);
+            result.put("hasMore", toIndex < totalLines);
+            result.put("status", status != null ? status : "UNKNOWN");
+            result.put("fileSize", logFile.length());
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (IOException e) {
+            throw new RuntimeException("读取日志文件失败: " + logFilePath, e);
+        }
     }
     
     @PostMapping("/tasks/create")

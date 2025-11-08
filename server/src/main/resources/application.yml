@@ -44,3 +44,8 @@ lightscript:
     expiration: 86400000  # 24 hours
   register:
     token: dev-register-token
+  log:
+    storage:
+      path: logs/tasks  # 日志文件存储根目录
+    retention:
+      days: 90  # 日志保留天数
