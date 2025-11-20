@@ -3,6 +3,7 @@ package com.example.lightscript.server.web;
 import com.example.lightscript.server.entity.Agent;
 import com.example.lightscript.server.entity.BatchTask;
 import com.example.lightscript.server.entity.Task;
+import com.example.lightscript.server.entity.TaskExecution;
 import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.model.AgentModels.TaskSpec;
 import com.example.lightscript.server.service.AgentService;
@@ -278,5 +279,75 @@ public class WebController {
     public ResponseEntity<Map<String, String>> cancelTask(@PathVariable String taskId) {
         taskService.cancelTask(taskId);
         return ResponseEntity.ok(Map.of("message", "Task cancelled"));
+    }
+    
+    /**
+     * 重启任务
+     */
+    @PostMapping("/tasks/{taskId}/restart")
+    public ResponseEntity<Map<String, Object>> restartTask(@PathVariable String taskId) {
+        taskService.restartTask(taskId);
+        
+        Task task = taskService.getTask(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", "任务已重启");
+        result.put("taskId", taskId);
+        result.put("executionCount", task.getExecutionCount());
+        result.put("status", task.getStatus());
+        
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 获取任务执行历史
+     */
+    @GetMapping("/tasks/{taskId}/executions")
+    public ResponseEntity<List<TaskExecution>> getTaskExecutions(@PathVariable String taskId) {
+        List<TaskExecution> executions = taskService.getTaskExecutionHistory(taskId);
+        return ResponseEntity.ok(executions);
+    }
+    
+    /**
+     * 查看历史执行日志
+     */
+    @GetMapping("/tasks/executions/{executionId}/logs")
+    public ResponseEntity<Map<String, Object>> getExecutionLogs(
+            @PathVariable Long executionId,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "5000") int limit) {
+        
+        TaskExecution execution = taskService.getTaskExecution(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
+        
+        return readLogFile(execution.getLogFilePath(), offset, limit, execution.getStatus());
+    }
+    
+    /**
+     * 下载历史执行日志
+     */
+    @GetMapping("/tasks/executions/{executionId}/download")
+    public ResponseEntity<Resource> downloadExecutionLog(@PathVariable Long executionId) {
+        TaskExecution execution = taskService.getTaskExecution(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
+        
+        if (execution.getLogFilePath() == null || execution.getLogFilePath().isEmpty()) {
+            throw new IllegalArgumentException("该执行记录无日志文件");
+        }
+        
+        File logFile = new File(execution.getLogFilePath());
+        if (!logFile.exists()) {
+            throw new IllegalArgumentException("日志文件不存在: " + execution.getLogFilePath());
+        }
+        
+        Resource resource = new FileSystemResource(logFile);
+        String filename = logFile.getName();
+        
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, 
+                "attachment; filename=\"" + filename + "\"")
+            .contentType(MediaType.TEXT_PLAIN)
+            .body(resource);
     }
 }

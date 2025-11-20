@@ -1,9 +1,11 @@
 package com.example.lightscript.server.service;
 
 import com.example.lightscript.server.entity.Task;
+import com.example.lightscript.server.entity.TaskExecution;
 import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.repository.TaskRepository;
+import com.example.lightscript.server.repository.TaskExecutionRepository;
 import com.example.lightscript.server.repository.TaskLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -33,6 +36,7 @@ public class TaskService {
     
     private final TaskRepository taskRepository;
     private final TaskLogRepository taskLogRepository;
+    private final TaskExecutionRepository taskExecutionRepository;
     
     @Value("${lightscript.log.storage.path:logs/tasks}")
     private String logStoragePath;
@@ -306,5 +310,91 @@ public class TaskService {
             log.error("Failed to write log file: {}", logFilePath, e);
             throw new RuntimeException("写入日志文件失败: " + logFilePath, e);
         }
+    }
+    
+    /**
+     * 重启任务
+     */
+    @Transactional
+    public void restartTask(String taskId) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        // 只有失败或超时的任务可以重启
+        if (!"FAILED".equals(task.getStatus()) && !"TIMEOUT".equals(task.getStatus())) {
+            throw new IllegalStateException(
+                "只有失败或超时的任务可以重启，当前状态: " + task.getStatus());
+        }
+        
+        // 1. 保存当前执行记录到历史表
+        saveExecutionHistory(task);
+        
+        // 2. 重置任务状态（准备下次执行）
+        task.setStatus("PENDING");
+        task.setExecutionCount(task.getExecutionCount() + 1);
+        task.setExitCode(null);
+        task.setSummary(null);
+        task.setPulledAt(null);
+        task.setStartedAt(null);
+        task.setFinishedAt(null);
+        task.setLogFilePath(null); // 下次启动时重新生成
+        
+        taskRepository.save(task);
+        
+        log.info("Task {} restarted, next execution will be: {}", 
+            taskId, task.getExecutionCount());
+    }
+    
+    /**
+     * 保存执行历史记录
+     */
+    private void saveExecutionHistory(Task task) {
+        TaskExecution execution = new TaskExecution();
+        execution.setTaskId(task.getTaskId());
+        execution.setExecutionSeq(task.getExecutionCount());
+        execution.setStatus(task.getStatus());
+        execution.setExitCode(task.getExitCode());
+        execution.setStartedAt(task.getStartedAt());
+        execution.setFinishedAt(task.getFinishedAt());
+        
+        if (task.getStartedAt() != null && task.getFinishedAt() != null) {
+            execution.setDurationMs(
+                Duration.between(task.getStartedAt(), task.getFinishedAt()).toMillis()
+            );
+        }
+        
+        execution.setSummary(task.getSummary());
+        execution.setLogFilePath(task.getLogFilePath());
+        
+        if (task.getLogFilePath() != null) {
+            File logFile = new File(task.getLogFilePath());
+            execution.setLogSizeBytes(logFile.exists() ? logFile.length() : 0L);
+        }
+        
+        taskExecutionRepository.save(execution);
+        
+        log.info("Saved execution history for task {}, seq {}, log: {}", 
+            task.getTaskId(), execution.getExecutionSeq(), task.getLogFilePath());
+    }
+    
+    /**
+     * 获取任务执行历史
+     */
+    public List<TaskExecution> getTaskExecutionHistory(String taskId) {
+        return taskExecutionRepository.findByTaskIdOrderByExecutionSeqAsc(taskId);
+    }
+    
+    /**
+     * 获取单个执行记录
+     */
+    public Optional<TaskExecution> getTaskExecution(Long executionId) {
+        return taskExecutionRepository.findById(executionId);
+    }
+    
+    /**
+     * 判断任务是否有执行历史
+     */
+    public boolean hasExecutionHistory(String taskId) {
+        return taskExecutionRepository.existsByTaskId(taskId);
     }
 }

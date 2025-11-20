@@ -108,17 +108,29 @@
                 <!-- 普通任务列表 -->
                 <div class="tasks-table" v-if="activeTab === 'normal'">
                     <el-table :data="filteredTasks" style="width: 100%" v-loading="loading">
-                        <el-table-column prop="taskId" label="任务ID" width="200">
+                        <el-table-column prop="taskId" label="任务ID" width="280">
                             <template #default="scope">
-                                <el-link type="primary" @click="viewTaskDetail(scope.row)">
-                                    {{ scope.row.taskId.substring(0, 16) }}...
-                                </el-link>
+                                <div>
+                                    <div style="font-weight: bold;">{{ scope.row.taskName || '未命名任务' }}</div>
+                                    <div style="font-size: 12px; color: #999;">{{ scope.row.taskId }}</div>
+                                </div>
                             </template>
                         </el-table-column>
                         
-                        <el-table-column prop="agentId" label="客户端" width="150">
+                        <el-table-column prop="agentId" label="Agent" width="150">
                             <template #default="scope">
-                                {{ getAgentName(scope.row.agentId) }}
+                                {{ scope.row.agentId }}
+                            </template>
+                        </el-table-column>
+                        
+                        <el-table-column prop="executionCount" label="执行次数" width="100" align="center">
+                            <template #default="scope">
+                                <el-tag size="small" v-if="scope.row.executionCount > 0" type="primary">
+                                    第 {{ scope.row.executionCount }} 次
+                                </el-tag>
+                                <el-tag size="small" type="info" v-else>
+                                    未启动
+                                </el-tag>
                             </template>
                         </el-table-column>
                         
@@ -150,10 +162,30 @@
                             </template>
                         </el-table-column>
                         
-                        <el-table-column label="操作" width="200">
+                        <el-table-column label="操作" width="320" fixed="right">
                             <template #default="scope">
                                 <el-button size="small" @click="viewTaskDetail(scope.row)">详情</el-button>
-                                <el-button size="small" type="primary" @click="viewTaskLogs(scope.row)">日志</el-button>
+                                <el-button 
+                                    size="small" 
+                                    type="primary" 
+                                    @click="viewTaskLogs(scope.row)"
+                                    :disabled="scope.row.executionCount === 0">
+                                    日志
+                                </el-button>
+                                <el-button 
+                                    size="small" 
+                                    type="warning" 
+                                    @click="restartTask(scope.row)"
+                                    v-if="scope.row.status === 'FAILED' || scope.row.status === 'TIMEOUT'">
+                                    重启
+                                </el-button>
+                                <el-button 
+                                    size="small" 
+                                    type="info" 
+                                    @click="viewTaskHistory(scope.row)"
+                                    v-if="scope.row.executionCount > 1">
+                                    历史
+                                </el-button>
                                 <el-button 
                                     size="small" 
                                     type="danger" 
@@ -529,6 +561,147 @@
                 <div class="logs-content">
                     <pre v-if="taskLogContent">{{ taskLogContent }}</pre>
                     <div v-else class="no-logs">暂无日志</div>
+                </div>
+            </div>
+        </el-dialog>
+
+        <!-- 任务历史对话框 -->
+        <el-dialog 
+            v-model="showHistoryDialog" 
+            title="任务执行历史" 
+            width="1100px"
+            destroy-on-close>
+            
+            <div v-if="selectedTask">
+                <el-alert 
+                    type="info" 
+                    :closable="false" 
+                    style="margin-bottom: 16px;">
+                    <template #title>
+                        任务：{{ selectedTask.taskName || selectedTask.taskId }} 
+                        （总共执行 {{ selectedTask.executionCount }} 次，历史记录 {{ taskExecutions.length }} 条）
+                    </template>
+                </el-alert>
+                
+                <!-- 历史记录表格 -->
+                <el-table 
+                    :data="taskExecutions" 
+                    v-loading="historyLoading"
+                    border
+                    stripe>
+                    
+                    <el-table-column prop="executionSeq" label="执行序号" width="100" align="center">
+                        <template #default="scope">
+                            <el-tag size="small" type="primary">第 {{ scope.row.executionSeq }} 次</el-tag>
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column prop="startedAt" label="启动时间" width="180">
+                        <template #default="scope">
+                            {{ formatDateTime(scope.row.startedAt) }}
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column prop="finishedAt" label="完成时间" width="180">
+                        <template #default="scope">
+                            {{ formatDateTime(scope.row.finishedAt) }}
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column prop="durationMs" label="执行时长" width="120">
+                        <template #default="scope">
+                            {{ formatDuration(scope.row.durationMs) }}
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column prop="status" label="状态" width="100" align="center">
+                        <template #default="scope">
+                            <el-tag :type="getTaskStatusType(scope.row.status)" size="small">
+                                {{ scope.row.status }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column prop="exitCode" label="退出码" width="80" align="center">
+                        <template #default="scope">
+                            <span :style="{ color: scope.row.exitCode === 0 ? '#67c23a' : '#f56c6c' }">
+                                {{ scope.row.exitCode }}
+                            </span>
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column prop="logSizeBytes" label="日志大小" width="100">
+                        <template #default="scope">
+                            {{ formatFileSize(scope.row.logSizeBytes) }}
+                        </template>
+                    </el-table-column>
+                    
+                    <el-table-column label="操作" width="180" fixed="right">
+                        <template #default="scope">
+                            <el-button 
+                                size="small" 
+                                type="primary"
+                                @click="viewExecutionLogs(scope.row)">
+                                查看日志
+                            </el-button>
+                            <el-button 
+                                size="small" 
+                                type="success"
+                                @click="downloadExecutionLog(scope.row)">
+                                下载
+                            </el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </el-dialog>
+
+        <!-- 历史执行日志对话框 -->
+        <el-dialog 
+            v-model="showExecutionLogsDialog" 
+            title="历史执行日志" 
+            width="900px"
+            destroy-on-close>
+            
+            <div v-if="selectedExecution">
+                <el-descriptions :column="2" border size="small" style="margin-bottom: 16px;">
+                    <el-descriptions-item label="执行序号">
+                        第 {{ selectedExecution.executionSeq }} 次
+                    </el-descriptions-item>
+                    <el-descriptions-item label="执行状态">
+                        <el-tag :type="getTaskStatusType(selectedExecution.status)" size="small">
+                            {{ selectedExecution.status }}
+                        </el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="启动时间">
+                        {{ formatDateTime(selectedExecution.startedAt) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="完成时间">
+                        {{ formatDateTime(selectedExecution.finishedAt) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="执行时长">
+                        {{ formatDuration(selectedExecution.durationMs) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="退出码">
+                        <span :style="{ color: selectedExecution.exitCode === 0 ? '#67c23a' : '#f56c6c' }">
+                            {{ selectedExecution.exitCode }}
+                        </span>
+                    </el-descriptions-item>
+                </el-descriptions>
+                
+                <div class="logs-container">
+                    <div class="logs-toolbar">
+                        <el-button size="small" type="success" @click="downloadExecutionLog(selectedExecution)">
+                            下载日志
+                        </el-button>
+                        <span style="margin-left: 10px; color: #999;">
+                            共 {{ executionLogTotalLines }} 行
+                        </span>
+                    </div>
+                    <div class="logs-content" v-loading="executionLogLoading">
+                        <pre v-if="executionLogContent">{{ executionLogContent }}</pre>
+                        <div v-else class="no-logs">暂无日志</div>
+                    </div>
                 </div>
             </div>
         </el-dialog>

@@ -5,12 +5,15 @@ const app = createApp({
         // 检查 Element Plus 是否正确加载
         console.log('ElementPlus 对象:', typeof ElementPlus);
 
-        // 尝试不同的方式获取 ElMessage
-        let ElMessage;
+        // 尝试不同的方式获取 ElMessage 和 ElMessageBox
+        let ElMessage, ElMessageBox;
+        
         if (typeof ElementPlus !== 'undefined' && ElementPlus.ElMessage) {
             ElMessage = ElementPlus.ElMessage;
+            ElMessageBox = ElementPlus.ElMessageBox;
         } else if (typeof window.ElMessage !== 'undefined') {
             ElMessage = window.ElMessage;
+            ElMessageBox = window.ElMessageBox;
         } else {
             console.error('无法找到 ElMessage 组件');
             // 创建一个简单的替代品
@@ -18,6 +21,11 @@ const app = createApp({
                 error: (msg) => console.error('Error:', msg),
                 warning: (msg) => console.warn('Warning:', msg),
                 success: (msg) => console.log('Success:', msg)
+            };
+            ElMessageBox = {
+                confirm: (msg, title, options) => {
+                    return Promise.resolve(window.confirm(msg));
+                }
             };
         }
         const tasks = ref([]);
@@ -34,6 +42,8 @@ const app = createApp({
         const showBatchTaskDialog = ref(false);
         const showTaskDetailDialog = ref(false);
         const showLogsDialog = ref(false);
+        const showHistoryDialog = ref(false);
+        const showExecutionLogsDialog = ref(false);
         
         // 表单数据
         const createTaskForm = ref({
@@ -64,6 +74,14 @@ const app = createApp({
         const autoRefreshLogs = ref(false);
         const onlineAgents = ref([]);
         const agentIdFilter = ref(''); // 用于筛选特定agent的任务
+        
+        // 历史相关状态
+        const taskExecutions = ref([]); // 任务执行历史列表
+        const historyLoading = ref(false); // 历史加载状态
+        const selectedExecution = ref(null); // 选中的执行记录
+        const executionLogContent = ref(''); // 历史执行日志内容
+        const executionLogTotalLines = ref(0); // 历史日志总行数
+        const executionLogLoading = ref(false); // 历史日志加载状态
 
         // Tab状态
         const activeTab = ref('normal');
@@ -294,6 +312,100 @@ const app = createApp({
             }
         };
 
+        // 重启任务
+        const restartTask = async (task) => {
+            try {
+                await ElMessageBox.confirm(
+                    `确认重启任务"${task.taskName || task.taskId}"吗？`,
+                    '重启确认',
+                    {
+                        confirmButtonText: '确认',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }
+                );
+                
+                const response = await api.post(`/web/tasks/${task.taskId}/restart`);
+                ElMessage.success(`任务已重启，当前为第${response.data.executionCount}次执行`);
+                fetchTasks(); // 刷新任务列表
+            } catch (error) {
+                if (error !== 'cancel') {
+                    console.error('重启任务失败:', error);
+                    ElMessage.error('重启任务失败: ' + (error.response?.data?.message || error.message));
+                }
+            }
+        };
+
+        // 查看任务历史
+        const viewTaskHistory = async (task) => {
+            selectedTask.value = task;
+            showHistoryDialog.value = true;
+            historyLoading.value = true;
+            
+            try {
+                const response = await api.get(`/web/tasks/${task.taskId}/executions`);
+                taskExecutions.value = response.data;
+            } catch (error) {
+                console.error('获取执行历史失败:', error);
+                ElMessage.error('获取执行历史失败');
+            } finally {
+                historyLoading.value = false;
+            }
+        };
+
+        // 查看历史执行日志
+        const viewExecutionLogs = async (execution) => {
+            selectedExecution.value = execution;
+            showExecutionLogsDialog.value = true;
+            executionLogLoading.value = true;
+            
+            try {
+                const response = await api.get(`/web/tasks/executions/${execution.id}/logs`, {
+                    params: {
+                        offset: 0,
+                        limit: 5000
+                    }
+                });
+                executionLogContent.value = response.data.content;
+                executionLogTotalLines.value = response.data.totalLines;
+            } catch (error) {
+                console.error('加载历史日志失败:', error);
+                ElMessage.error('加载历史日志失败');
+            } finally {
+                executionLogLoading.value = false;
+            }
+        };
+
+        // 下载历史日志
+        const downloadExecutionLog = (execution) => {
+            const url = `${api.defaults.baseURL}/web/tasks/executions/${execution.id}/download`;
+            window.open(url, '_blank');
+        };
+
+        // 格式化时长
+        const formatDuration = (ms) => {
+            if (!ms) return '-';
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds % 60}s`;
+            } else {
+                return `${seconds}s`;
+            }
+        };
+
+        // 格式化文件大小
+        const formatFileSize = (bytes) => {
+            if (!bytes) return '-';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        };
+
         const formatLogContent = (log) => {
             const timestamp = new Date(log.timestamp).toLocaleString();
             return `[${timestamp}] [${log.stream}] ${log.content}`;
@@ -504,6 +616,8 @@ const app = createApp({
             showBatchTaskDialog,
             showTaskDetailDialog,
             showLogsDialog,
+            showHistoryDialog,
+            showExecutionLogsDialog,
             // 表单数据
             createTaskForm,
             batchTaskForm,
@@ -520,6 +634,13 @@ const app = createApp({
             onlineAgents,
             totalTasks,
             agentIdFilter,
+            // 历史相关状态
+            taskExecutions,
+            historyLoading,
+            selectedExecution,
+            executionLogContent,
+            executionLogTotalLines,
+            executionLogLoading,
             // 计算属性
             filteredTasks,
             // 方法
@@ -532,6 +653,12 @@ const app = createApp({
             clearLogs,
             downloadTaskLog,
             cancelTask,
+            restartTask,
+            viewTaskHistory,
+            viewExecutionLogs,
+            downloadExecutionLog,
+            formatDuration,
+            formatFileSize,
             handleSearch,
             formatDateTime,
             formatLogContent,
