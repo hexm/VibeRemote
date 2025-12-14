@@ -192,7 +192,9 @@ public class WebController {
         String createdBy = "web-user";
         taskSpec.setTaskName(taskName);
         String taskId = taskService.createTask(agentId, taskSpec, createdBy);
-        return ResponseEntity.ok(Map.of("taskId", taskId));
+        Map<String, String> response = new HashMap<>();
+        response.put("taskId", taskId);
+        return ResponseEntity.ok(response);
     }
     
     @PostMapping("/tasks/batch")
@@ -272,13 +274,17 @@ public class WebController {
     @PostMapping("/batch-tasks/{batchId}/cancel")
     public ResponseEntity<Map<String, String>> cancelBatchTask(@PathVariable String batchId) {
         batchTaskService.cancelBatchTask(batchId);
-        return ResponseEntity.ok(Map.of("message", "Batch task cancelled"));
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Batch task cancelled");
+        return ResponseEntity.ok(response);
     }
     
     @PostMapping("/tasks/{taskId}/cancel")
     public ResponseEntity<Map<String, String>> cancelTask(@PathVariable String taskId) {
         taskService.cancelTask(taskId);
-        return ResponseEntity.ok(Map.of("message", "Task cancelled"));
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Task cancelled");
+        return ResponseEntity.ok(response);
     }
     
     /**

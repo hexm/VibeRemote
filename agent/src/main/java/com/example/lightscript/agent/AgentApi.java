@@ -2,134 +2,141 @@ package com.example.lightscript.agent;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 class AgentApi {
 	private final String baseUrl;
-	private final HttpClient httpClient;
+	private final CloseableHttpClient httpClient;
 	private final ObjectMapper mapper;
 
-	AgentApi(String baseUrl, HttpClient httpClient, ObjectMapper mapper) {
+	AgentApi(String baseUrl, CloseableHttpClient httpClient, ObjectMapper mapper) {
 		this.baseUrl = baseUrl;
 		this.httpClient = httpClient;
 		this.mapper = mapper;
 	}
 
 	Map<String, Object> register(String registerToken, String hostname, String osType) throws Exception {
-		Map<String, Object> payload = Map.of(
-				"registerToken", registerToken,
-				"hostname", hostname,
-				"osType", osType,
-				"ip", ""
-		);
-		HttpRequest req = HttpRequest.newBuilder()
-				.uri(URI.create(baseUrl + "/api/agent/register"))
-				.header("Content-Type", "application/json")
-				.timeout(Duration.ofSeconds(5))
-				.POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
-				.build();
-		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-		if (resp.statusCode() != 200) throw new RuntimeException("register failed: " + resp.statusCode());
-		return mapper.readValue(resp.body(), new TypeReference<Map<String, Object>>() {});
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("registerToken", registerToken);
+		payload.put("hostname", hostname);
+		payload.put("osType", osType);
+		payload.put("ip", "");
+		
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/register");
+		post.setHeader("Content-Type", "application/json");
+		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+		
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+			
+			if (statusCode != 200) {
+				throw new RuntimeException("Registration failed: " + responseBody);
+			}
+			return mapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+		}
 	}
 
 	void heartbeat(String agentId, String agentToken) throws Exception {
-		Map<String, Object> payload = Map.of(
-				"agentId", agentId,
-				"agentToken", agentToken,
-				"time", java.time.Instant.now().toString()
-		);
-		HttpRequest req = HttpRequest.newBuilder()
-				.uri(URI.create(baseUrl + "/api/agent/heartbeat"))
-				.header("Content-Type", "application/json")
-				.timeout(Duration.ofSeconds(5))
-				.POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
-				.build();
-		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-		// 检查响应状态码，401/403表示令牌无效
-		if (resp.statusCode() == 401 || resp.statusCode() == 403) {
-			throw new RuntimeException("Agent token invalid - Server may have restarted. Please restart Agent.");
-		}
-		if (resp.statusCode() != 200) {
-			throw new RuntimeException("Heartbeat failed: HTTP " + resp.statusCode());
-		}
-	}
-
-	void ack(String agentId, String agentToken, String taskId) throws Exception {
-		String url = String.format("%s/api/agent/tasks/%s/ack?agentId=%s&agentToken=%s", 
-				baseUrl, taskId, agentId, agentToken);
-		HttpRequest req = HttpRequest.newBuilder()
-				.uri(URI.create(url))
-				.timeout(Duration.ofSeconds(5))
-				.POST(HttpRequest.BodyPublishers.noBody())
-				.build();
-		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-		if (resp.statusCode() != 200) {
-			throw new RuntimeException("ACK failed: HTTP " + resp.statusCode());
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("agentId", agentId);
+		payload.put("agentToken", agentToken);
+		payload.put("time", java.time.Instant.now().toString());
+		
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/heartbeat");
+		post.setHeader("Content-Type", "application/json");
+		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+		
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			// 检查响应状态码，401/403表示令牌无效
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+				throw new RuntimeException("Heartbeat failed: " + responseBody);
+			}
 		}
 	}
 
-	void offline(String agentId, String agentToken) throws Exception {
-		String url = String.format("%s/api/agent/offline?agentId=%s&agentToken=%s", 
-				baseUrl, agentId, agentToken);
-		HttpRequest req = HttpRequest.newBuilder()
-				.uri(URI.create(url))
-				.timeout(Duration.ofSeconds(3))
-				.POST(HttpRequest.BodyPublishers.noBody())
-				.build();
-		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-		if (resp.statusCode() != 200) {
-			throw new RuntimeException("Offline notification failed: HTTP " + resp.statusCode());
+	Map<String, Object> pullTasks(String agentId, String agentToken) throws Exception {
+		String url = baseUrl + "/api/agent/tasks/pull?agentId=" + agentId + "&agentToken=" + agentToken;
+		HttpGet get = new HttpGet(url);
+		
+		try (CloseableHttpResponse response = httpClient.execute(get)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+			
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				throw new RuntimeException("Pull tasks failed: " + responseBody);
+			}
+			return mapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
 		}
-	}
-
-	Map<String, Object> pull(String agentId, String agentToken, int max) throws Exception {
-		String url = String.format("%s/api/agent/tasks/pull?agentId=%s&agentToken=%s&max=%d", baseUrl, agentId, agentToken, max);
-		HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();
-		HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-		if (resp.statusCode() != 200) throw new RuntimeException("pull failed: " + resp.statusCode());
-		return mapper.readValue(resp.body(), new TypeReference<Map<String, Object>>() {});
 	}
 
 	void sendLog(String agentId, String agentToken, String taskId, int seq, String stream, String data) throws Exception {
-		Map<String, Object> payload = Map.of(
-				"agentId", agentId,
-				"agentToken", agentToken,
-				"taskId", taskId,
-				"seq", seq,
-				"stream", stream,
-				"data", data
-		);
-		HttpRequest req = HttpRequest.newBuilder()
-				.uri(URI.create(baseUrl + "/api/agent/tasks/" + taskId + "/log"))
-				.header("Content-Type", "application/json")
-				.timeout(Duration.ofSeconds(10))
-				.POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
-				.build();
-		httpClient.send(req, HttpResponse.BodyHandlers.discarding());
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("agentId", agentId);
+		payload.put("agentToken", agentToken);
+		payload.put("taskId", taskId);
+		payload.put("seq", seq);
+		payload.put("stream", stream);
+		payload.put("data", data);
+		
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/" + taskId + "/log");
+		post.setHeader("Content-Type", "application/json");
+		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+		
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			// 日志上传不需要检查响应，失败了也继续
+		}
+	}
+
+	void ackTask(String agentId, String agentToken, String taskId) throws Exception {
+		String url = baseUrl + "/api/agent/tasks/" + taskId + "/ack?agentId=" + agentId + "&agentToken=" + agentToken;
+		HttpPost post = new HttpPost(url);
+		
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+				throw new RuntimeException("ACK task failed: " + responseBody);
+			}
+		}
 	}
 
 	void finish(String agentId, String agentToken, String taskId, int exitCode, String status, String summary) throws Exception {
-		Map<String, Object> payload = Map.of(
-				"agentId", agentId,
-				"agentToken", agentToken,
-				"taskId", taskId,
-				"exitCode", exitCode,
-				"status", status,
-				"summary", summary
-		);
-		HttpRequest req = HttpRequest.newBuilder()
-				.uri(URI.create(baseUrl + "/api/agent/tasks/" + taskId + "/finish"))
-				.header("Content-Type", "application/json")
-				.timeout(Duration.ofSeconds(10))
-				.POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
-				.build();
-		httpClient.send(req, HttpResponse.BodyHandlers.discarding());
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("agentId", agentId);
+		payload.put("agentToken", agentToken);
+		payload.put("taskId", taskId);
+		payload.put("exitCode", exitCode);
+		payload.put("status", status);
+		payload.put("summary", summary);
+		
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/" + taskId + "/finish");
+		post.setHeader("Content-Type", "application/json");
+		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+		
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			// 完成通知不需要检查响应
+		}
 	}
-} 
+}

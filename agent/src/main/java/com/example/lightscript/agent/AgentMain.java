@@ -1,10 +1,11 @@
 package com.example.lightscript.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.http.HttpClient;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -12,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -46,9 +46,7 @@ public class AgentMain {
         String osType = System.getProperty("os.name").toLowerCase().contains("win") ? "WINDOWS" : "LINUX";
 
         // 创建HTTP客户端
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .build();
+        CloseableHttpClient client = HttpClients.createDefault();
         AgentApi api = new AgentApi(server, client, MAPPER);
 
         // 注册Agent（带重试机制）
@@ -109,19 +107,13 @@ public class AgentMain {
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Agent shutting down...");
-            
-            // 主动通知服务器下线
-            try {
-                System.out.println("Notifying server of shutdown...");
-                api.offline(currentAgentId[0], currentAgentToken[0]);
-                System.out.println("Server notified successfully");
-            } catch (Exception e) {
-                System.err.println("Failed to notify server: " + e.getMessage());
-                // 忽略错误，继续关闭流程
-            }
-            
             taskRunner.shutdown();
             taskExecutor.shutdown();
+            try {
+                client.close();
+            } catch (IOException e) {
+                // 忽略关闭错误
+            }
             releaseLock(); // 释放文件锁
         }));
 
@@ -210,18 +202,14 @@ public class AgentMain {
                     }
                 }
                 
-                // 拉取任务（不打印日志避免刷屏）
-                Map<String, Object> response = api.pull(currentAgentId[0], currentAgentToken[0], 1);
+                // 拉取任务
+                Map<String, Object> response = api.pullTasks(currentAgentId[0], currentAgentToken[0]);
                 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> tasks = (List<Map<String, Object>>) response.get("tasks");
 
                 if (tasks != null && !tasks.isEmpty()) {
                     for (Map<String, Object> task : tasks) {
-                        // 调试：打印完整的任务数据
-                        System.out.println("DEBUG: Received task data: " + task);
-                        
-                        // 使用与服务器端TaskSpec一致的字段名
                         String taskId = String.valueOf(task.get("taskId"));
                         String scriptLang = String.valueOf(task.get("scriptLang"));
                         String scriptContent = String.valueOf(task.get("scriptContent"));
@@ -232,24 +220,6 @@ public class AgentMain {
                         // 检查是否所有必要字段都存在
                         if (taskId == null || "null".equals(taskId) || scriptContent == null || "null".equals(scriptContent)) {
                             System.err.println("ERROR: Invalid task data - taskId or scriptContent is null");
-                            System.err.println("  taskId: " + taskId);
-                            System.err.println("  scriptLang: " + scriptLang);
-                            System.err.println("  scriptContent: " + scriptContent);
-                            continue;
-                        }
-                        
-                        // 立即ACK确认收到任务
-                        try {
-                            api.ack(currentAgentId[0], currentAgentToken[0], taskId);
-                            System.out.println("Task " + taskId + " acknowledged");
-                        } catch (Exception e) {
-                            System.err.println("Failed to ACK task " + taskId + ": " + e.getMessage());
-                            // Token可能失效，标记需要重新注册
-                            if (e.getMessage().contains("400") || e.getMessage().contains("401") || e.getMessage().contains("403")) {
-                                System.err.println("Authentication error detected. Will re-register...");
-                                needReRegister[0] = true;
-                            }
-                            // ACK失败，任务会被服务器回退到PENDING，跳过执行
                             continue;
                         }
                         

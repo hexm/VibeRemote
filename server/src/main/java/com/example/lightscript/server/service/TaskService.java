@@ -297,11 +297,10 @@ public class TaskService {
             String logLine = String.format("[%s] [%s] %s\n", 
                 timestamp, request.getStream(), request.getData());
             
-            // 追加写入
-            Files.writeString(
+            // 追加写入 (Java 8 兼容)
+            Files.write(
                 logFile.toPath(), 
-                logLine, 
-                StandardCharsets.UTF_8,
+                logLine.getBytes(StandardCharsets.UTF_8),
                 StandardOpenOption.CREATE,
                 StandardOpenOption.APPEND
             );

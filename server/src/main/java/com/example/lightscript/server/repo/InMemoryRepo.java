@@ -57,6 +57,6 @@ public class InMemoryRepo {
 	}
 
 	public List<String> getLogs(String taskId) {
-		return logsByTask.getOrDefault(taskId, List.of());
+		return logsByTask.getOrDefault(taskId, new ArrayList<>());
 	}
 } 

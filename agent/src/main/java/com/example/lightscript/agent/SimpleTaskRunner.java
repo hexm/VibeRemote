@@ -32,6 +32,8 @@ class SimpleTaskRunner {
     void runTask(String taskId, String scriptLang, String scriptContent, int timeoutSec) {
         int seq = 0;
         try {
+            // 首先确认任务开始执行
+            api.ackTask(agentId, agentToken, taskId);
             api.sendLog(agentId, agentToken, taskId, ++seq, "system", "Task started (lang: " + scriptLang + ")");
             
             // 构建命令

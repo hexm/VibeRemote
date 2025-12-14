@@ -10,6 +10,7 @@ import javax.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -92,7 +93,9 @@ public class AgentController {
 			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
 		String taskId = taskService.createTask(agentId, spec, "debug");
-		return ResponseEntity.ok(Map.of("taskId", taskId));
+		Map<String, String> response = new HashMap<>();
+		response.put("taskId", taskId);
+		return ResponseEntity.ok(response);
 	}
 
 	@GetMapping("/tasks/{taskId}/logs")

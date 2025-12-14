@@ -41,7 +41,9 @@ public class AuthController {
             }
         }
         
-        return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", "Invalid credentials");
+        return ResponseEntity.status(401).body(errorResponse);
     }
     
     @PostMapping("/register")
@@ -60,7 +62,9 @@ public class AuthController {
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
     
@@ -78,15 +82,23 @@ public class AuthController {
                 User user = userOpt.get();
                 if (userService.validatePassword(user, request.getCurrentPassword())) {
                     userService.updatePassword(username, request.getNewPassword());
-                    return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
+                    Map<String, String> successResponse = new HashMap<>();
+                    successResponse.put("message", "Password changed successfully");
+                    return ResponseEntity.ok(successResponse);
                 } else {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Current password is incorrect"));
+                    Map<String, String> errorResponse = new HashMap<>();
+                    errorResponse.put("error", "Current password is incorrect");
+                    return ResponseEntity.badRequest().body(errorResponse);
                 }
             }
             
-            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "User not found");
+            return ResponseEntity.status(404).body(errorResponse);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid token"));
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Invalid token");
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
     
