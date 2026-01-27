@@ -10,8 +10,10 @@
 | `quick-start.sh` | 快速启动服务器（开发模式） |
 | `start-server.sh` | 启动后端服务器 |
 | `start-agent.sh` | 启动客户端代理 |
-| `start-web.sh` | 启动前端服务 |
-| `start-all.sh` | 一键启动所有服务 |
+| `start-web.sh` | 启动传统前端服务 (Vue 3) |
+| `start-modern-web.sh` | 启动现代化前端服务 (React 18) ⭐ |
+| `start-all.sh` | 一键启动所有服务（传统版本） |
+| `start-all-modern.sh` | 一键启动所有服务（现代化版本） ⭐ |
 | `stop-all.sh` | 停止所有服务 |
 | `reset-agent-id.sh` | 重置 Agent ID |
 
@@ -38,6 +40,7 @@ brew install python
 
 ### 2. 一键启动（推荐）
 
+#### 现代化版本 ⭐
 ```bash
 # 进入项目根目录
 cd LightScript
@@ -45,14 +48,26 @@ cd LightScript
 # 给脚本添加执行权限
 chmod +x scripts/mac/*.sh
 
-# 一键启动所有服务
+# 一键启动现代化版本
+./scripts/mac/start-all-modern.sh
+```
+
+这个命令会：
+- 自动构建项目
+- 启动后端服务器 (http://localhost:8080)
+- 启动现代化前端服务 (http://localhost:3001) ⭐
+- 显示访问地址和默认账号
+
+#### 传统版本
+```bash
+# 一键启动传统版本
 ./scripts/mac/start-all.sh
 ```
 
 这个命令会：
 - 自动构建项目
 - 启动后端服务器 (http://localhost:8080)
-- 启动前端服务 (http://localhost:3000)
+- 启动传统前端服务 (http://localhost:3000)
 - 显示访问地址和默认账号
 
 ### 3. 分步启动
@@ -67,6 +82,10 @@ chmod +x scripts/mac/*.sh
 ./scripts/mac/start-server.sh
 
 # 3. 启动前端（新终端窗口）
+# 现代化版本（推荐）
+./scripts/mac/start-modern-web.sh
+
+# 或传统版本
 ./scripts/mac/start-web.sh
 
 # 4. 启动客户端代理（新终端窗口）
@@ -120,9 +139,25 @@ chmod +x scripts/mac/*.sh
 
 启动成功后，你可以访问：
 
-- **前端界面**: http://localhost:3000
+### 现代化版本 ⭐
+- **现代化前端界面**: http://localhost:3001
 - **后端 API**: http://localhost:8080
 - **H2 数据库控制台**: http://localhost:8080/h2-console
+
+### 传统版本
+- **传统前端界面**: http://localhost:3000
+- **后端 API**: http://localhost:8080
+- **H2 数据库控制台**: http://localhost:8080/h2-console
+
+### 🎨 版本对比
+| 特性 | 传统版本 | 现代化版本 |
+|------|----------|------------|
+| **框架** | Vue 3 + Element Plus | React 18 + Ant Design 5 ⭐ |
+| **样式** | 传统CSS | Tailwind CSS ⭐ |
+| **设计** | 企业风格 | 现代渐变设计 ⭐ |
+| **动画** | 基础 | 流畅动画效果 ⭐ |
+| **响应式** | 基础支持 | 完全响应式 ⭐ |
+| **性能** | 一般 | 高性能优化 ⭐ |
 
 ## 👤 默认账号
 

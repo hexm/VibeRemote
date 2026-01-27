@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #40a9ff;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #52c41a;
+        }
+        .error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+    </style>
+</head>
+<body>
+    <h1>LightScript 登录功能测试</h1>
+    
+    <div class="test-section">
+        <h3>后端API测试</h3>
+        <button onclick="testBackendLogin()">测试后端登录API</button>
+        <div id="backend-result" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>前端访问测试</h3>
+        <p>前端地址: <a href="http://localhost:3002" target="_blank">http://localhost:3002</a></p>
+        <p>默认账号: admin / admin123</p>
+        <button onclick="openFrontend()">打开前端页面</button>
+    </div>
+
+    <div class="test-section">
+        <h3>问题排查</h3>
+        <button onclick="checkServices()">检查服务状态</button>
+        <div id="service-result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function testBackendLogin() {
+            const resultDiv = document.getElementById('backend-result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '测试中...';
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'admin123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <strong>✅ 后端登录成功!</strong><br>
+                        Token: ${data.token ? '已获取' : '未获取'}<br>
+                        用户名: ${data.username}<br>
+                        角色: ${data.role}
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `❌ 登录失败: ${data.error || '未知错误'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ 网络错误: ${error.message}`;
+            }
+        }
+
+        function openFrontend() {
+            window.open('http://localhost:3002', '_blank');
+        }
+
+        async function checkServices() {
+            const resultDiv = document.getElementById('service-result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '检查中...';
+            
+            const services = [
+                { name: '后端服务', url: 'http://localhost:8080/api/auth/login', method: 'OPTIONS' },
+                { name: '前端服务', url: 'http://localhost:3002', method: 'GET' }
+            ];
+            
+            let results = [];
+            
+            for (const service of services) {
+                try {
+                    const response = await fetch(service.url, { method: service.method });
+                    results.push(`✅ ${service.name}: 运行正常`);
+                } catch (error) {
+                    results.push(`❌ ${service.name}: ${error.message}`);
+                }
+            }
+            
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = results.join('<br>');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>输入框调试测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 2px solid #52c41a;
+            border-radius: 8px;
+            background: #f6ffed;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid #1890ff;
+            border-radius: 4px;
+            font-size: 16px;
+            background-color: white !important;
+            color: black !important;
+            pointer-events: auto !important;
+            z-index: 99999 !important;
+            position: relative !important;
+        }
+        
+        input:focus, textarea:focus {
+            outline: 2px solid #ff4d4f;
+            border-color: #ff4d4f;
+        }
+        
+        button {
+            padding: 12px 24px;
+            margin: 8px 4px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #1890ff;
+            color: white;
+        }
+        
+        button:hover {
+            background: #40a9ff;
+        }
+        
+        .debug-info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 输入框调试测试页面</h1>
+        <p>这是一个完全独立的HTML页面，用于测试输入框功能</p>
+        
+        <div class="test-section">
+            <h3>✅ 基础输入测试</h3>
+            <label>文本输入框:</label>
+            <input type="text" id="test1" placeholder="请在这里输入文字" />
+            
+            <label>密码输入框:</label>
+            <input type="password" id="test2" placeholder="请输入密码" />
+            
+            <label>数字输入框:</label>
+            <input type="number" id="test3" placeholder="请输入数字" />
+            
+            <label>文本域:</label>
+            <textarea id="test4" placeholder="请输入多行文本" rows="3"></textarea>
+        </div>
+        
+        <div class="test-section">
+            <h3>🎯 交互测试</h3>
+            <button onclick="focusTest()">聚焦到第一个输入框</button>
+            <button onclick="clearAll()">清空所有输入框</button>
+            <button onclick="fillTest()">填充测试数据</button>
+            <button onclick="checkStatus()">检查页面状态</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>📊 实时状态</h3>
+            <div id="status" class="debug-info">等待交互...</div>
+        </div>
+        
+        <div class="test-section">
+            <h3>🔗 返回测试</h3>
+            <p>如果这个页面的输入框可以正常工作，说明问题出在React应用中</p>
+            <button onclick="window.open('http://localhost:3001', '_blank')">打开React应用</button>
+        </div>
+    </div>
+
+    <script>
+        // 实时监控输入框状态
+        function updateStatus() {
+            const status = document.getElementById('status');
+            const info = {
+                timestamp: new Date().toLocaleTimeString(),
+                activeElement: document.activeElement?.tagName + '#' + document.activeElement?.id,
+                bodyOverflow: document.body.style.overflow,
+                bodyClasses: document.body.className,
+                inputValues: {
+                    test1: document.getElementById('test1').value,
+                    test2: document.getElementById('test2').value,
+                    test3: document.getElementById('test3').value,
+                    test4: document.getElementById('test4').value
+                }
+            };
+            status.textContent = JSON.stringify(info, null, 2);
+        }
+        
+        // 绑定事件监听器
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputs = document.querySelectorAll('input, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    console.log('输入框获得焦点:', this.id);
+                    updateStatus();
+                });
+                
+                input.addEventListener('blur', function() {
+                    console.log('输入框失去焦点:', this.id);
+                    updateStatus();
+                });
+                
+                input.addEventListener('input', function() {
+                    console.log('输入框值变化:', this.id, this.value);
+                    updateStatus();
+                });
+            });
+            
+            updateStatus();
+            setInterval(updateStatus, 1000); // 每秒更新状态
+        });
+        
+        function focusTest() {
+            document.getElementById('test1').focus();
+        }
+        
+        function clearAll() {
+            document.querySelectorAll('input, textarea').forEach(input => {
+                input.value = '';
+            });
+            updateStatus();
+        }
+        
+        function fillTest() {
+            document.getElementById('test1').value = '测试文本';
+            document.getElementById('test2').value = 'password123';
+            document.getElementById('test3').value = '12345';
+            document.getElementById('test4').value = '多行文本\n测试内容';
+            updateStatus();
+        }
+        
+        function checkStatus() {
+            console.log('=== 页面状态检查 ===');
+            console.log('Document ready state:', document.readyState);
+            console.log('Body overflow:', getComputedStyle(document.body).overflow);
+            console.log('Body pointer-events:', getComputedStyle(document.body).pointerEvents);
+            console.log('Active element:', document.activeElement);
+            
+            const inputs = document.querySelectorAll('input, textarea');
+            inputs.forEach((input, index) => {
+                const styles = getComputedStyle(input);
+                console.log(`Input ${index + 1} (${input.id}):`, {
+                    disabled: input.disabled,
+                    readonly: input.readOnly,
+                    pointerEvents: styles.pointerEvents,
+                    zIndex: styles.zIndex,
+                    position: styles.position,
+                    display: styles.display,
+                    visibility: styles.visibility
+                });
+            });
+        }
+    </script>
+</body>
+</html>
