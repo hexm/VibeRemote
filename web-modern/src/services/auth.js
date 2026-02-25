@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:8080/api'
+// 根据环境变量自动选择API地址
+// 生产环境使用相对路径 /api（通过Nginx代理）
+// 开发环境使用 http://localhost:8080/api
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 // 创建axios实例
 const api = axios.create({
