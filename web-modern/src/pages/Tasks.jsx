@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Modal, Form, message, Tooltip } from 'antd'
+import React, { useState, useEffect } from 'react'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Modal, Form, message, Tooltip, Tabs, Progress, Statistic, Row, Col } from 'antd'
 import {
   FileTextOutlined,
   SearchOutlined,
@@ -13,19 +13,45 @@ import {
   ExclamationCircleOutlined,
   ClockCircleOutlined,
   SyncOutlined,
+  AppstoreOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
+import api from '../services/auth'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
 const { Option } = Select
+const { TabPane } = Tabs
 
 const Tasks = () => {
+  // 基础状态
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('normal')
+  
+  // 普通任务状态
   const [createModalVisible, setCreateModalVisible] = useState(false)
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [selectedTask, setSelectedTask] = useState(null)
   const [form] = Form.useForm()
+  
+  // 批量任务状态
+  const [batchTasks, setBatchTasks] = useState([])
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchModalVisible, setBatchModalVisible] = useState(false)
+  const [batchDetailModalVisible, setBatchDetailModalVisible] = useState(false)
+  const [selectedBatchTask, setSelectedBatchTask] = useState(null)
+  const [batchTaskTasks, setBatchTaskTasks] = useState([])
+  const [batchForm] = Form.useForm()
+  
+  // 模拟在线代理数据
+  const [onlineAgents] = useState([
+    { agentId: 'agent-001', hostname: 'web-server-01', status: 'online' },
+    { agentId: 'agent-002', hostname: 'db-server-01', status: 'online' },
+    { agentId: 'agent-003', hostname: 'app-server-01', status: 'online' },
+    { agentId: 'agent-004', hostname: 'cache-server-01', status: 'online' },
+  ])
 
+  // 模拟任务数据
   const [tasks, setTasks] = useState([
     {
       key: '1',
@@ -81,6 +107,106 @@ const Tasks = () => {
     },
   ])
 
+  // 模拟批量任务数据
+  useEffect(() => {
+    if (activeTab === 'batch' && batchTasks.length === 0) {
+      setBatchTasks([
+        {
+          batchId: 'B001',
+          batchName: '系统维护批量任务',
+          scriptLang: 'shell',
+          targetAgentCount: 4,
+          successTasks: 3,
+          failedTasks: 1,
+          runningTasks: 0,
+          pendingTasks: 0,
+          status: 'PARTIAL_FAILED',
+          createdAt: '2024-01-15 09:30:00',
+          finishedAt: '2024-01-15 09:45:00',
+          progress: 100
+        },
+        {
+          batchId: 'B002', 
+          batchName: '日志清理批量任务',
+          scriptLang: 'shell',
+          targetAgentCount: 3,
+          successTasks: 2,
+          failedTasks: 0,
+          runningTasks: 1,
+          pendingTasks: 0,
+          status: 'RUNNING',
+          createdAt: '2024-01-15 10:00:00',
+          finishedAt: null,
+          progress: 67
+        }
+      ])
+    }
+  }, [activeTab, batchTasks.length])
+
+  // 批量任务状态辅助函数
+  const getBatchStatusText = (status) => {
+    const map = {
+      'PENDING': '等待中',
+      'RUNNING': '运行中', 
+      'COMPLETED': '已完成',
+      'PARTIAL_FAILED': '部分失败',
+      'FAILED': '失败'
+    }
+    return map[status] || status
+  }
+
+  const getBatchStatusType = (status) => {
+    const map = {
+      'PENDING': 'default',
+      'RUNNING': 'processing',
+      'COMPLETED': 'success', 
+      'PARTIAL_FAILED': 'warning',
+      'FAILED': 'error'
+    }
+    return map[status] || 'default'
+  }
+
+  // Tab切换处理
+  const handleTabChange = (key) => {
+    setActiveTab(key)
+  }
+
+  // 刷新数据
+  const handleRefresh = () => {
+    setLoading(true)
+    
+    if (activeTab === 'batch') {
+      // 刷新批量任务
+      setBatchLoading(true)
+      // 模拟API调用
+      setTimeout(() => {
+        setBatchLoading(false)
+        message.success('批量任务列表已刷新')
+        setLoading(false)
+      }, 800)
+    } else {
+      // 刷新普通任务
+      // 模拟API调用
+      setTimeout(() => {
+        message.success('任务列表已刷新')
+        setLoading(false)
+      }, 800)
+    }
+  }
+
+  // 创建批量任务
+  const handleCreateBatchTask = async (values) => {
+    try {
+      message.success('批量任务创建成功')
+      setBatchModalVisible(false)
+      batchForm.resetFields()
+      setActiveTab('batch')
+    } catch (error) {
+      message.error('创建批量任务失败')
+    }
+  }
+
+  // 创建普通任务
   const handleCreateTask = async (values) => {
     try {
       // 模拟API调用
@@ -89,9 +215,9 @@ const Tasks = () => {
       const newTask = {
         key: Date.now().toString(),
         id: `T${String(tasks.length + 1).padStart(3, '0')}`,
-        name: values.name,
+        name: values.taskName,
         script: values.script,
-        agent: values.agent,
+        agent: onlineAgents.find(a => a.agentId === values.agent)?.hostname || values.agent,
         status: 'pending',
         progress: 0,
         startTime: null,
@@ -109,11 +235,13 @@ const Tasks = () => {
     }
   }
 
+  // 查看任务日志
   const handleViewLog = (task) => {
     setSelectedTask(task)
     setLogModalVisible(true)
   }
 
+  // 停止任务
   const handleStopTask = (task) => {
     Modal.confirm({
       title: '确认停止',
@@ -131,6 +259,7 @@ const Tasks = () => {
     })
   }
 
+  // 删除任务
   const handleDeleteTask = (task) => {
     Modal.confirm({
       title: '确认删除',
@@ -144,6 +273,32 @@ const Tasks = () => {
     })
   }
 
+  // 查看批量任务详情
+  const viewBatchTaskDetail = (batchTask) => {
+    setSelectedBatchTask(batchTask)
+    setBatchDetailModalVisible(true)
+  }
+
+  // 取消批量任务
+  const cancelBatchTask = (batchTask) => {
+    Modal.confirm({
+      title: '确认取消',
+      content: `确定要取消批量任务"${batchTask.batchName}"吗？这将取消所有未完成的子任务。`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk() {
+        // 更新批量任务状态
+        setBatchTasks(batchTasks.map(task => 
+          task.batchId === batchTask.batchId 
+            ? { ...task, status: 'CANCELLED', runningTasks: 0 }
+            : task
+        ))
+        message.success('批量任务已取消')
+      },
+    })
+  }
+
+  // 普通任务表格列定义
   const columns = [
     {
       title: '任务信息',
@@ -300,6 +455,98 @@ const Tasks = () => {
     },
   ]
 
+  // 批量任务表格列定义
+  const batchColumns = [
+    {
+      title: '批量任务信息',
+      key: 'info',
+      render: (_, record) => (
+        <div>
+          <Text strong className="block">{record.batchName}</Text>
+          <Text code className="text-sm">{record.batchId}</Text>
+        </div>
+      ),
+    },
+    {
+      title: '目标节点',
+      dataIndex: 'targetAgentCount',
+      key: 'targetAgentCount',
+      render: (count) => (
+        <Tag color="blue" icon={<TeamOutlined />}>
+          {count} 个节点
+        </Tag>
+      ),
+    },
+    {
+      title: '执行统计',
+      key: 'stats',
+      render: (_, record) => (
+        <div className="space-y-1">
+          <div className="flex space-x-2 text-sm">
+            <Tag color="success">成功: {record.successTasks}</Tag>
+            <Tag color="error">失败: {record.failedTasks}</Tag>
+            {record.runningTasks > 0 && <Tag color="processing">运行: {record.runningTasks}</Tag>}
+          </div>
+          <Progress 
+            percent={record.progress} 
+            size="small" 
+            status={record.status === 'FAILED' ? 'exception' : 'normal'}
+          />
+        </div>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => (
+        <Tag color={getBatchStatusType(status)}>
+          {getBatchStatusText(status)}
+        </Tag>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_, record) => (
+        <Space>
+          <Tooltip title="查看详情">
+            <Button 
+              type="text" 
+              icon={<EyeOutlined />} 
+              size="small"
+              onClick={() => viewBatchTaskDetail(record)}
+              className="text-blue-500 hover:bg-blue-50"
+            />
+          </Tooltip>
+          {record.status === 'RUNNING' && (
+            <Tooltip title="取消任务">
+              <Button 
+                type="text" 
+                icon={<StopOutlined />} 
+                size="small"
+                onClick={() => cancelBatchTask(record)}
+                className="text-orange-500 hover:bg-orange-50"
+              />
+            </Tooltip>
+          )}
+          <Tooltip title="刷新统计">
+            <Button 
+              type="text" 
+              icon={<ReloadOutlined />} 
+              size="small"
+              onClick={() => {
+                message.success(`${record.batchName} 统计信息已刷新`)
+                // 这里可以调用API刷新单个批量任务的统计信息
+              }}
+              className="text-green-500 hover:bg-green-50"
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ]
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* 页面标题 */}
@@ -310,7 +557,7 @@ const Tasks = () => {
             任务管理
           </Title>
           <Text type="secondary" className="text-base">
-            创建、管理和监控脚本执行任务
+            创建、管理和监控脚本执行任务，支持批量任务功能
           </Text>
         </div>
         <Space>
@@ -323,71 +570,152 @@ const Tasks = () => {
             创建任务
           </Button>
           <Button
+            type="default"
+            icon={<AppstoreOutlined />}
+            onClick={() => setBatchModalVisible(true)}
+            className="shadow-lg"
+          >
+            批量任务
+          </Button>
+          <Button
             icon={<ReloadOutlined />}
             loading={loading}
-            onClick={() => setLoading(true)}
+            onClick={handleRefresh}
           >
             刷新
           </Button>
         </Space>
       </div>
 
-      {/* 工具栏 */}
+      {/* Tab切换 */}
       <Card className="shadow-lg">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <Space wrap>
-            <Search
-              placeholder="搜索任务名称或ID"
-              allowClear
-              style={{ width: 250 }}
-              prefix={<SearchOutlined className="text-gray-400" />}
-            />
-            <Select
-              defaultValue="all"
-              style={{ width: 120 }}
-            >
-              <Option value="all">全部状态</Option>
-              <Option value="running">运行中</Option>
-              <Option value="completed">已完成</Option>
-              <Option value="failed">失败</Option>
-              <Option value="pending">等待中</Option>
-            </Select>
-          </Space>
-          
-          <div className="flex items-center space-x-4 text-sm">
-            <Space>
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <Text>成功: {tasks.filter(t => t.status === 'completed').length}</Text>
-            </Space>
-            <Space>
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <Text>运行中: {tasks.filter(t => t.status === 'running').length}</Text>
-            </Space>
-            <Space>
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <Text>失败: {tasks.filter(t => t.status === 'failed').length}</Text>
-            </Space>
-          </div>
-        </div>
-      </Card>
+        <Tabs activeKey={activeTab} onChange={handleTabChange}>
+          <TabPane 
+            tab={
+              <span>
+                <FileTextOutlined />
+                普通任务
+              </span>
+            } 
+            key="normal"
+          >
+            {/* 普通任务工具栏 */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
+              <Space wrap>
+                <Search
+                  placeholder="搜索任务名称或ID"
+                  allowClear
+                  style={{ width: 250 }}
+                  prefix={<SearchOutlined className="text-gray-400" />}
+                />
+                <Select
+                  defaultValue="all"
+                  style={{ width: 120 }}
+                >
+                  <Option value="all">全部状态</Option>
+                  <Option value="running">运行中</Option>
+                  <Option value="completed">已完成</Option>
+                  <Option value="failed">失败</Option>
+                  <Option value="pending">等待中</Option>
+                </Select>
+              </Space>
+              
+              <div className="flex items-center space-x-4 text-sm">
+                <Space>
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <Text>成功: {tasks.filter(t => t.status === 'completed').length}</Text>
+                </Space>
+                <Space>
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <Text>运行中: {tasks.filter(t => t.status === 'running').length}</Text>
+                </Space>
+                <Space>
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <Text>失败: {tasks.filter(t => t.status === 'failed').length}</Text>
+                </Space>
+              </div>
+            </div>
 
-      {/* 任务列表 */}
-      <Card className="shadow-lg">
-        <Table
-          columns={columns}
-          dataSource={tasks}
-          loading={loading}
-          pagination={{
-            total: tasks.length,
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total, range) => 
-              `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
-          }}
-          className="rounded-lg overflow-hidden"
-          scroll={{ x: 1200 }}
-        />
+            <Table
+              columns={columns}
+              dataSource={tasks}
+              loading={loading}
+              pagination={{
+                total: tasks.length,
+                pageSize: 10,
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (total, range) => 
+                  `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
+              }}
+              className="rounded-lg overflow-hidden"
+              scroll={{ x: 1200 }}
+            />
+          </TabPane>
+
+          <TabPane 
+            tab={
+              <span>
+                <AppstoreOutlined />
+                批量任务
+              </span>
+            } 
+            key="batch"
+          >
+            {/* 批量任务工具栏 */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
+              <Space wrap>
+                <Search
+                  placeholder="搜索批量任务名称"
+                  allowClear
+                  style={{ width: 250 }}
+                  prefix={<SearchOutlined className="text-gray-400" />}
+                />
+                <Select
+                  defaultValue="all"
+                  style={{ width: 120 }}
+                >
+                  <Option value="all">全部状态</Option>
+                  <Option value="RUNNING">运行中</Option>
+                  <Option value="COMPLETED">已完成</Option>
+                  <Option value="FAILED">失败</Option>
+                  <Option value="PARTIAL_FAILED">部分失败</Option>
+                </Select>
+              </Space>
+              
+              <div className="flex items-center space-x-4 text-sm">
+                <Space>
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <Text>已完成: {batchTasks.filter(t => t.status === 'COMPLETED').length}</Text>
+                </Space>
+                <Space>
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <Text>运行中: {batchTasks.filter(t => t.status === 'RUNNING').length}</Text>
+                </Space>
+                <Space>
+                  <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                  <Text>部分失败: {batchTasks.filter(t => t.status === 'PARTIAL_FAILED').length}</Text>
+                </Space>
+              </div>
+            </div>
+
+            <Table
+              columns={batchColumns}
+              dataSource={batchTasks}
+              loading={batchLoading}
+              pagination={{
+                total: batchTasks.length,
+                pageSize: 10,
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (total, range) => 
+                  `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
+              }}
+              className="rounded-lg overflow-hidden"
+              scroll={{ x: 1200 }}
+            />
+          </TabPane>
+        </Tabs>
       </Card>
 
       {/* 创建任务模态框 */}
@@ -405,7 +733,7 @@ const Tasks = () => {
           className="mt-4"
         >
           <Form.Item
-            name="name"
+            name="taskName"
             label="任务名称"
             rules={[{ required: true, message: '请输入任务名称' }]}
           >
@@ -431,9 +759,11 @@ const Tasks = () => {
             rules={[{ required: true, message: '请选择执行节点' }]}
           >
             <Select placeholder="选择执行节点">
-              <Option value="web-server-01">web-server-01</Option>
-              <Option value="db-server-01">db-server-01</Option>
-              <Option value="app-server-01">app-server-01</Option>
+              {onlineAgents.map(agent => (
+                <Option key={agent.agentId} value={agent.agentId}>
+                  {agent.hostname}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           
@@ -479,6 +809,135 @@ const Tasks = () => {
           <div>[2024-01-15 10:28:00] 脚本执行完成</div>
           <div>[2024-01-15 10:28:00] 任务执行成功，退出码: 0</div>
         </div>
+      </Modal>
+      <Modal
+        title="创建批量任务"
+        open={batchModalVisible}
+        onCancel={() => setBatchModalVisible(false)}
+        footer={null}
+        width={700}
+      >
+        <Form
+          form={batchForm}
+          layout="vertical"
+          onFinish={handleCreateBatchTask}
+          className="mt-4"
+        >
+          <Form.Item
+            name="batchName"
+            label="批量任务名称"
+            rules={[{ required: true, message: '请输入批量任务名称' }]}
+          >
+            <Input placeholder="输入批量任务名称" />
+          </Form.Item>
+          
+          <Form.Item
+            name="selectedAgents"
+            label="目标节点"
+            rules={[{ required: true, message: '请选择至少一个执行节点' }]}
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择执行节点（可多选）"
+              style={{ width: '100%' }}
+            >
+              {onlineAgents.map(agent => (
+                <Option key={agent.agentId} value={agent.agentId}>
+                  <Space>
+                    <Tag color="green" size="small">在线</Tag>
+                    {agent.hostname}
+                  </Space>
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+          
+          <Form.Item
+            name="scriptContent"
+            label="脚本内容"
+            rules={[{ required: true, message: '请输入脚本内容' }]}
+          >
+            <TextArea 
+              rows={8} 
+              placeholder="输入要执行的脚本内容..."
+              style={{ fontFamily: 'monospace' }}
+            />
+          </Form.Item>
+          
+          <Form.Item className="mb-0 text-right">
+            <Space>
+              <Button onClick={() => setBatchModalVisible(false)}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit">
+                创建批量任务
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 批量任务详情模态框 */}
+      <Modal
+        title={`批量任务详情 - ${selectedBatchTask?.batchName}`}
+        open={batchDetailModalVisible}
+        onCancel={() => setBatchDetailModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setBatchDetailModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={1000}
+      >
+        {selectedBatchTask && (
+          <div className="space-y-4">
+            <Row gutter={16}>
+              <Col span={6}>
+                <Statistic
+                  title="目标节点"
+                  value={selectedBatchTask.targetAgentCount}
+                  prefix={<TeamOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="成功任务"
+                  value={selectedBatchTask.successTasks}
+                  valueStyle={{ color: '#3f8600' }}
+                  prefix={<CheckCircleOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="失败任务"
+                  value={selectedBatchTask.failedTasks}
+                  valueStyle={{ color: '#cf1322' }}
+                  prefix={<ExclamationCircleOutlined />}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="运行中"
+                  value={selectedBatchTask.runningTasks}
+                  valueStyle={{ color: '#1890ff' }}
+                  prefix={<SyncOutlined />}
+                />
+              </Col>
+            </Row>
+
+            <div>
+              <Text strong>整体进度</Text>
+              <Progress 
+                percent={selectedBatchTask.progress} 
+                status={selectedBatchTask.status === 'FAILED' ? 'exception' : 'normal'}
+                strokeColor={{
+                  '0%': '#108ee9',
+                  '100%': '#87d068',
+                }}
+              />
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
