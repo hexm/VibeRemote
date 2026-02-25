@@ -1,72 +1,105 @@
 # LightScript 生产环境部署总结
 
-## 部署信息
+## ✅ 部署完成
 
-- **部署时间**: 2026-02-25 16:42
-- **服务器**: 阿里云ECS
-- **IP地址**: 8.138.114.34
-- **部署路径**: /opt/lightscript/
+**部署时间**: 2026-02-25 16:42  
+**服务器**: 阿里云ECS (8.138.114.34)  
+**部署路径**: /opt/lightscript/
 
-## 服务状态
+---
 
-### 后端服务
-- **端口**: 8080
-- **状态**: ✅ 运行中
-- **进程ID**: 35953
-- **访问地址**: http://8.138.114.34:8080
-- **启动时间**: 7.761秒
-- **Spring Boot版本**: 2.7.18
-- **Java版本**: 1.8.0_482
+## 🌐 访问地址
 
-### 前端服务
-- **端口**: 3000
-- **状态**: ✅ 运行中
-- **进程ID**: 35972
-- **访问地址**: http://8.138.114.34:3000
+### 方式一：通过80端口（推荐）
+- **前端界面**: http://8.138.114.34
+- **后端API**: http://8.138.114.34/api/
 
-## 默认账号
+优点：统一域名，支持API代理
+
+### 方式二：通过独立端口
+- **前端界面**: http://8.138.114.34:3000
+- **后端API**: http://8.138.114.34:8080
+
+优点：前后端独立访问
+
+---
+
+## 🔐 默认账号
 
 - **管理员**: admin / admin123
 - **普通用户**: user / user123
 
-## 快速命令
+⚠️ 首次登录后请立即修改密码
 
+---
+
+## 📊 服务状态
+
+### 前端服务（Nginx）
+- **状态**: ✅ 运行中
+- **端口**: 80, 3000
+- **版本**: nginx/1.20.1
+- **配置**: /etc/nginx/conf.d/lightscript.conf
+
+### 后端服务（Spring Boot）
+- **状态**: ✅ 运行中
+- **端口**: 8080
+- **进程ID**: 48847
+- **版本**: Spring Boot 2.7.18
+- **Java版本**: 1.8.0_482
+- **启动时间**: 7.761秒
+
+### 数据库（H2）
+- **状态**: ✅ 运行中
+- **位置**: /opt/lightscript/data/lightscript.mv.db
+- **模式**: 文件存储
+
+---
+
+## 🛠️ 服务管理
+
+### 查看服务状态
 ```bash
-# 查看后端日志
-ssh root@8.138.114.34 'tail -f /opt/lightscript/backend/backend.log'
+# 查看Nginx状态
+ssh root@8.138.114.34 'systemctl status nginx'
 
-# 查看前端日志
-ssh root@8.138.114.34 'tail -f /opt/lightscript/frontend/frontend.log'
+# 查看后端进程
+ssh root@8.138.114.34 'ps aux | grep java'
 
-# 重启服务
-ssh root@8.138.114.34 '/opt/lightscript/scripts/restart-all.sh'
-
-# 停止服务
-ssh root@8.138.114.34 '/opt/lightscript/scripts/stop-all.sh'
-
-# 查看服务进程
-ssh root@8.138.114.34 'ps aux | grep -E "(java|python3)" | grep -v grep'
+# 查看端口监听
+ssh root@8.138.114.34 'netstat -tlnp | grep -E "(80|3000|8080)"'
 ```
 
-## 部署流程
+### 重启服务
+```bash
+# 重启所有服务
+ssh root@8.138.114.34 '/opt/lightscript/scripts/restart-all.sh'
 
-1. ✅ 配置SSH免密登录
-2. ✅ 本地构建后端和前端
-3. ✅ 创建部署包
-4. ✅ 上传到服务器
-5. ✅ 配置服务器环境
-6. ✅ 启动服务
+# 单独重启Nginx
+ssh root@8.138.114.34 'systemctl restart nginx'
 
-## 部署验证
+# 单独重启后端
+ssh root@8.138.114.34 '/opt/lightscript/scripts/stop-all.sh && /opt/lightscript/scripts/start-backend.sh'
+```
 
-- ✅ 后端服务正常启动（Spring Boot 2.7.18）
-- ✅ 前端服务正常运行（Python HTTP Server）
-- ✅ 数据库初始化完成（H2 Database）
-- ✅ 默认用户创建成功
-- ✅ JPA实体管理器初始化完成
-- ✅ Tomcat启动在8080端口
+### 查看日志
+```bash
+# Nginx访问日志
+ssh root@8.138.114.34 'tail -f /opt/lightscript/logs/nginx-access.log'
 
-## 服务器目录结构
+# Nginx错误日志
+ssh root@8.138.114.34 'tail -f /opt/lightscript/logs/nginx-error.log'
+
+# 后端日志
+ssh root@8.138.114.34 'tail -f /opt/lightscript/backend/backend.log'
+
+# 应用业务日志
+ssh root@8.138.114.34 'tail -f /opt/lightscript/logs/lightscript-server.log'
+```
+
+---
+
+## 📂 服务器目录结构
 
 ```
 /opt/lightscript/
@@ -77,44 +110,111 @@ ssh root@8.138.114.34 'ps aux | grep -E "(java|python3)" | grep -v grep'
 │   └── backend.pid            # 后端进程ID
 ├── frontend/
 │   ├── index.html             # 前端入口
-│   ├── assets/                # 前端资源
-│   ├── frontend.log           # 前端日志
-│   └── frontend.pid           # 前端进程ID
+│   └── assets/                # 前端资源 (CSS, JS)
 ├── data/
 │   └── lightscript.mv.db      # H2数据库文件
 ├── logs/
-│   └── lightscript-server.log # 应用日志
+│   ├── lightscript-server.log # 应用日志
+│   ├── nginx-access.log       # Nginx访问日志
+│   └── nginx-error.log        # Nginx错误日志
 └── scripts/
     ├── start-backend.sh       # 启动后端
-    ├── start-frontend.sh      # 启动前端
+    ├── start-frontend.sh      # 启动前端（Nginx）
     ├── stop-all.sh            # 停止所有服务
     └── restart-all.sh         # 重启所有服务
 ```
 
-## 注意事项
+---
 
-1. 首次登录后请修改默认密码
-2. 建议配置HTTPS和域名
-3. 定期备份数据库文件：/opt/lightscript/data/lightscript.mv.db
-4. 监控服务器资源使用情况
-5. 防火墙已配置开放8080和3000端口
+## 🔧 技术栈
 
-## 更新部署
+### 前端
+- React 18
+- Ant Design 5
+- Tailwind CSS
+- Vite
+- Nginx (Web服务器)
 
-当代码有更新时，只需重新运行部署脚本：
+### 后端
+- Spring Boot 2.7.18
+- Spring Security
+- Spring Data JPA
+- H2 Database
+- JWT认证
+
+---
+
+## 🚀 更新部署
+
+当代码有更新时，运行：
 
 ```bash
 ./scripts/mac/deploy-to-aliyun.sh
 ```
 
 脚本会自动：
-1. 备份现有部署
-2. 停止服务
-3. 部署新版本
-4. 启动服务
+1. ✅ 本地构建前后端
+2. ✅ 备份现有部署
+3. ✅ 停止服务
+4. ✅ 上传新版本
+5. ✅ 配置Nginx
+6. ✅ 启动服务
 
-## 相关文档
+---
+
+## ⚠️ 重要提示
+
+### 安全建议
+1. 修改默认密码
+2. 配置HTTPS（使用Let's Encrypt）
+3. 定期备份数据库文件
+4. 限制SSH访问IP
+5. 配置防火墙规则
+
+### 阿里云安全组
+确保以下端口已开放：
+- ✅ 80 (HTTP)
+- ✅ 3000 (前端)
+- ✅ 8080 (后端API)
+- ✅ 22 (SSH)
+
+⚠️ 配置后需要在阿里云控制台"应用到实例"才能生效
+
+### 备份策略
+```bash
+# 备份数据库
+ssh root@8.138.114.34 'cp /opt/lightscript/data/lightscript.mv.db /opt/lightscript/data/lightscript.mv.db.backup.$(date +%Y%m%d)'
+
+# 下载备份到本地
+scp root@8.138.114.34:/opt/lightscript/data/lightscript.mv.db.backup.* ./backups/
+```
+
+---
+
+## 📚 相关文档
 
 - [详细部署指南](./DEPLOYMENT_ALIYUN.md)
+- [Nginx部署说明](./NGINX_DEPLOYMENT.md)
+- [安全组配置](./ALIYUN_SECURITY_GROUP.md)
 - [快速部署指南](./QUICK_DEPLOY.md)
 - [项目结构说明](./PROJECT_STRUCTURE.md)
+
+---
+
+## 🎉 部署验证清单
+
+- [x] 后端服务启动成功
+- [x] 前端服务启动成功（Nginx）
+- [x] 数据库初始化完成
+- [x] 默认用户创建成功
+- [x] 80端口可访问
+- [x] 3000端口可访问
+- [x] 8080端口可访问
+- [x] SSH免密登录配置完成
+- [x] Nginx配置正确
+- [x] 日志文件正常生成
+
+---
+
+**部署状态**: ✅ 成功  
+**最后更新**: 2026-02-25 16:54
