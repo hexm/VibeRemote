@@ -81,10 +81,10 @@ EOF
 
 cat > ${DEPLOY_DIR}/scripts/start-frontend.sh << 'EOF'
 #!/bin/bash
-cd /opt/lightscript/frontend
-nohup python3 -m http.server 3000 > frontend.log 2>&1 &
-echo $! > frontend.pid
-echo "前端服务已启动，PID: $(cat frontend.pid)"
+# 前端使用Nginx部署，无需单独启动
+systemctl start nginx
+systemctl enable nginx
+echo "前端服务已启动（Nginx）"
 EOF
 
 cat > ${DEPLOY_DIR}/scripts/stop-all.sh << 'EOF'
@@ -96,12 +96,8 @@ if [ -f /opt/lightscript/backend/backend.pid ]; then
     echo "后端服务已停止"
 fi
 
-# 停止前端
-if [ -f /opt/lightscript/frontend/frontend.pid ]; then
-    kill $(cat /opt/lightscript/frontend/frontend.pid) 2>/dev/null || true
-    rm -f /opt/lightscript/frontend/frontend.pid
-    echo "前端服务已停止"
-fi
+# 停止前端（Nginx由systemd管理，不在这里停止）
+echo "前端服务由Nginx提供，使用 systemctl stop nginx 停止"
 EOF
 
 cat > ${DEPLOY_DIR}/scripts/restart-all.sh << 'EOF'
@@ -111,7 +107,7 @@ cd /opt/lightscript/scripts
 sleep 2
 ./start-backend.sh
 sleep 3
-./start-frontend.sh
+systemctl restart nginx
 echo "所有服务已重启"
 EOF
 
@@ -161,17 +157,66 @@ if ! command -v java &> /dev/null; then
     yum install -y java-11-openjdk || apt-get install -y openjdk-11-jdk
 fi
 
-# 检查Python3
-if ! command -v python3 &> /dev/null; then
-    echo "安装Python3..."
-    yum install -y python3 || apt-get install -y python3
+# 检查Nginx
+if ! command -v nginx &> /dev/null; then
+    echo "安装Nginx..."
+    yum install -y nginx || apt-get install -y nginx
 fi
+
+# 配置Nginx
+cat > /etc/nginx/conf.d/lightscript.conf << 'NGINXCONF'
+server {
+    listen 3000;
+    server_name _;
+    
+    root /opt/lightscript/frontend;
+    index index.html;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    access_log /opt/lightscript/logs/nginx-access.log;
+    error_log /opt/lightscript/logs/nginx-error.log;
+}
+
+server {
+    listen 80;
+    server_name _;
+    
+    location / {
+        root /opt/lightscript/frontend;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /api/ {
+        proxy_pass http://localhost:8080/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINXCONF
+
+# 测试Nginx配置
+nginx -t
+
+# 启动并启用Nginx
+systemctl enable nginx
+systemctl restart nginx
 
 # 配置防火墙
 if command -v firewall-cmd &> /dev/null; then
     echo "配置防火墙..."
     firewall-cmd --permanent --add-port=8080/tcp || true
     firewall-cmd --permanent --add-port=3000/tcp || true
+    firewall-cmd --permanent --add-service=http || true
     firewall-cmd --reload || true
 fi
 
