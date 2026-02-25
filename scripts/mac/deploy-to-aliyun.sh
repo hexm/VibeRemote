@@ -176,6 +176,15 @@ server {
         try_files $uri $uri/ /index.html;
     }
     
+    # 后端API代理
+    location /api/ {
+        proxy_pass http://localhost:8080/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
