@@ -49,6 +49,9 @@ public class Agent {
     @Column(name = "free_mem_mb")
     private Long freeMemMb;
     
+    @Column(name = "total_mem_mb")
+    private Long totalMemMb;
+    
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     

@@ -29,21 +29,31 @@ const Agents = () => {
     setLoading(true)
     try {
       const response = await api.get('/web/agents')
-      const agentList = response.content.map(agent => ({
-        key: agent.agentId,
-        id: agent.agentId,
-        hostname: agent.hostname,
-        ip: agent.ip || 'N/A',
-        os: agent.osType,
-        status: agent.status === 'ONLINE' ? 'online' : 'offline',
-        lastHeartbeat: agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString('zh-CN') : 'N/A',
-        tasks: 0,
+      const agentList = response.content.map(agent => {
         // CPU负载转换为百分比（0.0-1.0 -> 0-100）
-        cpu: agent.cpuLoad ? Math.round(agent.cpuLoad * 100) : 0,
-        // 内存使用率计算（假设总内存16GB）
-        memory: agent.freeMemMb ? Math.max(0, Math.min(100, Math.round((1 - agent.freeMemMb / 16384) * 100))) : 0,
-        uptime: calculateUptime(agent.createdAt),
-      }))
+        const cpuPercent = agent.cpuLoad ? Math.round(agent.cpuLoad * 100) : 0
+        
+        // 内存使用率计算
+        let memoryPercent = 0
+        if (agent.totalMemMb && agent.freeMemMb) {
+          const usedMemMb = agent.totalMemMb - agent.freeMemMb
+          memoryPercent = Math.round((usedMemMb / agent.totalMemMb) * 100)
+        }
+        
+        return {
+          key: agent.agentId,
+          id: agent.agentId,
+          hostname: agent.hostname,
+          ip: agent.ip || 'N/A',
+          os: agent.osType,
+          status: agent.status === 'ONLINE' ? 'online' : 'offline',
+          lastHeartbeat: agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString('zh-CN') : 'N/A',
+          tasks: 0,
+          cpu: cpuPercent,
+          memory: memoryPercent,
+          uptime: calculateUptime(agent.createdAt),
+        }
+      })
       setAgents(agentList)
     } catch (error) {
       console.error('Failed to load agents:', error)

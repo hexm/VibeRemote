@@ -37,6 +37,7 @@ public class AgentModels {
 		private Instant time;
 		private Double cpuLoad;
 		private Long freeMemMb;
+		private Long totalMemMb;
 	}
 
 	@Data

@@ -143,6 +143,9 @@ public class AgentService {
             if (request.getFreeMemMb() != null) {
                 agent.setFreeMemMb(request.getFreeMemMb());
             }
+            if (request.getTotalMemMb() != null) {
+                agent.setTotalMemMb(request.getTotalMemMb());
+            }
             agentRepository.save(agent);
             return true;
         }

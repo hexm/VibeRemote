@@ -48,12 +48,26 @@ class AgentApi {
 	}
 
 	void heartbeat(String agentId, String agentToken) throws Exception {
+		Double cpuLoad = getCpuLoad();
+		Long freeMemMb = getFreeMemoryMb();
+		Long totalMemMb = getTotalMemoryMb();
+		
 		Map<String, Object> payload = new HashMap<>();
 		payload.put("agentId", agentId);
 		payload.put("agentToken", agentToken);
 		payload.put("time", java.time.Instant.now().toString());
-		payload.put("cpuLoad", getCpuLoad());
-		payload.put("freeMemMb", getFreeMemoryMb());
+		payload.put("cpuLoad", cpuLoad);
+		payload.put("freeMemMb", freeMemMb);
+		payload.put("totalMemMb", totalMemMb);
+		
+		// 打印资源使用情况
+		System.out.println(String.format("Resource Usage - CPU: %.2f%%, Memory: %d/%d MB (%.2f%% used)", 
+			cpuLoad != null ? cpuLoad * 100 : 0.0,
+			freeMemMb != null && totalMemMb != null ? (totalMemMb - freeMemMb) : 0,
+			totalMemMb != null ? totalMemMb : 0,
+			freeMemMb != null && totalMemMb != null && totalMemMb > 0 
+				? ((totalMemMb - freeMemMb) * 100.0 / totalMemMb) : 0.0
+		));
 		
 		HttpPost post = new HttpPost(baseUrl + "/api/agent/heartbeat");
 		post.setHeader("Content-Type", "application/json");
@@ -115,6 +129,23 @@ class AgentApi {
 					(com.sun.management.OperatingSystemMXBean) osBean;
 				long freeMemory = sunOsBean.getFreePhysicalMemorySize();
 				return freeMemory / (1024 * 1024); // 转换为MB
+			}
+			return null;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取总内存（MB）
+	private Long getTotalMemoryMb() {
+		try {
+			java.lang.management.OperatingSystemMXBean osBean = 
+				java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+			if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
+				com.sun.management.OperatingSystemMXBean sunOsBean = 
+					(com.sun.management.OperatingSystemMXBean) osBean;
+				long totalMemory = sunOsBean.getTotalPhysicalMemorySize();
+				return totalMemory / (1024 * 1024); // 转换为MB
 			}
 			return null;
 		} catch (Exception e) {
