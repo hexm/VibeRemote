@@ -30,7 +30,7 @@ class AgentApi {
 		payload.put("registerToken", registerToken);
 		payload.put("hostname", hostname);
 		payload.put("osType", osType);
-		payload.put("ip", "");
+		payload.put("ip", getLocalIpAddress());
 		
 		HttpPost post = new HttpPost(baseUrl + "/api/agent/register");
 		post.setHeader("Content-Type", "application/json");
@@ -52,6 +52,8 @@ class AgentApi {
 		payload.put("agentId", agentId);
 		payload.put("agentToken", agentToken);
 		payload.put("time", java.time.Instant.now().toString());
+		payload.put("cpuLoad", getCpuLoad());
+		payload.put("freeMemMb", getFreeMemoryMb());
 		
 		HttpPost post = new HttpPost(baseUrl + "/api/agent/heartbeat");
 		post.setHeader("Content-Type", "application/json");
@@ -67,6 +69,56 @@ class AgentApi {
 				String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
 				throw new RuntimeException("Heartbeat failed: " + responseBody);
 			}
+		}
+	}
+	
+	// 获取本机IP地址
+	private String getLocalIpAddress() {
+		try {
+			return java.net.InetAddress.getLocalHost().getHostAddress();
+		} catch (Exception e) {
+			return "unknown";
+		}
+	}
+	
+	// 获取CPU负载（0.0-1.0）
+	private Double getCpuLoad() {
+		try {
+			java.lang.management.OperatingSystemMXBean osBean = 
+				java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+			if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
+				com.sun.management.OperatingSystemMXBean sunOsBean = 
+					(com.sun.management.OperatingSystemMXBean) osBean;
+				double load = sunOsBean.getSystemCpuLoad();
+				// 如果返回负数，表示不可用
+				return load >= 0 ? load : null;
+			}
+			// 使用系统平均负载作为替代
+			double loadAverage = osBean.getSystemLoadAverage();
+			if (loadAverage >= 0) {
+				int processors = osBean.getAvailableProcessors();
+				return Math.min(loadAverage / processors, 1.0);
+			}
+			return null;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取空闲内存（MB）
+	private Long getFreeMemoryMb() {
+		try {
+			java.lang.management.OperatingSystemMXBean osBean = 
+				java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+			if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
+				com.sun.management.OperatingSystemMXBean sunOsBean = 
+					(com.sun.management.OperatingSystemMXBean) osBean;
+				long freeMemory = sunOsBean.getFreePhysicalMemorySize();
+				return freeMemory / (1024 * 1024); // 转换为MB
+			}
+			return null;
+		} catch (Exception e) {
+			return null;
 		}
 	}
 

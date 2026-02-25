@@ -43,7 +43,15 @@ public class AgentMain {
 
         // 获取主机信息
         String hostname = java.net.InetAddress.getLocalHost().getHostName();
-        String osType = System.getProperty("os.name").toLowerCase().contains("win") ? "WINDOWS" : "LINUX";
+        String osName = System.getProperty("os.name").toLowerCase();
+        String osType;
+        if (osName.contains("win")) {
+            osType = "WINDOWS";
+        } else if (osName.contains("mac")) {
+            osType = "MACOS";
+        } else {
+            osType = "LINUX";
+        }
 
         // 创建HTTP客户端
         CloseableHttpClient client = HttpClients.createDefault();

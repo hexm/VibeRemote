@@ -38,8 +38,10 @@ const Agents = () => {
         status: agent.status === 'ONLINE' ? 'online' : 'offline',
         lastHeartbeat: agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString('zh-CN') : 'N/A',
         tasks: 0,
-        cpu: agent.cpuLoad || 0,
-        memory: agent.freeMemMb ? Math.round((1 - agent.freeMemMb / 16384) * 100) : 0,
+        // CPU负载转换为百分比（0.0-1.0 -> 0-100）
+        cpu: agent.cpuLoad ? Math.round(agent.cpuLoad * 100) : 0,
+        // 内存使用率计算（假设总内存16GB）
+        memory: agent.freeMemMb ? Math.max(0, Math.min(100, Math.round((1 - agent.freeMemMb / 16384) * 100))) : 0,
         uptime: calculateUptime(agent.createdAt),
       }))
       setAgents(agentList)
