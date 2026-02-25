@@ -11,6 +11,7 @@ import {
   ExclamationCircleOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons'
+import api from '../services/auth'
 
 const { Title, Text } = Typography
 const { Search } = Input
@@ -18,51 +19,55 @@ const { Option } = Select
 
 const Agents = () => {
   const [loading, setLoading] = useState(false)
-  const [agents, setAgents] = useState([
-    {
-      key: '1',
-      id: 'agent-001',
-      hostname: 'web-server-01',
-      ip: '192.168.1.101',
-      os: 'Ubuntu 20.04',
-      status: 'online',
-      lastHeartbeat: '2024-01-15 10:30:25',
-      tasks: 15,
-      cpu: 45,
-      memory: 68,
-      uptime: '15天 8小时',
-    },
-    {
-      key: '2',
-      id: 'agent-002',
-      hostname: 'db-server-01',
-      ip: '192.168.1.102',
-      os: 'CentOS 8',
-      status: 'online',
-      lastHeartbeat: '2024-01-15 10:30:20',
-      tasks: 8,
-      cpu: 32,
-      memory: 55,
-      uptime: '22天 3小时',
-    },
-    {
-      key: '3',
-      id: 'agent-003',
-      hostname: 'app-server-01',
-      ip: '192.168.1.103',
-      os: 'Windows Server 2019',
-      status: 'offline',
-      lastHeartbeat: '2024-01-15 09:45:12',
-      tasks: 3,
-      cpu: 0,
-      memory: 0,
-      uptime: '0天 0小时',
-    },
-  ])
-
-  const [filteredAgents, setFilteredAgents] = useState(agents)
+  const [agents, setAgents] = useState([])
+  const [filteredAgents, setFilteredAgents] = useState([])
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+
+  // 加载Agent列表
+  const loadAgents = async () => {
+    setLoading(true)
+    try {
+      const response = await api.get('/web/agents')
+      const agentList = response.content.map(agent => ({
+        key: agent.agentId,
+        id: agent.agentId,
+        hostname: agent.hostname,
+        ip: agent.ip || 'N/A',
+        os: agent.osType,
+        status: agent.status === 'ONLINE' ? 'online' : 'offline',
+        lastHeartbeat: agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString('zh-CN') : 'N/A',
+        tasks: 0,
+        cpu: agent.cpuLoad || 0,
+        memory: agent.freeMemMb ? Math.round((1 - agent.freeMemMb / 16384) * 100) : 0,
+        uptime: calculateUptime(agent.createdAt),
+      }))
+      setAgents(agentList)
+    } catch (error) {
+      console.error('Failed to load agents:', error)
+      message.error('加载客户端列表失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 计算运行时间
+  const calculateUptime = (createdAt) => {
+    if (!createdAt) return '0天 0小时'
+    const now = new Date()
+    const created = new Date(createdAt)
+    const diff = now - created
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    return `${days}天 ${hours}小时`
+  }
+
+  useEffect(() => {
+    loadAgents()
+    // 每30秒自动刷新
+    const interval = setInterval(loadAgents, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     filterAgents()
@@ -87,11 +92,8 @@ const Agents = () => {
   }
 
   const handleRefresh = () => {
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      message.success('数据已刷新')
-    }, 1000)
+    loadAgents()
+    message.success('数据已刷新')
   }
 
   const handleDeleteAgent = (agent) => {
