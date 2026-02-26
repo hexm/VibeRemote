@@ -4,11 +4,12 @@ import com.example.lightscript.server.entity.Agent;
 import com.example.lightscript.server.entity.BatchTask;
 import com.example.lightscript.server.entity.Task;
 import com.example.lightscript.server.entity.TaskExecution;
-import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.model.AgentModels.TaskSpec;
+import com.example.lightscript.server.model.TaskModels;
 import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.BatchTaskService;
 import com.example.lightscript.server.service.TaskService;
+import com.example.lightscript.server.service.TaskExecutionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -37,6 +38,7 @@ public class WebController {
     private final AgentService agentService;
     private final TaskService taskService;
     private final BatchTaskService batchTaskService;
+    private final TaskExecutionService taskExecutionService;
     
     @GetMapping("/dashboard/stats")
     public ResponseEntity<Map<String, Object>> getDashboardStats() {
@@ -66,68 +68,174 @@ public class WebController {
     }
     
     @GetMapping("/agents/{agentId}/tasks")
-    public ResponseEntity<Page<Task>> getAgentTasks(
-            @PathVariable String agentId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        Page<Task> tasks = taskService.getTasksByAgent(agentId, pageable);
-        return ResponseEntity.ok(tasks);
+    public ResponseEntity<List<TaskModels.TaskExecutionDTO>> getAgentTasks(
+            @PathVariable String agentId) {
+        // 返回该代理的所有执行实例（按创建时间倒序）
+        List<TaskExecution> executions = taskExecutionService.getExecutionsByAgentId(agentId);
+        List<TaskModels.TaskExecutionDTO> dtos = taskExecutionService.toDTOs(executions);
+        return ResponseEntity.ok(dtos);
     }
     
+    // ========== 任务管理API（新版 - 支持多代理）==========
+    
+    /**
+     * 获取所有任务（含聚合状态）
+     */
     @GetMapping("/tasks")
-    public ResponseEntity<Page<Task>> getAllTasks(
+    public ResponseEntity<Page<TaskModels.TaskDTO>> getAllTasks(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<Task> tasks = taskService.getAllTasks(pageable);
+        Page<TaskModels.TaskDTO> tasks = taskService.getAllTasksWithStatus(pageable);
         return ResponseEntity.ok(tasks);
     }
     
+    /**
+     * 获取任务详情（含聚合状态）
+     */
     @GetMapping("/tasks/{taskId}")
-    public ResponseEntity<Task> getTask(@PathVariable String taskId) {
-        Optional<Task> task = taskService.getTask(taskId);
-        return task.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<TaskModels.TaskDTO> getTask(@PathVariable String taskId) {
+        TaskModels.TaskDTO task = taskService.getTaskWithAggregatedStatus(taskId);
+        if (task == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(task);
     }
     
-    @GetMapping("/tasks/{taskId}/logs")
-    public ResponseEntity<Map<String, Object>> getTaskLogs(
+    /**
+     * 获取任务摘要（聚合状态和统计信息）
+     */
+    @GetMapping("/tasks/{taskId}/summary")
+    public ResponseEntity<TaskModels.TaskSummaryDTO> getTaskSummary(@PathVariable String taskId) {
+        TaskModels.TaskSummaryDTO summary = taskService.getTaskSummary(taskId);
+        if (summary == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(summary);
+    }
+    
+    /**
+     * 创建多代理任务（新版）
+     * 支持一个任务分发到多个代理执行
+     */
+    @PostMapping("/tasks/create")
+    public ResponseEntity<Map<String, Object>> createTask(
+            @RequestParam List<String> agentIds,
+            @RequestParam String taskName,
+            @RequestBody TaskSpec taskSpec) {
+        
+        // 验证参数
+        if (agentIds == null || agentIds.isEmpty()) {
+            throw new IllegalArgumentException("至少需要选择一个代理");
+        }
+        
+        // 使用固定的创建者，避免Principal相关问题
+        String createdBy = "web-user";
+        taskSpec.setTaskName(taskName);
+        
+        // 调用新的多代理任务创建方法
+        TaskModels.CreateTaskResponse createResponse = taskService.createMultiAgentTask(agentIds, taskSpec, createdBy);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("taskId", createResponse.getTaskId());
+        response.put("targetAgentCount", createResponse.getTargetAgentCount());
+        response.put("message", createResponse.getMessage());
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 获取任务的所有执行实例
+     */
+    @GetMapping("/tasks/{taskId}/executions")
+    public ResponseEntity<List<TaskExecution>> getTaskExecutions(@PathVariable String taskId) {
+        List<TaskExecution> executions = taskService.getTaskExecutionHistory(taskId);
+        return ResponseEntity.ok(executions);
+    }
+    
+    /**
+     * 重启任务
+     * @param mode 重启模式：ALL（重启所有）或 FAILED_ONLY（仅重启失败的）
+     */
+    @PostMapping("/tasks/{taskId}/restart")
+    public ResponseEntity<Map<String, Object>> restartTask(
             @PathVariable String taskId,
+            @RequestParam(defaultValue = "ALL") String mode) {
+        
+        // 验证重启模式
+        TaskModels.RestartMode restartMode;
+        try {
+            restartMode = TaskModels.RestartMode.valueOf(mode.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("无效的重启模式: " + mode + "，支持的模式: ALL, FAILED_ONLY");
+        }
+        
+        // 执行重启
+        TaskModels.RestartTaskResponse restartResponse = taskService.restartTask(taskId, restartMode);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", restartResponse.getMessage());
+        result.put("taskId", restartResponse.getTaskId());
+        result.put("mode", mode);
+        result.put("newExecutionCount", restartResponse.getNewExecutionCount());
+        
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 取消任务（取消所有执行实例）
+     */
+    @PostMapping("/tasks/{taskId}/cancel")
+    public ResponseEntity<Map<String, String>> cancelTask(@PathVariable String taskId) {
+        taskService.cancelTask(taskId);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "任务已取消");
+        response.put("taskId", taskId);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 取消特定执行实例
+     */
+    @PostMapping("/tasks/executions/{executionId}/cancel")
+    public ResponseEntity<Map<String, String>> cancelExecution(@PathVariable Long executionId) {
+        taskService.cancelExecution(executionId);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "执行实例已取消");
+        response.put("executionId", executionId.toString());
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 查看执行实例日志
+     */
+    @GetMapping("/tasks/executions/{executionId}/logs")
+    public ResponseEntity<Map<String, Object>> getExecutionLogs(
+            @PathVariable Long executionId,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "5000") int limit) {
         
-        Task task = taskService.getTask(taskId)
-            .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+        TaskExecution execution = taskService.getTaskExecution(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
         
-        String logFilePath = task.getLogFilePath();
-        
-        // 任务还未启动，没有日志文件
-        if (logFilePath == null || logFilePath.isEmpty()) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("content", "");
-            result.put("totalLines", 0);
-            result.put("offset", 0);
-            result.put("limit", limit);
-            result.put("hasMore", false);
-            result.put("status", task.getStatus());
-            return ResponseEntity.ok(result);
-        }
-        
-        return readLogFile(logFilePath, offset, limit, task.getStatus());
+        return readLogFile(execution.getLogFilePath(), offset, limit, execution.getStatus());
     }
     
-    @GetMapping("/tasks/{taskId}/logs/download")
-    public ResponseEntity<Resource> downloadTaskLog(@PathVariable String taskId) {
-        Task task = taskService.getTask(taskId)
-            .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
+    /**
+     * 下载执行实例日志
+     */
+    @GetMapping("/tasks/executions/{executionId}/download")
+    public ResponseEntity<Resource> downloadExecutionLog(@PathVariable Long executionId) {
+        TaskExecution execution = taskService.getTaskExecution(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
         
-        if (task.getLogFilePath() == null || task.getLogFilePath().isEmpty()) {
-            throw new IllegalArgumentException("任务还未启动，无日志文件");
+        if (execution.getLogFilePath() == null || execution.getLogFilePath().isEmpty()) {
+            throw new IllegalArgumentException("该执行记录无日志文件");
         }
         
-        File logFile = new File(task.getLogFilePath());
+        File logFile = new File(execution.getLogFilePath());
         if (!logFile.exists()) {
-            throw new IllegalArgumentException("日志文件不存在: " + task.getLogFilePath());
+            throw new IllegalArgumentException("日志文件不存在: " + execution.getLogFilePath());
         }
         
         Resource resource = new FileSystemResource(logFile);
@@ -139,6 +247,98 @@ public class WebController {
             .contentType(MediaType.TEXT_PLAIN)
             .body(resource);
     }
+    
+    // ========== 批量任务管理API（已弃用）==========
+    
+    /**
+     * 创建批量任务（已弃用，请使用 /tasks/create 并传入多个 agentIds）
+     */
+    @Deprecated
+    @PostMapping("/tasks/batch")
+    public ResponseEntity<Map<String, Object>> createBatchTasks(
+            @RequestParam List<String> agentIds,
+            @RequestBody TaskSpec taskSpec) {
+        String createdBy = "web-user";
+        List<String> taskIds = taskService.createBatchTasks(agentIds, taskSpec, createdBy);
+        Map<String, Object> result = new HashMap<>();
+        result.put("taskIds", taskIds);
+        result.put("count", taskIds.size());
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 创建批量任务（已弃用）
+     */
+    @Deprecated
+    @PostMapping("/batch-tasks/create")
+    public ResponseEntity<Map<String, Object>> createBatchTask(
+            @RequestParam String batchName,
+            @RequestParam List<String> agentIds,
+            @RequestBody TaskSpec taskSpec) {
+        String createdBy = "web-user";
+        BatchTask batchTask = batchTaskService.createBatchTask(
+            batchName, agentIds, 
+            taskSpec.getScriptLang(), 
+            taskSpec.getScriptContent(),
+            taskSpec.getTimeoutSec(), 
+            createdBy
+        );
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("batchId", batchTask.getBatchId());
+        result.put("batchName", batchTask.getBatchName());
+        result.put("targetAgentCount", batchTask.getTargetAgentCount());
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 获取批量任务列表（已弃用）
+     */
+    @Deprecated
+    @GetMapping("/batch-tasks")
+    public ResponseEntity<Page<BatchTask>> getBatchTasks(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<BatchTask> batchTasks = batchTaskService.getBatchTasks(page, size);
+        return ResponseEntity.ok(batchTasks);
+    }
+    
+    /**
+     * 获取批量任务详情（已弃用）
+     */
+    @Deprecated
+    @GetMapping("/batch-tasks/{batchId}")
+    public ResponseEntity<BatchTask> getBatchTaskDetail(@PathVariable String batchId) {
+        BatchTask batchTask = batchTaskService.getBatchTaskDetail(batchId);
+        if (batchTask == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(batchTask);
+    }
+    
+    /**
+     * 获取批量任务的所有子任务（已弃用）
+     */
+    @Deprecated
+    @GetMapping("/batch-tasks/{batchId}/tasks")
+    public ResponseEntity<List<Task>> getBatchTaskTasks(@PathVariable String batchId) {
+        List<Task> tasks = batchTaskService.getBatchTaskTasks(batchId);
+        return ResponseEntity.ok(tasks);
+    }
+    
+    /**
+     * 取消批量任务（已弃用）
+     */
+    @Deprecated
+    @PostMapping("/batch-tasks/{batchId}/cancel")
+    public ResponseEntity<Map<String, String>> cancelBatchTask(@PathVariable String batchId) {
+        batchTaskService.cancelBatchTask(batchId);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Batch task cancelled");
+        return ResponseEntity.ok(response);
+    }
+    
+    // ========== 工具方法 ==========
     
     /**
      * 统一的日志文件读取方法
@@ -181,179 +381,5 @@ public class WebController {
         } catch (IOException e) {
             throw new RuntimeException("读取日志文件失败: " + logFilePath, e);
         }
-    }
-    
-    @PostMapping("/tasks/create")
-    public ResponseEntity<Map<String, String>> createTask(
-            @RequestParam String agentId,
-            @RequestParam String taskName,
-            @RequestBody TaskSpec taskSpec) {
-        // 使用固定的创建者，避免Principal相关问题
-        String createdBy = "web-user";
-        taskSpec.setTaskName(taskName);
-        String taskId = taskService.createTask(agentId, taskSpec, createdBy);
-        Map<String, String> response = new HashMap<>();
-        response.put("taskId", taskId);
-        return ResponseEntity.ok(response);
-    }
-    
-    @PostMapping("/tasks/batch")
-    public ResponseEntity<Map<String, Object>> createBatchTasks(
-            @RequestParam List<String> agentIds,
-            @RequestBody TaskSpec taskSpec) {
-        // 使用固定的创建者，避免Principal相关问题
-        String createdBy = "web-user";
-        List<String> taskIds = taskService.createBatchTasks(agentIds, taskSpec, createdBy);
-        Map<String, Object> result = new HashMap<>();
-        result.put("taskIds", taskIds);
-        result.put("count", taskIds.size());
-        return ResponseEntity.ok(result);
-    }
-    
-    // ========== 批量任务管理API ==========
-    
-    /**
-     * 创建批量任务（新版）
-     */
-    @PostMapping("/batch-tasks/create")
-    public ResponseEntity<Map<String, Object>> createBatchTask(
-            @RequestParam String batchName,
-            @RequestParam List<String> agentIds,
-            @RequestBody TaskSpec taskSpec) {
-        String createdBy = "web-user";
-        BatchTask batchTask = batchTaskService.createBatchTask(
-            batchName, agentIds, 
-            taskSpec.getScriptLang(), 
-            taskSpec.getScriptContent(),
-            taskSpec.getTimeoutSec(), 
-            createdBy
-        );
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("batchId", batchTask.getBatchId());
-        result.put("batchName", batchTask.getBatchName());
-        result.put("targetAgentCount", batchTask.getTargetAgentCount());
-        return ResponseEntity.ok(result);
-    }
-    
-    /**
-     * 获取批量任务列表（分页）
-     */
-    @GetMapping("/batch-tasks")
-    public ResponseEntity<Page<BatchTask>> getBatchTasks(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Page<BatchTask> batchTasks = batchTaskService.getBatchTasks(page, size);
-        return ResponseEntity.ok(batchTasks);
-    }
-    
-    /**
-     * 获取批量任务详情
-     */
-    @GetMapping("/batch-tasks/{batchId}")
-    public ResponseEntity<BatchTask> getBatchTaskDetail(@PathVariable String batchId) {
-        BatchTask batchTask = batchTaskService.getBatchTaskDetail(batchId);
-        if (batchTask == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(batchTask);
-    }
-    
-    /**
-     * 获取批量任务的所有子任务
-     */
-    @GetMapping("/batch-tasks/{batchId}/tasks")
-    public ResponseEntity<List<Task>> getBatchTaskTasks(@PathVariable String batchId) {
-        List<Task> tasks = batchTaskService.getBatchTaskTasks(batchId);
-        return ResponseEntity.ok(tasks);
-    }
-    
-    /**
-     * 取消批量任务
-     */
-    @PostMapping("/batch-tasks/{batchId}/cancel")
-    public ResponseEntity<Map<String, String>> cancelBatchTask(@PathVariable String batchId) {
-        batchTaskService.cancelBatchTask(batchId);
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Batch task cancelled");
-        return ResponseEntity.ok(response);
-    }
-    
-    @PostMapping("/tasks/{taskId}/cancel")
-    public ResponseEntity<Map<String, String>> cancelTask(@PathVariable String taskId) {
-        taskService.cancelTask(taskId);
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Task cancelled");
-        return ResponseEntity.ok(response);
-    }
-    
-    /**
-     * 重启任务
-     */
-    @PostMapping("/tasks/{taskId}/restart")
-    public ResponseEntity<Map<String, Object>> restartTask(@PathVariable String taskId) {
-        taskService.restartTask(taskId);
-        
-        Task task = taskService.getTask(taskId)
-            .orElseThrow(() -> new IllegalArgumentException("任务不存在"));
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("message", "任务已重启");
-        result.put("taskId", taskId);
-        result.put("executionCount", task.getExecutionCount());
-        result.put("status", task.getStatus());
-        
-        return ResponseEntity.ok(result);
-    }
-    
-    /**
-     * 获取任务执行历史
-     */
-    @GetMapping("/tasks/{taskId}/executions")
-    public ResponseEntity<List<TaskExecution>> getTaskExecutions(@PathVariable String taskId) {
-        List<TaskExecution> executions = taskService.getTaskExecutionHistory(taskId);
-        return ResponseEntity.ok(executions);
-    }
-    
-    /**
-     * 查看历史执行日志
-     */
-    @GetMapping("/tasks/executions/{executionId}/logs")
-    public ResponseEntity<Map<String, Object>> getExecutionLogs(
-            @PathVariable Long executionId,
-            @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "5000") int limit) {
-        
-        TaskExecution execution = taskService.getTaskExecution(executionId)
-            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
-        
-        return readLogFile(execution.getLogFilePath(), offset, limit, execution.getStatus());
-    }
-    
-    /**
-     * 下载历史执行日志
-     */
-    @GetMapping("/tasks/executions/{executionId}/download")
-    public ResponseEntity<Resource> downloadExecutionLog(@PathVariable Long executionId) {
-        TaskExecution execution = taskService.getTaskExecution(executionId)
-            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
-        
-        if (execution.getLogFilePath() == null || execution.getLogFilePath().isEmpty()) {
-            throw new IllegalArgumentException("该执行记录无日志文件");
-        }
-        
-        File logFile = new File(execution.getLogFilePath());
-        if (!logFile.exists()) {
-            throw new IllegalArgumentException("日志文件不存在: " + execution.getLogFilePath());
-        }
-        
-        Resource resource = new FileSystemResource(logFile);
-        String filename = logFile.getName();
-        
-        return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, 
-                "attachment; filename=\"" + filename + "\"")
-            .contentType(MediaType.TEXT_PLAIN)
-            .body(resource);
     }
 }

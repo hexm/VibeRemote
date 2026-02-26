@@ -60,30 +60,33 @@ public class AgentController {
 		return ResponseEntity.ok(rsp);
 	}
 
-	@PostMapping("/tasks/{taskId}/ack")
-	public ResponseEntity<Void> ack(@PathVariable String taskId, @RequestParam String agentId, @RequestParam String agentToken) {
+	/**
+	 * 确认任务开始执行（使用executionId）
+	 */
+	@PostMapping("/tasks/executions/{executionId}/ack")
+	public ResponseEntity<Void> ackExecution(@PathVariable Long executionId, @RequestParam String agentId, @RequestParam String agentToken) {
 		if (!agentService.validateAgent(agentId, agentToken)) {
 			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
-		taskService.ackTask(taskId);
+		taskService.ackTaskExecution(executionId);
 		return ResponseEntity.ok().build();
 	}
 
-	@PostMapping("/tasks/{taskId}/log")
-	public ResponseEntity<Void> log(@PathVariable String taskId, @Valid @RequestBody LogChunkRequest req) {
+	@PostMapping("/tasks/executions/{executionId}/log")
+	public ResponseEntity<Void> log(@PathVariable Long executionId, @Valid @RequestBody LogChunkRequest req) {
 		if (!agentService.validateAgent(req.getAgentId(), req.getAgentToken())) {
 			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
-		taskService.appendLog(taskId, req);
+		taskService.appendLog(req);
 		return ResponseEntity.ok().build();
 	}
 
-	@PostMapping("/tasks/{taskId}/finish")
-	public ResponseEntity<Void> finish(@PathVariable String taskId, @Valid @RequestBody FinishRequest req) {
+	@PostMapping("/tasks/executions/{executionId}/finish")
+	public ResponseEntity<Void> finish(@PathVariable Long executionId, @Valid @RequestBody FinishRequest req) {
 		if (!agentService.validateAgent(req.getAgentId(), req.getAgentToken())) {
 			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
-		taskService.finishTask(taskId, req);
+		taskService.finishTask(req);
 		return ResponseEntity.ok().build();
 	}
 

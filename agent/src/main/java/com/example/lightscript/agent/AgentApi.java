@@ -171,16 +171,16 @@ class AgentApi {
 		}
 	}
 
-	void sendLog(String agentId, String agentToken, String taskId, int seq, String stream, String data) throws Exception {
+	void sendLog(String agentId, String agentToken, Long executionId, int seq, String stream, String data) throws Exception {
 		Map<String, Object> payload = new HashMap<>();
 		payload.put("agentId", agentId);
 		payload.put("agentToken", agentToken);
-		payload.put("taskId", taskId);
+		payload.put("executionId", executionId);
 		payload.put("seq", seq);
 		payload.put("stream", stream);
 		payload.put("data", data);
 		
-		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/" + taskId + "/log");
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/executions/" + executionId + "/log");
 		post.setHeader("Content-Type", "application/json");
 		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
 		
@@ -189,8 +189,8 @@ class AgentApi {
 		}
 	}
 
-	void ackTask(String agentId, String agentToken, String taskId) throws Exception {
-		String url = baseUrl + "/api/agent/tasks/" + taskId + "/ack?agentId=" + agentId + "&agentToken=" + agentToken;
+	void ackTask(String agentId, String agentToken, Long executionId) throws Exception {
+		String url = baseUrl + "/api/agent/tasks/executions/" + executionId + "/ack?agentId=" + agentId + "&agentToken=" + agentToken;
 		HttpPost post = new HttpPost(url);
 		
 		try (CloseableHttpResponse response = httpClient.execute(post)) {
@@ -205,16 +205,16 @@ class AgentApi {
 		}
 	}
 
-	void finish(String agentId, String agentToken, String taskId, int exitCode, String status, String summary) throws Exception {
+	void finish(String agentId, String agentToken, Long executionId, int exitCode, String status, String summary) throws Exception {
 		Map<String, Object> payload = new HashMap<>();
 		payload.put("agentId", agentId);
 		payload.put("agentToken", agentToken);
-		payload.put("taskId", taskId);
+		payload.put("executionId", executionId);
 		payload.put("exitCode", exitCode);
 		payload.put("status", status);
 		payload.put("summary", summary);
 		
-		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/" + taskId + "/finish");
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/executions/" + executionId + "/finish");
 		post.setHeader("Content-Type", "application/json");
 		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
 		

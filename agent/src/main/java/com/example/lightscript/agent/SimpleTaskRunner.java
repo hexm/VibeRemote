@@ -29,12 +29,12 @@ class SimpleTaskRunner {
         System.out.println("[TaskRunner] Credentials updated");
     }
 
-    void runTask(String taskId, String scriptLang, String scriptContent, int timeoutSec) {
+    void runTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
         int seq = 0;
         try {
             // 首先确认任务开始执行
-            api.ackTask(agentId, agentToken, taskId);
-            api.sendLog(agentId, agentToken, taskId, ++seq, "system", "Task started (lang: " + scriptLang + ")");
+            api.ackTask(agentId, agentToken, executionId);
+            api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Task started (lang: " + scriptLang + ")");
             
             // 构建命令
             ProcessBuilder pb;
@@ -68,7 +68,7 @@ class SimpleTaskRunner {
                             continue;
                         }
                         try {
-                            api.sendLog(agentId, agentToken, taskId, ++localSeq, "stdout", line);
+                            api.sendLog(agentId, agentToken, executionId, ++localSeq, "stdout", line);
                         } catch (Exception e) {
                             System.err.println("Failed to send stdout log: " + e.getMessage());
                         }
@@ -88,7 +88,7 @@ class SimpleTaskRunner {
                             continue;
                         }
                         try {
-                            api.sendLog(agentId, agentToken, taskId, ++localSeq, "stderr", line);
+                            api.sendLog(agentId, agentToken, executionId, ++localSeq, "stderr", line);
                         } catch (Exception e) {
                             System.err.println("Failed to send stderr log: " + e.getMessage());
                         }
@@ -106,13 +106,13 @@ class SimpleTaskRunner {
             
             if (!finished) {
                 p.destroyForcibly();
-                api.sendLog(agentId, agentToken, taskId, ++seq, "system", "Process timeout after " + timeoutSec + " seconds");
-                api.finish(agentId, agentToken, taskId, -1, "TIMEOUT", "Process timeout");
+                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Process timeout after " + timeoutSec + " seconds");
+                api.finish(agentId, agentToken, executionId, -1, "TIMEOUT", "Process timeout");
             } else {
                 int exitCode = p.exitValue();
                 String status = exitCode == 0 ? "SUCCESS" : "FAILED";
-                api.sendLog(agentId, agentToken, taskId, ++seq, "system", "Process finished with exit code: " + exitCode);
-                api.finish(agentId, agentToken, taskId, exitCode, status, "exitCode=" + exitCode);
+                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Process finished with exit code: " + exitCode);
+                api.finish(agentId, agentToken, executionId, exitCode, status, "exitCode=" + exitCode);
             }
             
             // 等待日志线程完成
@@ -121,8 +121,8 @@ class SimpleTaskRunner {
             
         } catch (Exception e) {
             try {
-                api.sendLog(agentId, agentToken, taskId, ++seq, "stderr", "Exception: " + e.getMessage());
-                api.finish(agentId, agentToken, taskId, -2, "FAILED", e.toString());
+                api.sendLog(agentId, agentToken, executionId, ++seq, "stderr", "Exception: " + e.getMessage());
+                api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
             } catch (Exception ignored) {
                 System.err.println("Failed to report task failure: " + ignored.getMessage());
             }

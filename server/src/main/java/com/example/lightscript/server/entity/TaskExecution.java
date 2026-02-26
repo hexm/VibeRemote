@@ -1,92 +1,74 @@
 package com.example.lightscript.server.entity;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * 任务执行历史记录
+ * 任务执行实体
+ * 代表一个任务在特定代理上的执行实例
+ * 一个任务可以有多个执行实例（多个代理或多次重启）
  */
 @Entity
 @Table(name = "task_executions",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"task_id", "execution_seq"})
+    uniqueConstraints = @UniqueConstraint(
+        name = "uk_task_agent_exec",
+        columnNames = {"task_id", "agent_id", "execution_number"}
+    ),
+    indexes = {
+        @Index(name = "idx_task_id", columnList = "task_id"),
+        @Index(name = "idx_agent_id", columnList = "agent_id"),
+        @Index(name = "idx_status", columnList = "status")
+    }
 )
 @Data
+@EqualsAndHashCode(callSuper = false)
 public class TaskExecution {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private Long id;
     
-    /**
-     * 任务ID（关联Task表）
-     */
     @Column(name = "task_id", length = 64, nullable = false)
     private String taskId;
     
-    /**
-     * 执行序号：1, 2, 3...
-     */
-    @Column(name = "execution_seq", nullable = false)
-    private Integer executionSeq;
+    @Column(name = "agent_id", length = 64, nullable = false)
+    private String agentId;
     
-    /**
-     * 执行状态：SUCCESS/FAILED/TIMEOUT
-     */
+    @Column(name = "execution_number", nullable = false)
+    private Integer executionNumber = 1; // 执行次数，重启时递增
+    
     @Column(name = "status", length = 20)
-    private String status;
+    private String status = "PENDING"; // PENDING | PULLED | RUNNING | SUCCESS | FAILED | TIMEOUT | CANCELLED
     
-    /**
-     * 退出码
-     */
+    @Column(name = "log_file_path", length = 500)
+    private String logFilePath; // 日志文件路径
+    
     @Column(name = "exit_code")
     private Integer exitCode;
     
-    /**
-     * 启动时间
-     */
-    @Column(name = "started_at")
-    private LocalDateTime startedAt;
-    
-    /**
-     * 完成时间
-     */
-    @Column(name = "finished_at")
-    private LocalDateTime finishedAt;
-    
-    /**
-     * 执行时长（毫秒）
-     */
-    @Column(name = "duration_ms")
-    private Long durationMs;
-    
-    /**
-     * 执行摘要
-     */
     @Column(name = "summary", columnDefinition = "TEXT")
     private String summary;
     
-    /**
-     * 日志文件路径
-     */
-    @Column(name = "log_file_path", length = 500)
-    private String logFilePath;
+    @Column(name = "pulled_at")
+    private LocalDateTime pulledAt;
     
-    /**
-     * 日志文件大小（字节）
-     */
-    @Column(name = "log_size_bytes")
-    private Long logSizeBytes;
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
     
-    /**
-     * 记录创建时间
-     */
+    @Column(name = "finished_at")
+    private LocalDateTime finishedAt;
+    
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 }

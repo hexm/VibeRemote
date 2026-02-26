@@ -219,21 +219,26 @@ public class AgentMain {
                 if (tasks != null && !tasks.isEmpty()) {
                     for (Map<String, Object> task : tasks) {
                         String taskId = String.valueOf(task.get("taskId"));
+                        Long executionId = task.get("executionId") != null ? 
+                            ((Number) task.get("executionId")).longValue() : null;
                         String scriptLang = String.valueOf(task.get("scriptLang"));
                         String scriptContent = String.valueOf(task.get("scriptContent"));
                         Integer timeoutSec = (Integer) task.getOrDefault("timeoutSec", 300);
 
-                        System.out.println("Received task: " + taskId + " (lang: " + scriptLang + ")");
+                        System.out.println("Received task: " + taskId + " (executionId: " + executionId + ", lang: " + scriptLang + ")");
                         
                         // 检查是否所有必要字段都存在
-                        if (taskId == null || "null".equals(taskId) || scriptContent == null || "null".equals(scriptContent)) {
-                            System.err.println("ERROR: Invalid task data - taskId or scriptContent is null");
+                        if (taskId == null || "null".equals(taskId) || 
+                            executionId == null ||
+                            scriptContent == null || "null".equals(scriptContent)) {
+                            System.err.println("ERROR: Invalid task data - taskId, executionId or scriptContent is null");
                             continue;
                         }
                         
                         // 异步执行任务
+                        final Long finalExecutionId = executionId;
                         taskExecutor.submit(() -> {
-                            taskRunner.runTask(taskId, scriptLang, scriptContent, timeoutSec);
+                            taskRunner.runTask(finalExecutionId, taskId, scriptLang, scriptContent, timeoutSec);
                         });
                     }
                 }

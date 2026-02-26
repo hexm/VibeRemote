@@ -17,12 +17,6 @@ public class Task {
     @Column(name = "task_id", length = 64)
     private String taskId;
     
-    @Column(name = "agent_id", length = 64, nullable = false)
-    private String agentId;
-    
-    @Column(name = "batch_id", length = 64)
-    private String batchId; // 所属批量任务ID，null表示普通任务
-    
     @Column(name = "task_name", length = 200)
     private String taskName; // 任务名称
     
@@ -41,35 +35,42 @@ public class Task {
     @Column(name = "env_value")
     private Map<String, String> env;
     
-    @Column(name = "status", length = 20)
-    private String status = "PENDING"; // PENDING | PULLED | RUNNING | SUCCESS | FAILED | TIMEOUT | CANCELLED
-    
-    @Column(name = "execution_count")
-    private Integer executionCount = 0; // 执行次数，每次启动时累加
-    
-    @Column(name = "log_file_path", length = 500)
-    private String logFilePath; // 日志文件路径
-    
-    @Column(name = "exit_code")
-    private Integer exitCode;
-    
-    @Column(name = "summary", columnDefinition = "TEXT")
-    private String summary;
-    
     @Column(name = "created_by", length = 64)
     private String createdBy;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
-    @Column(name = "pulled_at")
-    private LocalDateTime pulledAt;
+    // Transient fields for aggregated status (computed from TaskExecution records)
+    @Transient
+    private String aggregatedStatus; // ALL_SUCCESS, PARTIAL_SUCCESS, ALL_FAILED, IN_PROGRESS, PENDING
     
-    @Column(name = "started_at")
-    private LocalDateTime startedAt;
+    @Transient
+    private Integer targetAgentCount; // 目标代理数量
     
-    @Column(name = "finished_at")
-    private LocalDateTime finishedAt;
+    @Transient
+    private Integer completedExecutions; // 已完成的执行数
+    
+    @Transient
+    private String executionProgress; // 执行进度，如 "3/5"
+    
+    @Transient
+    private Integer pendingCount;
+    
+    @Transient
+    private Integer runningCount;
+    
+    @Transient
+    private Integer successCount;
+    
+    @Transient
+    private Integer failedCount;
+    
+    @Transient
+    private Integer timeoutCount;
+    
+    @Transient
+    private Integer cancelledCount;
     
     @PrePersist
     protected void onCreate() {

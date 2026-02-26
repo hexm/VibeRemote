@@ -15,6 +15,11 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * 批量任务服务
+ * @deprecated 已废弃，请使用 TaskService.createMultiAgentTask 创建多代理任务
+ */
+@Deprecated
 @Service
 public class BatchTaskService {
     
@@ -24,9 +29,14 @@ public class BatchTaskService {
     @Autowired
     private TaskRepository taskRepository;
     
+    @Autowired
+    private TaskService taskService;
+    
     /**
      * 创建批量任务
+     * @deprecated 使用 TaskService.createMultiAgentTask 代替
      */
+    @Deprecated
     @Transactional
     public BatchTask createBatchTask(String batchName, List<String> agentIds, 
                                     String scriptLang, String scriptContent, 
@@ -48,26 +58,15 @@ public class BatchTaskService {
         
         batchTaskRepository.save(batchTask);
         
-        // 为每个Agent创建关联的普通任务
-        int index = 1;
-        for (String agentId : agentIds) {
-            // 生成子任务名称，确保唯一性
-            String taskName = batchName + "-任务" + index;
-            
-            Task task = new Task();
-            task.setTaskId(UUID.randomUUID().toString());
-            task.setAgentId(agentId);
-            task.setBatchId(batchTask.getBatchId());
-            task.setTaskName(taskName);
-            task.setScriptLang(scriptLang);
-            task.setScriptContent(scriptContent);
-            task.setTimeoutSec(timeoutSec);
-            task.setStatus("PENDING");
-            task.setCreatedBy(createdBy);
-            
-            taskRepository.save(task);
-            index++;
-        }
+        // 使用新的多代理任务API创建任务
+        com.example.lightscript.server.model.AgentModels.TaskSpec taskSpec = 
+            new com.example.lightscript.server.model.AgentModels.TaskSpec();
+        taskSpec.setScriptLang(scriptLang);
+        taskSpec.setScriptContent(scriptContent);
+        taskSpec.setTimeoutSec(timeoutSec);
+        
+        // 创建多代理任务
+        taskService.createMultiAgentTask(agentIds, taskSpec, createdBy);
         
         return batchTask;
     }
@@ -102,70 +101,38 @@ public class BatchTaskService {
     
     /**
      * 获取批量任务的所有子任务
+     * @deprecated 批量任务功能已废弃
      */
+    @Deprecated
     public List<Task> getBatchTaskTasks(String batchId) {
-        return taskRepository.findByBatchIdOrderByCreatedAtAsc(batchId);
+        // 返回空列表，因为批量任务功能已废弃
+        return new ArrayList<>();
     }
     
     /**
      * 取消批量任务（取消所有未完成的子任务）
+     * @deprecated 批量任务功能已废弃
      */
+    @Deprecated
     @Transactional
     public void cancelBatchTask(String batchId) {
-        List<Task> tasks = taskRepository.findByBatchIdOrderByCreatedAtAsc(batchId);
-        
-        for (Task task : tasks) {
-            if ("PENDING".equals(task.getStatus()) || "RUNNING".equals(task.getStatus())) {
-                task.setStatus("CANCELLED");
-                task.setFinishedAt(LocalDateTime.now());
-                taskRepository.save(task);
-            }
-        }
+        // 批量任务功能已废弃，不执行任何操作
     }
     
     /**
      * 计算批量任务的统计信息和状态
+     * @deprecated 批量任务功能已废弃
      */
+    @Deprecated
     private void calculateBatchTaskStats(BatchTask batchTask) {
-        List<Task> tasks = taskRepository.findByBatchIdOrderByCreatedAtAsc(batchTask.getBatchId());
-        
-        batchTask.setTotalTasks(tasks.size());
-        batchTask.setPendingTasks((int) tasks.stream().filter(t -> "PENDING".equals(t.getStatus())).count());
-        batchTask.setRunningTasks((int) tasks.stream().filter(t -> "RUNNING".equals(t.getStatus()) || "PULLED".equals(t.getStatus())).count());
-        batchTask.setSuccessTasks((int) tasks.stream().filter(t -> "SUCCESS".equals(t.getStatus())).count());
-        batchTask.setFailedTasks((int) tasks.stream().filter(t -> "FAILED".equals(t.getStatus())).count());
-        batchTask.setTimeoutTasks((int) tasks.stream().filter(t -> "TIMEOUT".equals(t.getStatus())).count());
-        batchTask.setCancelledTasks((int) tasks.stream().filter(t -> "CANCELLED".equals(t.getStatus())).count());
-        
-        // 计算综合状态
-        int completedTasks = batchTask.getSuccessTasks() + batchTask.getFailedTasks() + 
-                            batchTask.getTimeoutTasks() + batchTask.getCancelledTasks();
-        
-        if (completedTasks == 0) {
-            if (batchTask.getRunningTasks() > 0) {
-                batchTask.setStatus("RUNNING");
-            } else {
-                batchTask.setStatus("PENDING");
-            }
-        } else if (completedTasks == batchTask.getTotalTasks()) {
-            // 全部完成
-            if (batchTask.getSuccessTasks() == batchTask.getTotalTasks()) {
-                batchTask.setStatus("COMPLETED"); // 全部成功
-            } else if (batchTask.getFailedTasks() + batchTask.getTimeoutTasks() == batchTask.getTotalTasks()) {
-                batchTask.setStatus("FAILED"); // 全部失败
-            } else {
-                batchTask.setStatus("PARTIAL_FAILED"); // 部分失败
-            }
-        } else {
-            // 部分完成
-            batchTask.setStatus("RUNNING");
-        }
-        
-        // 计算进度
-        if (batchTask.getTotalTasks() > 0) {
-            batchTask.setProgress((double) completedTasks / batchTask.getTotalTasks() * 100);
-        } else {
-            batchTask.setProgress(0.0);
-        }
+        // 批量任务功能已废弃，设置默认值
+        batchTask.setTotalTasks(0);
+        batchTask.setPendingTasks(0);
+        batchTask.setRunningTasks(0);
+        batchTask.setSuccessTasks(0);
+        batchTask.setFailedTasks(0);
+        batchTask.setTimeoutTasks(0);
+        batchTask.setCancelledTasks(0);
+        batchTask.setStatus("DEPRECATED");
     }
 }

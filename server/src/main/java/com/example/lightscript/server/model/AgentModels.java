@@ -43,6 +43,7 @@ public class AgentModels {
 	@Data
 	public static class TaskSpec {
 		private String taskId;
+		private Long executionId; // 执行实例ID（必需，用于多代理支持）
 		private String taskName; // 任务名称
 		private String scriptLang; // bash | powershell | cmd
 		private String scriptContent;
@@ -61,8 +62,8 @@ public class AgentModels {
 		private String agentId;
 		@NotBlank
 		private String agentToken;
-		@NotBlank
-		private String taskId;
+		@NotNull
+		private Long executionId; // 执行实例ID（必需）
 		@NotNull
 		private Integer seq;
 		@NotBlank
@@ -77,8 +78,8 @@ public class AgentModels {
 		private String agentId;
 		@NotBlank
 		private String agentToken;
-		@NotBlank
-		private String taskId;
+		@NotNull
+		private Long executionId; // 执行实例ID（必需）
 		private Integer exitCode;
 		private String status; // SUCCESS|FAILED|TIMEOUT|CANCELLED
 		private String summary;
