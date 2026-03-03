@@ -24,18 +24,25 @@ public class AuthController {
     
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
-        Optional<User> userOpt = userService.findByUsername(request.getUsername());
+        Optional<User> userOpt = userService.getUserByUsername(request.getUsername());
         
         if (userOpt.isPresent()) {
             User user = userOpt.get();
-            if (user.getEnabled() && userService.validatePassword(user, request.getPassword())) {
+            // 检查用户状态和密码
+            if ("ACTIVE".equals(user.getStatus()) && 
+                org.springframework.security.crypto.bcrypt.BCrypt.checkpw(request.getPassword(), user.getPassword())) {
+                
                 String token = jwtUtil.generateToken(user.getUsername());
+                
+                // 更新最后登录时间
+                userService.updateLastLoginTime(user.getId());
                 
                 Map<String, Object> response = new HashMap<>();
                 response.put("token", token);
                 response.put("username", user.getUsername());
-                response.put("role", user.getRole());
                 response.put("email", user.getEmail());
+                response.put("realName", user.getRealName());
+                response.put("permissions", user.getPermissions());
                 
                 return ResponseEntity.ok(response);
             }
@@ -49,11 +56,17 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody RegisterUserRequest request) {
         try {
+            // 创建普通用户，分配基本权限
+            java.util.List<String> basicPermissions = java.util.Arrays.asList(
+                "task:view", "script:view", "agent:view", "log:view"
+            );
+            
             User user = userService.createUser(
                 request.getUsername(), 
                 request.getPassword(), 
                 request.getEmail(), 
-                "USER"
+                request.getUsername(),  // realName默认使用username
+                basicPermissions
             );
             
             Map<String, Object> response = new HashMap<>();
@@ -77,11 +90,12 @@ public class AuthController {
             String token = authHeader.substring(7); // Remove "Bearer "
             String username = jwtUtil.extractUsername(token);
             
-            Optional<User> userOpt = userService.findByUsername(username);
+            Optional<User> userOpt = userService.getUserByUsername(username);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                if (userService.validatePassword(user, request.getCurrentPassword())) {
-                    userService.updatePassword(username, request.getNewPassword());
+                // 验证当前密码
+                if (org.springframework.security.crypto.bcrypt.BCrypt.checkpw(request.getCurrentPassword(), user.getPassword())) {
+                    userService.resetPassword(user.getId(), request.getNewPassword());
                     Map<String, String> successResponse = new HashMap<>();
                     successResponse.put("message", "Password changed successfully");
                     return ResponseEntity.ok(successResponse);

@@ -65,8 +65,8 @@ public class BatchTaskService {
         taskSpec.setScriptContent(scriptContent);
         taskSpec.setTimeoutSec(timeoutSec);
         
-        // 创建多代理任务
-        taskService.createMultiAgentTask(agentIds, taskSpec, createdBy);
+        // 创建多代理任务（默认autoStart=true）
+        taskService.createMultiAgentTask(agentIds, taskSpec, createdBy, true);
         
         return batchTask;
     }

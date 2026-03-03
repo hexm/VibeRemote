@@ -90,4 +90,15 @@ public interface TaskExecutionRepository extends JpaRepository<TaskExecution, Lo
      * 检查执行实例是否存在
      */
     boolean existsByTaskIdAndAgentIdAndExecutionNumber(String taskId, String agentId, Integer executionNumber);
+    
+    /**
+     * 查询可执行任务的待处理执行实例（排除DRAFT/STOPPED/CANCELLED状态的任务）
+     */
+    @Query("SELECT te FROM TaskExecution te " +
+           "JOIN Task t ON te.taskId = t.taskId " +
+           "WHERE te.agentId = :agentId " +
+           "AND te.status = 'PENDING' " +
+           "AND t.taskStatus NOT IN ('DRAFT', 'STOPPED', 'CANCELLED') " +
+           "ORDER BY te.createdAt ASC")
+    List<TaskExecution> findPendingExecutionsForActiveTasks(@Param("agentId") String agentId);
 }

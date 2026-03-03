@@ -28,6 +28,9 @@ public class TaskModels {
         private String createdBy;
         private LocalDateTime createdAt;
         
+        // 任务状态
+        private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
+        
         // 聚合字段（从TaskExecution计算得出）
         private String aggregatedStatus; // ALL_SUCCESS, PARTIAL_SUCCESS, ALL_FAILED, IN_PROGRESS, PENDING
         private Integer targetAgentCount; // 目标代理数量
@@ -112,7 +115,30 @@ public class TaskModels {
     @Data
     public static class CreateTaskResponse {
         private String taskId;
+        private String taskStatus; // 任务状态
         private Integer targetAgentCount;
+        private String message;
+    }
+    
+    /**
+     * 启动任务响应
+     */
+    @Data
+    public static class StartTaskResponse {
+        private String taskId;
+        private String taskStatus;
+        private Integer executionCount;
+        private String message;
+    }
+    
+    /**
+     * 停止任务响应
+     */
+    @Data
+    public static class StopTaskResponse {
+        private String taskId;
+        private String taskStatus;
+        private Integer cancelledCount;
         private String message;
     }
 

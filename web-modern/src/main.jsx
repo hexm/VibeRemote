@@ -5,6 +5,7 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import App from './App.jsx'
 import './index.css'
+import './utils/axios' // 导入axios配置
 
 // 安全的Ant Design主题配置
 const theme = {

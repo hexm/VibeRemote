@@ -5,8 +5,10 @@ import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
 import Dashboard from './pages/Dashboard'
 import Agents from './pages/Agents'
+import AgentGroups from './pages/AgentGroups'
 import Tasks from './pages/Tasks'
 import Scripts from './pages/Scripts'
+import Users from './pages/Users'
 import Login from './pages/Login'
 import { authService } from './services/auth'
 
@@ -128,8 +130,10 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/agents" element={<Agents />} />
+            <Route path="/agent-groups" element={<AgentGroups />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/scripts" element={<Scripts />} />
+            <Route path="/users" element={<Users />} />
           </Routes>
         </Content>
       </Layout>

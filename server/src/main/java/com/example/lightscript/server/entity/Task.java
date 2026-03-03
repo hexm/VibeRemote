@@ -41,6 +41,12 @@ public class Task {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
+    @Column(name = "task_status", length = 20)
+    private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
+    
+    @Column(name = "target_agent_ids", length = 2000)
+    private String targetAgentIds; // 目标代理ID列表，逗号分隔
+    
     // Transient fields for aggregated status (computed from TaskExecution records)
     @Transient
     private String aggregatedStatus; // ALL_SUCCESS, PARTIAL_SUCCESS, ALL_FAILED, IN_PROGRESS, PENDING

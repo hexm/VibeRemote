@@ -53,7 +53,8 @@ public class TaskService {
     public TaskModels.CreateTaskResponse createMultiAgentTask(
             List<String> agentIds, 
             TaskSpec taskSpec, 
-            String createdBy) {
+            String createdBy,
+            boolean autoStart) {
         
         // 验证参数
         if (agentIds == null || agentIds.isEmpty()) {
@@ -78,18 +79,220 @@ public class TaskService {
         task.setCreatedBy(createdBy);
         task.setCreatedAt(LocalDateTime.now());
         
-        task = taskRepository.save(task);
-        log.info("Multi-agent task created: {}, targets: {}", task.getTaskId(), agentIds.size());
+        // 保存目标代理列表
+        task.setTargetAgentIds(String.join(",", agentIds));
         
-        // 2. 为每个代理创建执行实例
-        List<TaskExecution> executions = taskExecutionService.createExecutions(task.getTaskId(), agentIds);
-        log.info("Created {} execution instances for task {}", executions.size(), task.getTaskId());
+        // 根据autoStart设置初始状态
+        if (autoStart) {
+            task.setTaskStatus("PENDING");
+        } else {
+            task.setTaskStatus("DRAFT");
+        }
+        
+        task = taskRepository.save(task);
+        log.info("Multi-agent task created: {}, targets: {}, autoStart: {}", 
+            task.getTaskId(), agentIds.size(), autoStart);
+        
+        // 2. 如果autoStart=true，为每个代理创建执行实例
+        int executionCount = 0;
+        if (autoStart) {
+            List<TaskExecution> executions = taskExecutionService.createExecutions(task.getTaskId(), agentIds);
+            executionCount = executions.size();
+            log.info("Created {} execution instances for task {}", executionCount, task.getTaskId());
+            
+            // 更新任务状态
+            updateTaskStatus(task.getTaskId());
+        }
         
         // 3. 返回响应
         TaskModels.CreateTaskResponse response = new TaskModels.CreateTaskResponse();
         response.setTaskId(task.getTaskId());
+        response.setTaskStatus(task.getTaskStatus());
         response.setTargetAgentCount(agentIds.size());
-        response.setMessage("任务创建成功，已分配给 " + agentIds.size() + " 个代理");
+        if (autoStart) {
+            response.setMessage("任务创建成功，已分配给 " + agentIds.size() + " 个代理");
+        } else {
+            response.setMessage("任务创建成功（草稿状态），需要手动启动");
+        }
+        
+        return response;
+    }
+    
+    /**
+     * 计算任务状态（根据执行实例状态）
+     */
+    public String calculateTaskStatus(String taskId) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        // 获取所有执行实例
+        List<TaskExecution> executions = taskExecutionService.getExecutionsByTaskId(taskId);
+        
+        // 如果没有执行实例，保持DRAFT状态
+        if (executions.isEmpty()) {
+            return "DRAFT";
+        }
+        
+        // 有执行实例时，根据执行实例状态计算任务状态
+        // 统计各状态数量
+        long totalCount = executions.size();
+        long pendingCount = executions.stream().filter(e -> "PENDING".equals(e.getStatus())).count();
+        long pulledCount = executions.stream().filter(e -> "PULLED".equals(e.getStatus())).count();
+        long runningCount = executions.stream().filter(e -> "RUNNING".equals(e.getStatus())).count();
+        long successCount = executions.stream().filter(e -> "SUCCESS".equals(e.getStatus())).count();
+        long failedCount = executions.stream().filter(e -> "FAILED".equals(e.getStatus()) || "TIMEOUT".equals(e.getStatus())).count();
+        long cancelledCount = executions.stream().filter(e -> "CANCELLED".equals(e.getStatus())).count();
+        
+        // 状态判断逻辑
+        if (runningCount > 0 || pulledCount > 0) {
+            return "RUNNING";
+        }
+        
+        if (successCount == totalCount) {
+            return "SUCCESS";
+        }
+        
+        if (failedCount == totalCount) {
+            return "FAILED";
+        }
+        
+        if (cancelledCount == totalCount) {
+            return "CANCELLED";
+        }
+        
+        if (successCount > 0 && failedCount > 0) {
+            return "PARTIAL_SUCCESS";
+        }
+        
+        if (pendingCount == totalCount) {
+            return "PENDING";
+        }
+        
+        // 默认返回PENDING
+        return "PENDING";
+    }
+    
+    /**
+     * 更新任务状态
+     */
+    @Transactional
+    public void updateTaskStatus(String taskId) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        String oldStatus = task.getTaskStatus();
+        String newStatus = calculateTaskStatus(taskId);
+        
+        if (!newStatus.equals(oldStatus)) {
+            task.setTaskStatus(newStatus);
+            taskRepository.save(task);
+            log.info("Task {} status updated: {} -> {}", taskId, oldStatus, newStatus);
+        }
+    }
+    
+    /**
+     * 启动任务
+     */
+    @Transactional
+    public TaskModels.StartTaskResponse startTask(String taskId) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        // 验证任务状态为DRAFT
+        if (!"DRAFT".equals(task.getTaskStatus())) {
+            throw new IllegalStateException("只能启动草稿状态的任务，当前状态: " + task.getTaskStatus());
+        }
+        
+        // 获取目标代理列表（从第一次创建时应该保存，这里需要从某处获取）
+        // 由于当前设计中没有保存目标代理列表，我们需要从用户输入获取
+        // 这里暂时抛出异常，需要调用者提供代理列表
+        throw new UnsupportedOperationException("启动任务需要提供目标代理列表，请使用startTask(taskId, agentIds)方法");
+    }
+    
+    /**
+     * 启动任务（带代理列表）
+     */
+    @Transactional
+    public TaskModels.StartTaskResponse startTask(String taskId, List<String> agentIds) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        // 验证任务状态为DRAFT
+        if (!"DRAFT".equals(task.getTaskStatus())) {
+            throw new IllegalStateException("只能启动草稿状态的任务，当前状态: " + task.getTaskStatus());
+        }
+        
+        // 如果没有提供代理列表，使用任务创建时保存的代理列表
+        List<String> targetAgentIds = agentIds;
+        if (targetAgentIds == null || targetAgentIds.isEmpty()) {
+            if (task.getTargetAgentIds() != null && !task.getTargetAgentIds().isEmpty()) {
+                targetAgentIds = Arrays.asList(task.getTargetAgentIds().split(","));
+                log.info("Task {} using saved agent list: {}", taskId, targetAgentIds);
+            }
+        }
+        
+        // 验证代理列表
+        if (targetAgentIds == null || targetAgentIds.isEmpty()) {
+            throw new IllegalArgumentException("无法确定目标代理列表，请提供代理ID");
+        }
+        
+        // 为所有目标代理创建执行实例
+        List<TaskExecution> executions = taskExecutionService.createExecutions(taskId, targetAgentIds);
+        log.info("Task {} started, created {} execution instances", taskId, executions.size());
+        
+        // 更新任务状态
+        updateTaskStatus(taskId);
+        
+        // 返回响应
+        TaskModels.StartTaskResponse response = new TaskModels.StartTaskResponse();
+        response.setTaskId(taskId);
+        response.setTaskStatus(task.getTaskStatus());
+        response.setExecutionCount(executions.size());
+        response.setMessage("任务已启动，创建了 " + executions.size() + " 个执行实例");
+        
+        return response;
+    }
+    
+    /**
+     * 停止任务
+     */
+    @Transactional
+    public TaskModels.StopTaskResponse stopTask(String taskId) {
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        // 计算当前状态
+        String currentStatus = calculateTaskStatus(taskId);
+        
+        // 验证任务状态可停止（PENDING或RUNNING）
+        if (!"PENDING".equals(currentStatus) && !"RUNNING".equals(currentStatus)) {
+            throw new IllegalStateException("只能停止待执行或执行中的任务，当前状态: " + currentStatus);
+        }
+        
+        // 查询所有未完成的执行实例
+        List<TaskExecution> executions = taskExecutionService.getExecutionsByTaskId(taskId);
+        List<TaskExecution> toCancel = executions.stream()
+            .filter(e -> "PENDING".equals(e.getStatus()) || "PULLED".equals(e.getStatus()) || "RUNNING".equals(e.getStatus()))
+            .collect(Collectors.toList());
+        
+        // 取消这些执行实例
+        int cancelledCount = 0;
+        for (TaskExecution execution : toCancel) {
+            taskExecutionService.cancelExecution(execution.getId());
+            cancelledCount++;
+        }
+        
+        log.info("Task {} stopped, cancelled {} execution instances", taskId, cancelledCount);
+        
+        // 更新任务状态
+        updateTaskStatus(taskId);
+        
+        // 返回响应
+        TaskModels.StopTaskResponse response = new TaskModels.StopTaskResponse();
+        response.setTaskId(taskId);
+        response.setTaskStatus(task.getTaskStatus());
+        response.setCancelledCount(cancelledCount);
+        response.setMessage("任务已停止，取消了 " + cancelledCount + " 个执行实例");
         
         return response;
     }
@@ -150,12 +353,36 @@ public class TaskService {
     }
     
     /**
+     * 按状态获取任务（包含聚合状态）
+     */
+    public Page<TaskModels.TaskDTO> getTasksByStatus(String status, Pageable pageable) {
+        Page<Task> taskPage = taskRepository.findByTaskStatus(status, pageable);
+        
+        List<TaskModels.TaskDTO> taskDTOs = taskPage.getContent().stream()
+                .map(task -> {
+                    List<TaskExecution> executions = taskExecutionService.getExecutionsByTaskId(task.getTaskId());
+                    return toTaskDTO(task, executions);
+                })
+                .collect(Collectors.toList());
+        
+        return new PageImpl<>(taskDTOs, pageable, taskPage.getTotalElements());
+    }
+    
+    /**
      * 重启任务
      */
     @Transactional
     public TaskModels.RestartTaskResponse restartTask(String taskId, TaskModels.RestartMode mode) {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+        
+        // 验证任务状态可重启
+        String currentStatus = calculateTaskStatus(taskId);
+        if (!"SUCCESS".equals(currentStatus) && !"FAILED".equals(currentStatus) && 
+            !"PARTIAL_SUCCESS".equals(currentStatus) && !"STOPPED".equals(currentStatus) &&
+            !"CANCELLED".equals(currentStatus)) {
+            throw new IllegalStateException("只能重启已完成、失败、部分成功、已停止或已取消的任务，当前状态: " + currentStatus);
+        }
         
         List<TaskExecution> executions = taskExecutionService.getExecutionsByTaskId(taskId);
         
@@ -183,6 +410,9 @@ public class TaskService {
         }
         
         log.info("Task {} restarted, mode: {}, new executions: {}", taskId, mode, newExecutionCount);
+        
+        // 更新任务状态
+        updateTaskStatus(taskId);
         
         TaskModels.RestartTaskResponse response = new TaskModels.RestartTaskResponse();
         response.setTaskId(taskId);
@@ -306,6 +536,9 @@ public class TaskService {
         dto.setCreatedBy(task.getCreatedBy());
         dto.setCreatedAt(task.getCreatedAt());
         
+        // 设置任务状态
+        dto.setTaskStatus(task.getTaskStatus());
+        
         // 计算聚合状态和统计
         Map<String, Integer> stats = computeExecutionStats(executions);
         dto.setAggregatedStatus(computeAggregatedStatus(executions));
@@ -333,11 +566,12 @@ public class TaskService {
     @Deprecated
     @Transactional
     public String createTask(String agentId, TaskSpec taskSpec, String createdBy) {
-        // 使用新的多代理方法，传入单个代理
+        // 使用新的多代理方法，传入单个代理，默认autoStart=true
         TaskModels.CreateTaskResponse response = createMultiAgentTask(
                 Collections.singletonList(agentId), 
                 taskSpec, 
-                createdBy
+                createdBy,
+                true
         );
         return response.getTaskId();
     }
@@ -362,8 +596,8 @@ public class TaskService {
      */
     @Transactional
     public List<TaskSpec> pullTasks(String agentId, int maxTasks) {
-        // 查询该代理的待处理执行实例
-        List<TaskExecution> pendingExecutions = taskExecutionService.getPendingExecutionsByAgentId(agentId);
+        // 使用新的Repository方法，只查询可执行状态任务的待处理执行实例
+        List<TaskExecution> pendingExecutions = taskExecutionRepository.findPendingExecutionsForActiveTasks(agentId);
         
         return pendingExecutions.stream()
                 .limit(maxTasks)
@@ -416,6 +650,9 @@ public class TaskService {
         taskExecutionRepository.save(execution);
         log.info("Task execution {} acknowledged and started, log file: {}", 
             execution.getId(), logFilePath);
+        
+        // 更新任务状态
+        updateTaskStatus(execution.getTaskId());
     }
     
     /**
@@ -464,6 +701,9 @@ public class TaskService {
             request.getSummary()
         );
         log.info("Task execution {} finished with status {}", execution.getId(), request.getStatus());
+        
+        // 更新任务状态
+        updateTaskStatus(execution.getTaskId());
     }
     
     public Optional<Task> getTask(String taskId) {
@@ -639,6 +879,12 @@ public class TaskService {
     @Transactional
     public void cancelExecution(Long executionId) {
         taskExecutionService.cancelExecution(executionId);
+        
+        // 获取执行实例以更新任务状态
+        Optional<TaskExecution> optExecution = taskExecutionService.getExecution(executionId);
+        if (optExecution.isPresent()) {
+            updateTaskStatus(optExecution.get().getTaskId());
+        }
     }
 
 }

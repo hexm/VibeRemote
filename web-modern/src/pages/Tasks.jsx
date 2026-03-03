@@ -16,6 +16,7 @@ import {
   HistoryOutlined,
   RedoOutlined,
   ClearOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons'
 import api from '../services/auth'
 
@@ -32,6 +33,7 @@ const Tasks = () => {
   const [totalTasks, setTotalTasks] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [statusFilter, setStatusFilter] = useState('all')
   const [createModalVisible, setCreateModalVisible] = useState(false)
   const [detailModalVisible, setDetailModalVisible] = useState(false)
   const [logModalVisible, setLogModalVisible] = useState(false)
@@ -51,6 +53,8 @@ const Tasks = () => {
   
   // 在线代理数据
   const [onlineAgents, setOnlineAgents] = useState([])
+  const [agentGroups, setAgentGroups] = useState([])
+  const [selectionMode, setSelectionMode] = useState('manual') // manual or group
 
   // 获取在线代理列表
   const fetchOnlineAgents = async () => {
@@ -71,16 +75,47 @@ const Tasks = () => {
     }
   }
 
+  // 获取Agent分组列表
+  const fetchAgentGroups = async () => {
+    try {
+      const response = await api.get('/web/agent-groups')
+      setAgentGroups(response.content || [])
+    } catch (error) {
+      console.error('获取分组列表失败:', error)
+    }
+  }
+
+  // 当选择分组时，自动填充Agent列表
+  const handleGroupChange = async (groupId) => {
+    if (!groupId) {
+      form.setFieldsValue({ selectedAgents: [] })
+      return
+    }
+    
+    try {
+      const response = await api.get(`/web/agent-groups/${groupId}`)
+      const agentIds = response.agents?.map(a => a.agentId) || []
+      form.setFieldsValue({ selectedAgents: agentIds })
+    } catch (error) {
+      message.error('获取分组成员失败')
+    }
+  }
+
   // 获取任务列表（含聚合状态）
   const fetchTasks = async () => {
     setLoading(true)
     try {
-      const response = await api.get('/web/tasks', {
-        params: {
-          page: currentPage - 1,
-          size: pageSize
-        }
-      })
+      const params = {
+        page: currentPage - 1,
+        size: pageSize
+      }
+      
+      // 添加状态筛选参数
+      if (statusFilter && statusFilter !== 'all') {
+        params.status = statusFilter
+      }
+      
+      const response = await api.get('/web/tasks', { params })
       
       if (response?.content) {
         setTasks(response.content)
@@ -101,7 +136,8 @@ const Tasks = () => {
   useEffect(() => {
     fetchTasks()
     fetchOnlineAgents()
-  }, [currentPage, pageSize])
+    fetchAgentGroups()
+  }, [currentPage, pageSize, statusFilter])
 
   // 自动刷新日志
   useEffect(() => {
@@ -124,6 +160,34 @@ const Tasks = () => {
   }, [autoRefreshLogs, logModalVisible, selectedExecution])
 
   // 辅助函数
+  const getTaskStatusColor = (status) => {
+    const map = {
+      'DRAFT': 'default',
+      'PENDING': 'blue',
+      'RUNNING': 'processing',
+      'SUCCESS': 'success',
+      'FAILED': 'error',
+      'PARTIAL_SUCCESS': 'warning',
+      'STOPPED': 'default',
+      'CANCELLED': 'default',
+    }
+    return map[status] || 'default'
+  }
+
+  const getTaskStatusText = (status) => {
+    const map = {
+      'DRAFT': '草稿',
+      'PENDING': '待执行',
+      'RUNNING': '执行中',
+      'SUCCESS': '成功',
+      'FAILED': '失败',
+      'PARTIAL_SUCCESS': '部分成功',
+      'STOPPED': '已停止',
+      'CANCELLED': '已取消',
+    }
+    return map[status] || status
+  }
+
   const getStatusColor = (status) => {
     const map = {
       'PENDING': 'default',
@@ -209,9 +273,12 @@ const Tasks = () => {
       const params = new URLSearchParams()
       values.selectedAgents.forEach(id => params.append('agentIds', id))
       params.append('taskName', values.taskName)
+      // 修复：正确传递autoStart值，如果未定义则默认为true
+      const autoStart = values.autoStart === undefined ? true : values.autoStart
+      params.append('autoStart', autoStart)
       
       await api.post(`/web/tasks/create?${params.toString()}`, taskSpec)
-      message.success('任务创建成功')
+      message.success(autoStart ? '任务创建成功' : '任务创建成功（草稿状态）')
       setCreateModalVisible(false)
       form.resetFields()
       fetchTasks()
@@ -361,6 +428,54 @@ const Tasks = () => {
     })
   }
 
+  // 启动草稿任务
+  const handleStartTask = async (task) => {
+    Modal.confirm({
+      title: '启动任务',
+      content: `确定要启动任务"${task.taskName || task.taskId}"吗？任务将在创建时选择的所有代理节点上执行。`,
+      okText: '启动',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          // 不传递agentIds参数，使用任务创建时保存的代理列表
+          const response = await api.post(`/web/tasks/${task.taskId}/start`)
+          message.success(`任务已启动，创建了${response.executionCount}个执行实例`)
+          fetchTasks()
+          if (detailModalVisible && selectedTask?.taskId === task.taskId) {
+            handleViewDetail(task)
+          }
+        } catch (error) {
+          console.error('启动任务失败:', error)
+          message.error('启动任务失败: ' + (error.response?.data?.message || error.message))
+          return Promise.reject()
+        }
+      }
+    })
+  }
+
+  // 停止任务
+  const handleStopTask = async (task) => {
+    Modal.confirm({
+      title: '确认停止',
+      content: `确定要停止任务"${task.taskName || task.taskId}"吗？这将取消所有未完成的执行实例。`,
+      okText: '确定',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          const response = await api.post(`/web/tasks/${task.taskId}/stop`)
+          message.success(`任务已停止，取消了${response.cancelledCount}个执行实例`)
+          fetchTasks()
+          if (detailModalVisible && selectedTask?.taskId === task.taskId) {
+            handleViewDetail(task)
+          }
+        } catch (error) {
+          console.error('停止任务失败:', error)
+          message.error('停止任务失败: ' + (error.response?.data?.message || error.message))
+        }
+      }
+    })
+  }
+
   // 任务表格列定义
   const columns = [
     {
@@ -373,6 +488,29 @@ const Tasks = () => {
           <Text code className="text-xs text-gray-500">{record.taskId}</Text>
         </div>
       ),
+    },
+    {
+      title: '任务状态',
+      dataIndex: 'taskStatus',
+      key: 'taskStatus',
+      width: 120,
+      render: (status) => {
+        const statusIcons = {
+          'DRAFT': <FileTextOutlined />,
+          'PENDING': <ClockCircleOutlined />,
+          'RUNNING': <SyncOutlined spin />,
+          'SUCCESS': <CheckCircleOutlined />,
+          'FAILED': <ExclamationCircleOutlined />,
+          'PARTIAL_SUCCESS': <ExclamationCircleOutlined />,
+          'STOPPED': <StopOutlined />,
+          'CANCELLED': <StopOutlined />,
+        }
+        return (
+          <Tag color={getTaskStatusColor(status)} icon={statusIcons[status]}>
+            {getTaskStatusText(status)}
+          </Tag>
+        )
+      },
     },
     {
       title: '目标节点',
@@ -404,26 +542,6 @@ const Tasks = () => {
           />
         </div>
       ),
-    },
-    {
-      title: '聚合状态',
-      dataIndex: 'aggregatedStatus',
-      key: 'aggregatedStatus',
-      width: 120,
-      render: (status) => {
-        const statusIcons = {
-          'PENDING': <ClockCircleOutlined />,
-          'IN_PROGRESS': <SyncOutlined spin />,
-          'ALL_SUCCESS': <CheckCircleOutlined />,
-          'PARTIAL_SUCCESS': <ExclamationCircleOutlined />,
-          'ALL_FAILED': <ExclamationCircleOutlined />,
-        }
-        return (
-          <Tag color={getStatusColor(status)} icon={statusIcons[status]}>
-            {getStatusText(status)}
-          </Tag>
-        )
-      },
     },
     {
       title: '执行统计',
@@ -462,7 +580,7 @@ const Tasks = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 180,
+      width: 200,
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
@@ -476,7 +594,36 @@ const Tasks = () => {
             />
           </Tooltip>
           
-          {(record.aggregatedStatus === 'PARTIAL_SUCCESS' || record.aggregatedStatus === 'ALL_FAILED') && (
+          {/* 草稿状态：显示启动按钮 */}
+          {record.taskStatus === 'DRAFT' && (
+            <Tooltip title="启动任务">
+              <Button 
+                type="text" 
+                icon={<PlayCircleOutlined />} 
+                size="small"
+                onClick={() => handleStartTask(record)}
+                className="text-green-500 hover:bg-green-50"
+              />
+            </Tooltip>
+          )}
+          
+          {/* 待执行或执行中：显示停止按钮 */}
+          {(record.taskStatus === 'PENDING' || record.taskStatus === 'RUNNING') && (
+            <Tooltip title="停止任务">
+              <Button 
+                type="text" 
+                icon={<StopOutlined />} 
+                size="small"
+                danger
+                onClick={() => handleStopTask(record)}
+              />
+            </Tooltip>
+          )}
+          
+          {/* 失败、部分成功、已停止、已取消：显示重启按钮（成功的任务不能重启）*/}
+          {(record.taskStatus === 'FAILED' || 
+            record.taskStatus === 'PARTIAL_SUCCESS' || record.taskStatus === 'STOPPED' ||
+            record.taskStatus === 'CANCELLED') && (
             <Tooltip title="重启任务">
               <Button 
                 type="text" 
@@ -484,18 +631,6 @@ const Tasks = () => {
                 size="small"
                 onClick={() => handleRestartTask(record)}
                 className="text-orange-500 hover:bg-orange-50"
-              />
-            </Tooltip>
-          )}
-          
-          {record.aggregatedStatus === 'IN_PROGRESS' && (
-            <Tooltip title="取消任务">
-              <Button 
-                type="text" 
-                icon={<StopOutlined />} 
-                size="small"
-                danger
-                onClick={() => handleCancelTask(record)}
               />
             </Tooltip>
           )}
@@ -551,30 +686,41 @@ const Tasks = () => {
               prefix={<SearchOutlined className="text-gray-400" />}
             />
             <Select
-              defaultValue="all"
+              value={statusFilter}
+              onChange={(value) => {
+                setStatusFilter(value)
+                setCurrentPage(1) // 重置到第一页
+              }}
               style={{ width: 150 }}
             >
               <Option value="all">全部状态</Option>
-              <Option value="IN_PROGRESS">进行中</Option>
-              <Option value="ALL_SUCCESS">全部成功</Option>
+              <Option value="DRAFT">草稿</Option>
+              <Option value="PENDING">待执行</Option>
+              <Option value="RUNNING">执行中</Option>
+              <Option value="SUCCESS">成功</Option>
+              <Option value="FAILED">失败</Option>
               <Option value="PARTIAL_SUCCESS">部分成功</Option>
-              <Option value="ALL_FAILED">全部失败</Option>
-              <Option value="PENDING">等待中</Option>
+              <Option value="STOPPED">已停止</Option>
+              <Option value="CANCELLED">已取消</Option>
             </Select>
           </Space>
           
           <div className="flex items-center space-x-4 text-sm">
             <Space>
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <Text>全部成功: {tasks.filter(t => t.aggregatedStatus === 'ALL_SUCCESS').length}</Text>
+              <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+              <Text>草稿: {tasks.filter(t => t.taskStatus === 'DRAFT').length}</Text>
             </Space>
             <Space>
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <Text>进行中: {tasks.filter(t => t.aggregatedStatus === 'IN_PROGRESS').length}</Text>
+              <Text>执行中: {tasks.filter(t => t.taskStatus === 'RUNNING').length}</Text>
             </Space>
             <Space>
-              <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-              <Text>部分成功: {tasks.filter(t => t.aggregatedStatus === 'PARTIAL_SUCCESS').length}</Text>
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <Text>成功: {tasks.filter(t => t.taskStatus === 'SUCCESS').length}</Text>
+            </Space>
+            <Space>
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              <Text>失败: {tasks.filter(t => t.taskStatus === 'FAILED').length}</Text>
             </Space>
           </div>
         </div>
@@ -633,6 +779,38 @@ const Tasks = () => {
           </Form.Item>
           
           <Form.Item
+            label="选择方式"
+          >
+            <Radio.Group value={selectionMode} onChange={(e) => setSelectionMode(e.target.value)}>
+              <Radio value="manual">手动选择</Radio>
+              <Radio value="group">按分组选择</Radio>
+            </Radio.Group>
+          </Form.Item>
+
+          {selectionMode === 'group' && (
+            <Form.Item
+              name="groupId"
+              label="选择分组"
+            >
+              <Select
+                placeholder="选择Agent分组"
+                onChange={handleGroupChange}
+                allowClear
+              >
+                {agentGroups.map(group => (
+                  <Option key={group.id} value={group.id}>
+                    <Space>
+                      <TeamOutlined />
+                      {group.name}
+                      <Tag color="blue">{group.agentCount}个Agent</Tag>
+                    </Space>
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
+          
+          <Form.Item
             name="selectedAgents"
             label={
               <span>
@@ -651,6 +829,7 @@ const Tasks = () => {
               placeholder={onlineAgents.length === 0 ? '正在加载节点列表...' : '选择执行节点（可多选）'}
               notFoundContent={onlineAgents.length === 0 ? '暂无可用节点' : '未找到匹配节点'}
               style={{ width: '100%' }}
+              disabled={selectionMode === 'group'}
             >
               {onlineAgents.map(agent => (
                 <Option key={agent.agentId} value={agent.agentId}>
@@ -695,6 +874,21 @@ const Tasks = () => {
           >
             <Input type="number" min={1} />
           </Form.Item>
+          
+          <Form.Item
+            name="autoStart"
+            label="启动选项"
+            valuePropName="checked"
+            initialValue={true}
+          >
+            <Switch 
+              checkedChildren="立即启动" 
+              unCheckedChildren="保存为草稿"
+            />
+          </Form.Item>
+          <div className="text-xs text-gray-500 -mt-4 mb-4">
+            取消勾选后，任务将保存为草稿，需要手动启动
+          </div>
           
           <Form.Item className="mb-0 text-right">
             <Space>
@@ -775,14 +969,14 @@ const Tasks = () => {
               </div>
 
               <div className="mt-4 space-y-2">
+                <div><Text strong>任务状态：</Text>
+                  <Tag color={getTaskStatusColor(selectedTask.taskStatus)}>
+                    {getTaskStatusText(selectedTask.taskStatus)}
+                  </Tag>
+                </div>
                 <div><Text strong>脚本类型：</Text><Tag color="purple">{selectedTask.scriptLang}</Tag></div>
                 <div><Text strong>创建者：</Text>{selectedTask.createdBy}</div>
                 <div><Text strong>创建时间：</Text>{formatDateTime(selectedTask.createdAt)}</div>
-                <div><Text strong>聚合状态：</Text>
-                  <Tag color={getStatusColor(selectedTask.aggregatedStatus)}>
-                    {getStatusText(selectedTask.aggregatedStatus)}
-                  </Tag>
-                </div>
               </div>
             </Card>
 

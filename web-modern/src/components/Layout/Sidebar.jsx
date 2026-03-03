@@ -6,7 +6,9 @@ import {
   DesktopOutlined,
   FileTextOutlined,
   CodeOutlined,
-  RocketOutlined
+  RocketOutlined,
+  UserOutlined,
+  TeamOutlined
 } from '@ant-design/icons'
 
 const { Sider } = Layout
@@ -23,6 +25,11 @@ const menuItems = [
     label: '客户端管理',
   },
   {
+    key: '/agent-groups',
+    icon: <TeamOutlined />,
+    label: 'Agent分组',
+  },
+  {
     key: '/tasks',
     icon: <FileTextOutlined />,
     label: '任务管理',
@@ -31,6 +38,11 @@ const menuItems = [
     key: '/scripts',
     icon: <CodeOutlined />,
     label: '脚本管理',
+  },
+  {
+    key: '/users',
+    icon: <UserOutlined />,
+    label: '用户管理',
   },
 ]
 

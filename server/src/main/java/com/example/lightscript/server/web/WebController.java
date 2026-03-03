@@ -16,6 +16,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -75,6 +76,30 @@ public class WebController {
         List<TaskModels.TaskExecutionDTO> dtos = taskExecutionService.toDTOs(executions);
         return ResponseEntity.ok(dtos);
     }
+
+    /**
+     * 获取Agent所属的分组
+     */
+    @GetMapping("/agents/{agentId}/groups")
+    public ResponseEntity<?> getAgentGroups(@PathVariable String agentId) {
+        List<com.example.lightscript.server.entity.AgentGroup> groups = agentGroupService.getAgentGroups(agentId);
+
+        List<com.example.lightscript.server.model.AgentGroupModels.SimpleGroupDTO> dtoList = groups.stream()
+            .map(group -> {
+                com.example.lightscript.server.model.AgentGroupModels.SimpleGroupDTO dto =
+                    new com.example.lightscript.server.model.AgentGroupModels.SimpleGroupDTO();
+                dto.setId(group.getId());
+                dto.setName(group.getName());
+                dto.setType(group.getType());
+                return dto;
+            })
+            .collect(java.util.stream.Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("groups", dtoList);
+        return ResponseEntity.ok(response);
+    }
+
     
     // ========== 任务管理API（新版 - 支持多代理）==========
     
@@ -84,9 +109,17 @@ public class WebController {
     @GetMapping("/tasks")
     public ResponseEntity<Page<TaskModels.TaskDTO>> getAllTasks(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        Page<TaskModels.TaskDTO> tasks = taskService.getAllTasksWithStatus(pageable);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<TaskModels.TaskDTO> tasks;
+        
+        if (status != null && !status.isEmpty()) {
+            tasks = taskService.getTasksByStatus(status, pageable);
+        } else {
+            tasks = taskService.getAllTasksWithStatus(pageable);
+        }
+        
         return ResponseEntity.ok(tasks);
     }
     
@@ -117,16 +150,28 @@ public class WebController {
     /**
      * 创建多代理任务（新版）
      * 支持一个任务分发到多个代理执行
+     * 支持通过分组ID选择代理
      */
     @PostMapping("/tasks/create")
     public ResponseEntity<Map<String, Object>> createTask(
-            @RequestParam List<String> agentIds,
+            @RequestParam(required = false) List<String> agentIds,
+            @RequestParam(required = false) Long groupId,
             @RequestParam String taskName,
+            @RequestParam(defaultValue = "true") Boolean autoStart,
             @RequestBody TaskSpec taskSpec) {
         
+        // 如果提供了groupId，从分组获取agentIds
+        List<String> targetAgentIds = agentIds;
+        if (groupId != null) {
+            targetAgentIds = agentGroupService.getGroupAgentIds(groupId);
+            if (targetAgentIds.isEmpty()) {
+                throw new IllegalArgumentException("分组中没有Agent");
+            }
+        }
+        
         // 验证参数
-        if (agentIds == null || agentIds.isEmpty()) {
-            throw new IllegalArgumentException("至少需要选择一个代理");
+        if (targetAgentIds == null || targetAgentIds.isEmpty()) {
+            throw new IllegalArgumentException("至少需要选择一个代理或指定一个分组");
         }
         
         // 使用固定的创建者，避免Principal相关问题
@@ -134,13 +179,36 @@ public class WebController {
         taskSpec.setTaskName(taskName);
         
         // 调用新的多代理任务创建方法
-        TaskModels.CreateTaskResponse createResponse = taskService.createMultiAgentTask(agentIds, taskSpec, createdBy);
+        TaskModels.CreateTaskResponse createResponse = taskService.createMultiAgentTask(
+            targetAgentIds, taskSpec, createdBy, autoStart);
         
         Map<String, Object> response = new HashMap<>();
         response.put("taskId", createResponse.getTaskId());
+        response.put("taskStatus", createResponse.getTaskStatus());
         response.put("targetAgentCount", createResponse.getTargetAgentCount());
         response.put("message", createResponse.getMessage());
         
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 启动任务（草稿状态的任务）
+     */
+    @PostMapping("/tasks/{taskId}/start")
+    public ResponseEntity<TaskModels.StartTaskResponse> startTask(
+            @PathVariable String taskId,
+            @RequestParam(required = false) List<String> agentIds) {
+        
+        TaskModels.StartTaskResponse response = taskService.startTask(taskId, agentIds);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 停止任务（待执行或执行中的任务）
+     */
+    @PostMapping("/tasks/{taskId}/stop")
+    public ResponseEntity<TaskModels.StopTaskResponse> stopTask(@PathVariable String taskId) {
+        TaskModels.StopTaskResponse response = taskService.stopTask(taskId);
         return ResponseEntity.ok(response);
     }
     
@@ -382,4 +450,8 @@ public class WebController {
             throw new RuntimeException("读取日志文件失败: " + logFilePath, e);
         }
     }
+
+
+    private final com.example.lightscript.server.service.AgentGroupService agentGroupService;
+
 }
