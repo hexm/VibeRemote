@@ -19,6 +19,7 @@ import {
   PlayCircleOutlined,
 } from '@ant-design/icons'
 import api from '../services/auth'
+import scriptService from '../services/scriptService'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
@@ -60,47 +61,19 @@ const Tasks = () => {
   const [scriptSource, setScriptSource] = useState('custom') // custom or existing
   const [availableScripts, setAvailableScripts] = useState([])
 
-  // 获取可用脚本列表（从Scripts页面的模拟数据）
-  const fetchAvailableScripts = () => {
-    // 这里使用Scripts页面的模拟数据
-    const scripts = [
-      {
-        id: 'S001',
-        name: '系统更新脚本',
-        type: 'shell',
-        content: `#!/bin/bash
-echo "开始系统更新..."
-apt update
-apt upgrade -y
-echo "系统更新完成"`,
-      },
-      {
-        id: 'S002',
-        name: '日志清理脚本',
-        type: 'shell',
-        content: `#!/bin/bash
-echo "开始清理日志..."
-find /var/log -name "*.log" -mtime +30 -delete
-echo "日志清理完成"`,
-      },
-      {
-        id: 'S003',
-        name: '数据备份脚本',
-        type: 'powershell',
-        content: `# PowerShell 数据备份脚本
-Write-Host "开始数据备份..."
-$source = "C:\\Data"
-$destination = "C:\\Backup"
-Copy-Item -Path $source -Destination $destination -Recurse
-Write-Host "数据备份完成"`,
-      },
-    ]
-    setAvailableScripts(scripts)
+  // 获取可用脚本列表（从scriptService获取）
+  const fetchAvailableScripts = async () => {
+    try {
+      const scripts = await scriptService.getScriptsForTask()
+      setAvailableScripts(scripts)
+    } catch (error) {
+      console.error('获取脚本列表失败:', error)
+    }
   }
 
   // 处理脚本选择
   const handleScriptSelect = (scriptId) => {
-    const script = availableScripts.find(s => s.id === scriptId)
+    const script = availableScripts.find(s => s.scriptId === scriptId)
     if (script) {
       form.setFieldsValue({
         scriptLang: script.type,
@@ -154,7 +127,7 @@ Write-Host "数据备份完成"`,
     }
   }
 
-  // 获取任务列表（含聚合状态）
+  // 获取任务列表
   const fetchTasks = async () => {
     setLoading(true)
     try {
@@ -191,6 +164,17 @@ Write-Host "数据备份完成"`,
     fetchOnlineAgents()
     fetchAgentGroups()
     fetchAvailableScripts()
+    
+    // 监听脚本数据变化
+    const handleScriptsChange = () => {
+      fetchAvailableScripts()
+    }
+    
+    scriptService.addListener(handleScriptsChange)
+    
+    return () => {
+      scriptService.removeListener(handleScriptsChange)
+    }
   }, [currentPage, pageSize, statusFilter])
 
   // 自动刷新日志
@@ -238,28 +222,6 @@ Write-Host "数据备份完成"`,
       'PARTIAL_SUCCESS': '部分成功',
       'STOPPED': '已停止',
       'CANCELLED': '已取消',
-    }
-    return map[status] || status
-  }
-
-  const getStatusColor = (status) => {
-    const map = {
-      'PENDING': 'default',
-      'IN_PROGRESS': 'processing',
-      'ALL_SUCCESS': 'success',
-      'PARTIAL_SUCCESS': 'warning',
-      'ALL_FAILED': 'error',
-    }
-    return map[status] || 'default'
-  }
-
-  const getStatusText = (status) => {
-    const map = {
-      'PENDING': '等待中',
-      'IN_PROGRESS': '进行中',
-      'ALL_SUCCESS': '全部成功',
-      'PARTIAL_SUCCESS': '部分成功',
-      'ALL_FAILED': '全部失败',
     }
     return map[status] || status
   }
@@ -318,6 +280,17 @@ Write-Host "数据备份完成"`,
   // 创建多代理任务
   const handleCreateTask = async (values) => {
     try {
+      // 如果values是事件对象（从按钮点击触发），需要先验证表单
+      if (values && values.preventDefault) {
+        values = await form.validateFields()
+      }
+      
+      // 验证必填字段
+      if (!values.selectedAgents || values.selectedAgents.length === 0) {
+        message.error('请选择至少一个客户端')
+        return
+      }
+      
       const taskSpec = {
         scriptLang: values.scriptLang || 'shell',
         scriptContent: values.scriptContent,
@@ -381,7 +354,8 @@ Write-Host "数据备份完成"`,
       setLogTotalLines(response.totalLines || 0)
     } catch (error) {
       console.error('获取日志失败:', error)
-      message.error('获取日志失败')
+      const errorMsg = error.response?.data?.message || error.message || '未知错误'
+      message.error(`获取日志失败: ${errorMsg}`)
     }
   }
 
@@ -392,9 +366,38 @@ Write-Host "数据备份完成"`,
   }
 
   // 下载执行日志
-  const downloadExecutionLog = (execution) => {
-    const url = `${api.defaults.baseURL}/web/tasks/executions/${execution.id}/download`
-    window.open(url, '_blank')
+  const downloadExecutionLog = async (execution) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${api.defaults.baseURL}/web/tasks/executions/${execution.id}/download`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `HTTP ${response.status}`)
+      }
+      
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `execution_${execution.id}_${execution.executionNumber}.log`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      message.success('日志下载成功')
+    } catch (error) {
+      console.error('下载日志失败:', error)
+      message.error(`下载日志失败: ${error.message}`)
+    }
   }
 
   // 取消任务（取消所有执行实例）
@@ -622,7 +625,28 @@ Write-Host "数据备份完成"`,
       dataIndex: 'createdBy',
       key: 'createdBy',
       width: 100,
-      render: (user) => <Text>{user || 'admin'}</Text>,
+      render: (createdBy) => <Text>{createdBy || 'admin'}</Text>,
+    },
+    {
+      title: '执行次数',
+      dataIndex: 'executionCount',
+      key: 'executionCount',
+      width: 100,
+      render: (count) => <Tag color="cyan">第 {count || 1} 次</Tag>,
+    },
+    {
+      title: '开始时间',
+      dataIndex: 'startedAt',
+      key: 'startedAt',
+      width: 160,
+      render: (time) => <Text className="text-xs">{time ? formatDateTime(time) : '-'}</Text>,
+    },
+    {
+      title: '结束时间',
+      dataIndex: 'finishedAt',
+      key: 'finishedAt',
+      width: 160,
+      render: (time) => <Text className="text-xs">{time ? formatDateTime(time) : '-'}</Text>,
     },
     {
       title: '创建时间',
@@ -634,59 +658,56 @@ Write-Host "数据备份完成"`,
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 240,
       fixed: 'right',
       render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="查看详情">
-            <Button 
-              type="text" 
-              icon={<EyeOutlined />} 
-              size="small"
-              onClick={() => handleViewDetail(record)}
-              className="text-blue-500 hover:bg-blue-50"
-            />
-          </Tooltip>
+        <Space size="small" wrap>
+          <Button 
+            type="link" 
+            icon={<EyeOutlined />} 
+            size="small"
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           
           {/* 草稿状态：显示启动按钮 */}
           {record.taskStatus === 'DRAFT' && (
-            <Tooltip title="启动任务">
-              <Button 
-                type="text" 
-                icon={<PlayCircleOutlined />} 
-                size="small"
-                onClick={() => handleStartTask(record)}
-                className="text-green-500 hover:bg-green-50"
-              />
-            </Tooltip>
+            <Button 
+              type="link" 
+              icon={<PlayCircleOutlined />} 
+              size="small"
+              onClick={() => handleStartTask(record)}
+            >
+              启动
+            </Button>
           )}
           
           {/* 待执行或执行中：显示停止按钮 */}
           {(record.taskStatus === 'PENDING' || record.taskStatus === 'RUNNING') && (
-            <Tooltip title="停止任务">
-              <Button 
-                type="text" 
-                icon={<StopOutlined />} 
-                size="small"
-                danger
-                onClick={() => handleStopTask(record)}
-              />
-            </Tooltip>
+            <Button 
+              type="link" 
+              icon={<StopOutlined />} 
+              size="small"
+              danger
+              onClick={() => handleStopTask(record)}
+            >
+              停止
+            </Button>
           )}
           
           {/* 失败、部分成功、已停止、已取消：显示重启按钮（成功的任务不能重启）*/}
           {(record.taskStatus === 'FAILED' || 
             record.taskStatus === 'PARTIAL_SUCCESS' || record.taskStatus === 'STOPPED' ||
             record.taskStatus === 'CANCELLED') && (
-            <Tooltip title="重启任务">
-              <Button 
-                type="text" 
-                icon={<RedoOutlined />} 
-                size="small"
-                onClick={() => handleRestartTask(record)}
-                className="text-orange-500 hover:bg-orange-50"
-              />
-            </Tooltip>
+            <Button 
+              type="link" 
+              icon={<RedoOutlined />} 
+              size="small"
+              onClick={() => handleRestartTask(record)}
+            >
+              重启
+            </Button>
           )}
         </Space>
       ),
@@ -983,7 +1004,7 @@ Write-Host "数据备份完成"`,
                     }}
                   >
                     {availableScripts.map(script => (
-                      <Option key={script.id} value={script.id}>
+                      <Option key={script.scriptId} value={script.scriptId}>
                         <Space>
                           <Tag color="purple">{script.type}</Tag>
                           {script.name}
@@ -1076,6 +1097,14 @@ Write-Host "数据备份完成"`,
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
         footer={[
+          <Button 
+            key="refresh" 
+            icon={<ReloadOutlined />} 
+            onClick={() => handleViewDetail(selectedTask)}
+            loading={detailLoading}
+          >
+            刷新
+          </Button>,
           <Button key="close" onClick={() => setDetailModalVisible(false)}>
             关闭
           </Button>
@@ -1127,7 +1156,7 @@ Write-Host "数据备份完成"`,
                     ? Math.round((selectedTask.completedExecutions || 0) / selectedTask.targetAgentCount * 100) 
                     : 0
                   } 
-                  status={selectedTask.aggregatedStatus === 'ALL_FAILED' ? 'exception' : 'normal'}
+                  status={selectedTask.taskStatus === 'FAILED' ? 'exception' : 'normal'}
                   strokeColor={{
                     '0%': '#108ee9',
                     '100%': '#87d068',
@@ -1135,15 +1164,48 @@ Write-Host "数据备份完成"`,
                 />
               </div>
 
-              <div className="mt-4 space-y-2">
-                <div><Text strong>任务状态：</Text>
-                  <Tag color={getTaskStatusColor(selectedTask.taskStatus)}>
-                    {getTaskStatusText(selectedTask.taskStatus)}
-                  </Tag>
-                </div>
-                <div><Text strong>脚本类型：</Text><Tag color="purple">{selectedTask.scriptLang}</Tag></div>
-                <div><Text strong>创建者：</Text>{selectedTask.createdBy}</div>
-                <div><Text strong>创建时间：</Text>{formatDateTime(selectedTask.createdAt)}</div>
+              {/* 任务详细信息 - 两列布局 */}
+              <div className="mt-4">
+                <Text strong className="text-base">任务详细信息</Text>
+                <Row gutter={32} className="mt-3">
+                  <Col span={12}>
+                    <div className="space-y-2">
+                      <div><Text strong>任务状态：</Text>
+                        <Tag color={getTaskStatusColor(selectedTask.taskStatus)}>
+                          {getTaskStatusText(selectedTask.taskStatus)}
+                        </Tag>
+                      </div>
+                      <div><Text strong>脚本类型：</Text><Tag color="purple">{selectedTask.scriptLang}</Tag></div>
+                      <div><Text strong>创建者：</Text>{selectedTask.createdBy}</div>
+                      <div><Text strong>创建时间：</Text>{formatDateTime(selectedTask.createdAt)}</div>
+                      <div><Text strong>执行次数：</Text>
+                        <Tag color="cyan">第 {selectedTask.executionCount || 1} 次</Tag>
+                      </div>
+                    </div>
+                  </Col>
+                  <Col span={12}>
+                    <div className="space-y-2">
+                      <div><Text strong>超时设置：</Text>{selectedTask.timeoutSec}秒</div>
+                      <div><Text strong>开始时间：</Text>
+                        {selectedTask.startedAt ? formatDateTime(selectedTask.startedAt) : '-'}
+                      </div>
+                      <div><Text strong>结束时间：</Text>
+                        {selectedTask.finishedAt ? formatDateTime(selectedTask.finishedAt) : '-'}
+                      </div>
+                      <div><Text strong>执行耗时：</Text>
+                        {selectedTask.startedAt && selectedTask.finishedAt 
+                          ? formatDuration(new Date(selectedTask.finishedAt) - new Date(selectedTask.startedAt))
+                          : selectedTask.startedAt && !selectedTask.finishedAt
+                          ? formatDuration(new Date() - new Date(selectedTask.startedAt)) + ' (进行中)'
+                          : '-'
+                        }
+                      </div>
+                      <div><Text strong>执行进度：</Text>
+                        {selectedTask.executionProgress || '0/0'}
+                      </div>
+                    </div>
+                  </Col>
+                </Row>
               </div>
             </Card>
 
@@ -1232,39 +1294,39 @@ Write-Host "数据备份完成"`,
                   {
                     title: '操作',
                     key: 'actions',
-                    width: 150,
+                    width: 180,
                     render: (_, record) => (
-                      <Space size="small">
+                      <Space size="small" wrap>
                         {record.logFilePath && (
-                          <Tooltip title="查看日志">
-                            <Button 
-                              type="text" 
-                              size="small"
-                              icon={<EyeOutlined />}
-                              onClick={() => handleViewLog(record)}
-                            />
-                          </Tooltip>
+                          <Button 
+                            type="link" 
+                            size="small"
+                            icon={<EyeOutlined />}
+                            onClick={() => handleViewLog(record)}
+                          >
+                            日志
+                          </Button>
                         )}
                         {record.logFilePath && (
-                          <Tooltip title="下载日志">
-                            <Button 
-                              type="text" 
-                              size="small"
-                              icon={<DownloadOutlined />}
-                              onClick={() => downloadExecutionLog(record)}
-                            />
-                          </Tooltip>
+                          <Button 
+                            type="link" 
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            onClick={() => downloadExecutionLog(record)}
+                          >
+                            下载
+                          </Button>
                         )}
                         {(record.status === 'PENDING' || record.status === 'RUNNING' || record.status === 'PULLED') && (
-                          <Tooltip title="取消执行">
-                            <Button 
-                              type="text" 
-                              size="small"
-                              icon={<StopOutlined />}
-                              danger
-                              onClick={() => handleCancelExecution(record)}
-                            />
-                          </Tooltip>
+                          <Button 
+                            type="link" 
+                            size="small"
+                            icon={<StopOutlined />}
+                            danger
+                            onClick={() => handleCancelExecution(record)}
+                          >
+                            取消
+                          </Button>
                         )}
                       </Space>
                     )

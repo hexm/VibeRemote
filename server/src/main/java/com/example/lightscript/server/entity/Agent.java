@@ -55,6 +55,9 @@ public class Agent {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
+    @Column(name = "task_count")
+    private Integer taskCount = 0; // 任务执行总数
+    
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     

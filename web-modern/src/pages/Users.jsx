@@ -53,10 +53,18 @@ const Users = () => {
       setUsers(response.content || [])
     } catch (error) {
       console.error('获取用户列表失败:', error)
-      if (error.status === 403 || error.error === 'Forbidden') {
-        message.warning({ content: '您没有权限查看用户列表', key: 'users-permission' })
+      if (error.status === 403) {
+        message.warning({
+          content: '您没有权限查看用户列表，请联系管理员',
+          key: 'user-list-permission',
+          duration: 3
+        })
       } else {
-        message.error({ content: '获取用户列表失败', key: 'users-error' })
+        message.error({
+          content: '获取用户列表失败',
+          key: 'user-list-error',
+          duration: 3
+        })
       }
     } finally {
       setLoading(false)
@@ -95,7 +103,7 @@ const Users = () => {
       setCurrentUser(fullUserData)
     } catch (error) {
       console.error('获取用户详情失败', error)
-      message.error('获取用户详情失败')
+      message.error(error.message || error.error || '获取用户详情失败')
       setCurrentUser(record) // 降级使用表格数据
     }
   }
@@ -113,7 +121,8 @@ const Users = () => {
       message.success('删除成功')
       fetchUsers()
     } catch (error) {
-      message.error('删除失败')
+      console.error('删除失败:', error)
+      message.error(error.message || error.error || '删除失败')
     }
   }
 
@@ -123,7 +132,8 @@ const Users = () => {
       message.success('状态更新成功')
       fetchUsers()
     } catch (error) {
-      message.error('状态更新失败')
+      console.error('状态更新失败:', error)
+      message.error(error.message || error.error || '状态更新失败')
     }
   }
 
@@ -146,7 +156,29 @@ const Users = () => {
       form.resetFields()
       fetchUsers()
     } catch (error) {
-      message.error(error.response?.data?.message || '操作失败')
+      console.error('操作失败:', error)
+      // 提取有意义的错误信息
+      let errorMessage = '操作失败'
+      
+      if (error.message) {
+        errorMessage = error.message
+      } else if (error.error) {
+        errorMessage = error.error
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      }
+      
+      // 针对常见错误提供友好提示
+      if (error.status === 403) {
+        errorMessage = '您没有权限执行此操作'
+      } else if (error.status === 409) {
+        errorMessage = '用户名已存在'
+      } else if (error.status === 400) {
+        errorMessage = error.message || '请求参数错误，请检查输入'
+      }
+      
+      message.error(errorMessage)
+      // 不关闭Modal，让用户可以修改后重试
     }
   }
 

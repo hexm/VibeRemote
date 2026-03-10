@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Modal, Form, message, Tooltip } from 'antd'
+import React, { useState, useEffect } from 'react'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Modal, Form, message, Tooltip, Upload, Tabs } from 'antd'
 import {
   CodeOutlined,
   SearchOutlined,
@@ -8,105 +8,391 @@ import {
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
-  PlayCircleOutlined,
   FileTextOutlined,
+  UploadOutlined,
+  InboxOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
+import scriptService from '../services/scriptService'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
 const { Option } = Select
+const { TabPane } = Tabs
+const { Dragger } = Upload
 
 const Scripts = () => {
   const [loading, setLoading] = useState(false)
   const [createModalVisible, setCreateModalVisible] = useState(false)
+  const [editModalVisible, setEditModalVisible] = useState(false)
+  const [reuploadModalVisible, setReuploadModalVisible] = useState(false)
   const [viewModalVisible, setViewModalVisible] = useState(false)
   const [selectedScript, setSelectedScript] = useState(null)
   const [form] = Form.useForm()
+  const [editForm] = Form.useForm()
+  const [uploadForm] = Form.useForm()
+  const [reuploadForm] = Form.useForm()
+  const [fileList, setFileList] = useState([])
+  const [reuploadFileList, setReuploadFileList] = useState([])
+  const [activeTab, setActiveTab] = useState('manual')
+  const [scripts, setScripts] = useState([])
+  const [filteredScripts, setFilteredScripts] = useState([])
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const [selectedType, setSelectedType] = useState('all')
+  const [scriptStats, setScriptStats] = useState({
+    total: 0,
+    bash: 0,
+    python: 0,
+    powershell: 0,
+    javascript: 0,
+    typescript: 0,
+    cmd: 0
+  })
 
-  const [scripts, setScripts] = useState([
-    {
-      key: '1',
-      id: 'S001',
-      name: '系统更新脚本',
-      filename: 'update-system.sh',
-      type: 'bash',
-      description: '更新系统软件包和安全补丁',
-      size: '2.3 KB',
-      lastModified: '2024-01-15 09:30:00',
-      author: 'admin',
-      usage: 15,
-      content: `#!/bin/bash
-echo "开始系统更新..."
-apt update
-apt upgrade -y
-echo "系统更新完成"`,
+  // 初始化和监听脚本数据变化
+  useEffect(() => {
+    loadScripts()
+    
+    const handleScriptsChange = (newScripts) => {
+      setScripts([...newScripts])
+      setFilteredScripts([...newScripts])
+    }
+    
+    scriptService.addListener(handleScriptsChange)
+    
+    return () => {
+      scriptService.removeListener(handleScriptsChange)
+    }
+  }, [])
+
+  // 加载脚本统计信息
+  const loadScriptStats = async () => {
+    try {
+      const allScripts = await scriptService.getAllScripts()
+      const stats = {
+        total: allScripts.length,
+        bash: allScripts.filter(s => s.type === 'bash').length,
+        python: allScripts.filter(s => s.type === 'python').length,
+        powershell: allScripts.filter(s => s.type === 'powershell').length,
+        javascript: allScripts.filter(s => s.type === 'javascript').length,
+        typescript: allScripts.filter(s => s.type === 'typescript').length,
+        cmd: allScripts.filter(s => s.type === 'cmd').length
+      }
+      setScriptStats(stats)
+    } catch (error) {
+      console.error('加载统计信息失败:', error)
+    }
+  }
+
+  // 加载脚本数据
+  const loadScripts = async (filters = {}) => {
+    try {
+      setLoading(true)
+      const scripts = await scriptService.getAllScripts(filters)
+      setScripts(scripts)
+      setFilteredScripts(scripts)
+      
+      // 如果没有过滤条件，更新统计信息
+      if (Object.keys(filters).length === 0) {
+        const stats = {
+          total: scripts.length,
+          bash: scripts.filter(s => s.type === 'bash').length,
+          python: scripts.filter(s => s.type === 'python').length,
+          powershell: scripts.filter(s => s.type === 'powershell').length,
+          javascript: scripts.filter(s => s.type === 'javascript').length,
+          typescript: scripts.filter(s => s.type === 'typescript').length,
+          cmd: scripts.filter(s => s.type === 'cmd').length
+        }
+        setScriptStats(stats)
+      }
+    } catch (error) {
+      console.error('加载脚本失败:', error)
+      message.error('加载脚本失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 应用过滤器
+  const applyFilters = () => {
+    const filters = {}
+    
+    if (searchKeyword.trim()) {
+      filters.keyword = searchKeyword.trim()
+    }
+    
+    if (selectedType !== 'all') {
+      filters.type = selectedType
+    }
+    
+    loadScripts(filters)
+  }
+
+  // 过滤器变化时应用过滤
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      applyFilters()
+    }, 300) // 防抖，300ms后执行搜索
+    
+    return () => clearTimeout(timeoutId)
+  }, [searchKeyword, selectedType])
+
+  const handleRefresh = async () => {
+    scriptService.clearCache()
+    await loadScripts()
+    message.success('数据已刷新')
+  }
+
+  const handleSearch = (value) => {
+    setSearchKeyword(value)
+  }
+
+  const handleTypeChange = (value) => {
+    setSelectedType(value)
+  }
+
+  const handleResetFilters = () => {
+    setSearchKeyword('')
+    setSelectedType('all')
+    // 重置后会触发useEffect自动加载数据
+  }
+
+  const handleUploadScript = async (values) => {
+    try {
+      if (fileList.length === 0) {
+        message.error('请选择要上传的脚本文件')
+        return
+      }
+
+      const file = fileList[0]
+      const scriptData = {
+        name: values.name,
+        type: values.type,
+        description: values.description,
+      }
+      
+      await scriptService.uploadScript(scriptData, file)
+      setCreateModalVisible(false)
+      uploadForm.resetFields()
+      setFileList([])
+      setActiveTab('manual')
+      message.success('脚本上传成功')
+    } catch (error) {
+      message.error('脚本上传失败: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const uploadProps = {
+    name: 'file',
+    multiple: false,
+    fileList: fileList,
+    beforeUpload: (file) => {
+      // 检查文件类型
+      const allowedTypes = ['.sh', '.ps1', '.bat', '.cmd', '.py', '.js', '.ts']
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+      
+      if (!allowedTypes.includes(fileExtension)) {
+        message.error('只支持脚本文件格式: .sh, .ps1, .bat, .cmd, .py, .js, .ts')
+        return false
+      }
+
+      // 检查文件大小 (限制为1MB)
+      if (file.size > 1024 * 1024) {
+        message.error('文件大小不能超过1MB')
+        return false
+      }
+
+      setFileList([file])
+      
+      // 根据文件扩展名自动设置脚本类型
+      const typeMap = {
+        '.sh': 'bash',
+        '.ps1': 'powershell', 
+        '.bat': 'cmd',
+        '.cmd': 'cmd',
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript'
+      }
+      
+      const scriptType = typeMap[fileExtension] || 'bash'
+      uploadForm.setFieldsValue({ 
+        type: scriptType,
+        filename: file.name 
+      })
+      
+      return false // 阻止自动上传
     },
-    {
-      key: '2',
-      id: 'S002',
-      name: '日志清理脚本',
-      filename: 'cleanup-logs.sh',
-      type: 'bash',
-      description: '清理系统日志文件，释放磁盘空间',
-      size: '1.8 KB',
-      lastModified: '2024-01-14 16:45:00',
-      author: 'admin',
-      usage: 8,
-      content: `#!/bin/bash
-echo "开始清理日志..."
-find /var/log -name "*.log" -mtime +30 -delete
-echo "日志清理完成"`,
+    onRemove: () => {
+      setFileList([])
+      uploadForm.resetFields(['type', 'filename'])
     },
-    {
-      key: '3',
-      id: 'S003',
-      name: '数据备份脚本',
-      filename: 'backup-data.ps1',
-      type: 'powershell',
-      description: '备份重要数据到指定目录',
-      size: '3.1 KB',
-      lastModified: '2024-01-13 14:20:00',
-      author: 'user',
-      usage: 3,
-      content: `# PowerShell 数据备份脚本
-Write-Host "开始数据备份..."
-$source = "C:\\Data"
-$destination = "C:\\Backup"
-Copy-Item -Path $source -Destination $destination -Recurse
-Write-Host "数据备份完成"`,
-    },
-  ])
+  }
 
   const handleCreateScript = async (values) => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newScript = {
-        key: Date.now().toString(),
-        id: `S${String(scripts.length + 1).padStart(3, '0')}`,
+      const scriptData = {
         name: values.name,
         filename: values.filename,
         type: values.type,
         description: values.description,
+        encoding: values.encoding || 'UTF-8',
         content: values.content,
-        size: `${(values.content.length / 1024).toFixed(1)} KB`,
-        lastModified: new Date().toLocaleString(),
-        author: 'admin',
-        usage: 0,
       }
       
-      setScripts([newScript, ...scripts])
+      await scriptService.addScript(scriptData)
       setCreateModalVisible(false)
       form.resetFields()
       message.success('脚本创建成功')
     } catch (error) {
-      message.error('脚本创建失败')
+      message.error('脚本创建失败: ' + (error.response?.data?.message || error.message))
     }
   }
 
-  const handleViewScript = (script) => {
+  const handleViewScript = async (script) => {
     setSelectedScript(script)
-    setViewModalVisible(true)
+    
+    try {
+      // 获取脚本内容
+      const content = await scriptService.getScriptContent(script.scriptId)
+      script.content = content
+      setViewModalVisible(true)
+    } catch (error) {
+      message.error('获取脚本内容失败')
+    }
+  }
+
+  const handleDownloadScript = async (script) => {
+    try {
+      const response = await scriptService.downloadScript(script.scriptId)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = script.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      message.success(`脚本 ${script.filename} 下载成功`)
+    } catch (error) {
+      message.error('下载失败: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const handleEditScript = (script) => {
+    setSelectedScript(script)
+    
+    if (script.isUploaded) {
+      // 上传的脚本：打开重新上传Modal
+      reuploadForm.setFieldsValue({
+        name: script.name,
+        type: script.type,
+        description: script.description,
+      })
+      setReuploadModalVisible(true)
+    } else {
+      // 手动录入的脚本：打开编辑Modal
+      editForm.setFieldsValue({
+        name: script.name,
+        filename: script.filename,
+        type: script.type,
+        description: script.description,
+        encoding: script.encoding,
+        content: script.content,
+      })
+      setEditModalVisible(true)
+    }
+  }
+
+  const handleUpdateScript = async (values) => {
+    try {
+      const updates = {
+        name: values.name,
+        filename: values.filename,
+        type: values.type,
+        description: values.description,
+        encoding: values.encoding,
+        content: values.content,
+      }
+      
+      await scriptService.updateScript(selectedScript.scriptId, updates)
+      setEditModalVisible(false)
+      editForm.resetFields()
+      setSelectedScript(null)
+      message.success('脚本更新成功')
+    } catch (error) {
+      message.error('脚本更新失败: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const handleReuploadScript = async (values) => {
+    try {
+      if (reuploadFileList.length === 0) {
+        message.error('请选择要重新上传的脚本文件')
+        return
+      }
+
+      const file = reuploadFileList[0]
+      const scriptData = {
+        name: values.name,
+        type: values.type,
+        description: values.description,
+      }
+      
+      await scriptService.reuploadScript(selectedScript.scriptId, scriptData, file)
+      setReuploadModalVisible(false)
+      reuploadForm.resetFields()
+      setReuploadFileList([])
+      setSelectedScript(null)
+      message.success('脚本重新上传成功')
+    } catch (error) {
+      message.error('脚本重新上传失败: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const reuploadProps = {
+    name: 'file',
+    multiple: false,
+    fileList: reuploadFileList,
+    beforeUpload: (file) => {
+      // 检查文件类型
+      const allowedTypes = ['.sh', '.ps1', '.bat', '.cmd', '.py', '.js', '.ts']
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+      
+      if (!allowedTypes.includes(fileExtension)) {
+        message.error('只支持脚本文件格式: .sh, .ps1, .bat, .cmd, .py, .js, .ts')
+        return false
+      }
+
+      // 检查文件大小 (限制为1MB)
+      if (file.size > 1024 * 1024) {
+        message.error('文件大小不能超过1MB')
+        return false
+      }
+
+      setReuploadFileList([file])
+      
+      // 根据文件扩展名自动设置脚本类型
+      const typeMap = {
+        '.sh': 'bash',
+        '.ps1': 'powershell', 
+        '.bat': 'cmd',
+        '.cmd': 'cmd',
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript'
+      }
+      
+      const scriptType = typeMap[fileExtension] || 'bash'
+      reuploadForm.setFieldsValue({ type: scriptType })
+      
+      return false // 阻止自动上传
+    },
+    onRemove: () => {
+      setReuploadFileList([])
+      reuploadForm.resetFields(['type'])
+    },
   }
 
   const handleDeleteScript = (script) => {
@@ -115,21 +401,13 @@ Write-Host "数据备份完成"`,
       content: `确定要删除脚本 ${script.name} 吗？`,
       okText: '确定',
       cancelText: '取消',
-      onOk() {
-        setScripts(scripts.filter(s => s.key !== script.key))
-        message.success('脚本已删除')
-      },
-    })
-  }
-
-  const handleRunScript = (script) => {
-    Modal.confirm({
-      title: '执行脚本',
-      content: `确定要执行脚本 ${script.name} 吗？`,
-      okText: '确定',
-      cancelText: '取消',
-      onOk() {
-        message.success('脚本执行任务已创建')
+      async onOk() {
+        try {
+          await scriptService.deleteScript(script.scriptId)
+          message.success('脚本已删除')
+        } catch (error) {
+          message.error('删除失败: ' + (error.response?.data?.message || error.message))
+        }
       },
     })
   }
@@ -140,6 +418,8 @@ Write-Host "数据备份完成"`,
       powershell: 'blue',
       cmd: 'orange',
       python: 'purple',
+      javascript: 'yellow',
+      typescript: 'cyan',
     }
     return colors[type] || 'default'
   }
@@ -150,6 +430,8 @@ Write-Host "数据备份完成"`,
       powershell: '💻',
       cmd: '⚡',
       python: '🐍',
+      javascript: '🟨',
+      typescript: '🔷',
     }
     return icons[type] || '📄'
   }
@@ -163,8 +445,16 @@ Write-Host "数据备份完成"`,
           <div className="flex items-center space-x-2 mb-1">
             <span className="text-lg">{getTypeIcon(record.type)}</span>
             <Text strong>{record.name}</Text>
+            {record.isUploaded && (
+              <Tag color="blue" size="small">上传</Tag>
+            )}
           </div>
           <Text code className="text-sm">{record.filename}</Text>
+          {record.encoding && !record.isUploaded && (
+            <div>
+              <Text type="secondary" className="text-xs">编码: {record.encoding}</Text>
+            </div>
+          )}
         </div>
       ),
     },
@@ -184,20 +474,20 @@ Write-Host "数据备份完成"`,
       key: 'description',
       render: (text) => (
         <Text className="text-sm" style={{ maxWidth: 200 }}>
-          {text}
+          {text || '-'}
         </Text>
       ),
     },
     {
       title: '大小',
-      dataIndex: 'size',
-      key: 'size',
+      dataIndex: 'sizeDisplay',
+      key: 'sizeDisplay',
       render: (text) => <Text className="font-mono text-sm">{text}</Text>,
     },
     {
       title: '使用次数',
-      dataIndex: 'usage',
-      key: 'usage',
+      dataIndex: 'usageCount',
+      key: 'usageCount',
       render: (count) => (
         <Tag color="blue" className="font-mono">
           {count}
@@ -205,61 +495,75 @@ Write-Host "数据备份完成"`,
       ),
     },
     {
-      title: '作者',
-      dataIndex: 'author',
-      key: 'author',
+      title: '创建者',
+      dataIndex: 'createdBy',
+      key: 'createdBy',
       render: (text) => <Text>{text}</Text>,
     },
     {
       title: '最后修改',
-      dataIndex: 'lastModified',
-      key: 'lastModified',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
       render: (text) => (
         <Text type="secondary" className="text-sm">
-          {text.split(' ')[0]}
+          {text ? text.split('T')[0] : '-'}
         </Text>
       ),
     },
     {
       title: '操作',
       key: 'actions',
+      width: 240,
       render: (_, record) => (
-        <Space>
-          <Tooltip title="查看代码">
+        <Space wrap>
+          <Button 
+            type="link" 
+            icon={<EyeOutlined />} 
+            size="small"
+            onClick={() => handleViewScript(record)}
+          >
+            查看
+          </Button>
+          
+          {record.isUploaded ? (
+            <>
+              <Button 
+                type="link" 
+                icon={<DownloadOutlined />} 
+                size="small"
+                onClick={() => handleDownloadScript(record)}
+              >
+                下载
+              </Button>
+              <Button 
+                type="link" 
+                icon={<UploadOutlined />} 
+                size="small"
+                onClick={() => handleEditScript(record)}
+              >
+                重传
+              </Button>
+            </>
+          ) : (
             <Button 
-              type="text" 
-              icon={<EyeOutlined />} 
-              size="small"
-              onClick={() => handleViewScript(record)}
-              className="text-blue-500 hover:bg-blue-50"
-            />
-          </Tooltip>
-          <Tooltip title="编辑">
-            <Button 
-              type="text" 
+              type="link" 
               icon={<EditOutlined />} 
               size="small"
-              className="text-green-500 hover:bg-green-50"
-            />
-          </Tooltip>
-          <Tooltip title="执行">
-            <Button 
-              type="text" 
-              icon={<PlayCircleOutlined />} 
-              size="small"
-              onClick={() => handleRunScript(record)}
-              className="text-orange-500 hover:bg-orange-50"
-            />
-          </Tooltip>
-          <Tooltip title="删除">
-            <Button 
-              type="text" 
-              icon={<DeleteOutlined />} 
-              size="small"
-              danger
-              onClick={() => handleDeleteScript(record)}
-            />
-          </Tooltip>
+              onClick={() => handleEditScript(record)}
+            >
+              编辑
+            </Button>
+          )}
+          
+          <Button 
+            type="link" 
+            icon={<DeleteOutlined />} 
+            size="small"
+            danger
+            onClick={() => handleDeleteScript(record)}
+          >
+            删除
+          </Button>
         </Space>
       ),
     },
@@ -290,7 +594,7 @@ Write-Host "数据备份完成"`,
           <Button
             icon={<ReloadOutlined />}
             loading={loading}
-            onClick={() => setLoading(true)}
+            onClick={handleRefresh}
           >
             刷新
           </Button>
@@ -306,31 +610,51 @@ Write-Host "数据备份完成"`,
               allowClear
               style={{ width: 250 }}
               prefix={<SearchOutlined className="text-gray-400" />}
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              onSearch={handleSearch}
             />
             <Select
-              defaultValue="all"
+              value={selectedType}
               style={{ width: 120 }}
+              onChange={handleTypeChange}
             >
               <Option value="all">全部类型</Option>
               <Option value="bash">Bash</Option>
               <Option value="powershell">PowerShell</Option>
               <Option value="cmd">CMD</Option>
               <Option value="python">Python</Option>
+              <Option value="javascript">JavaScript</Option>
+              <Option value="typescript">TypeScript</Option>
             </Select>
+            {(searchKeyword || selectedType !== 'all') && (
+              <Button 
+                onClick={handleResetFilters}
+                size="small"
+              >
+                重置筛选
+              </Button>
+            )}
           </Space>
           
           <div className="flex items-center space-x-4 text-sm">
             <Space>
+              <span>📊</span>
+              <Text>
+                显示: {filteredScripts.length} / {scriptStats.total}
+              </Text>
+            </Space>
+            <Space>
               <span>🐧</span>
-              <Text>Bash: {scripts.filter(s => s.type === 'bash').length}</Text>
+              <Text>Bash: {scriptStats.bash}</Text>
             </Space>
             <Space>
               <span>💻</span>
-              <Text>PowerShell: {scripts.filter(s => s.type === 'powershell').length}</Text>
+              <Text>PowerShell: {scriptStats.powershell}</Text>
             </Space>
             <Space>
               <span>🐍</span>
-              <Text>Python: {scripts.filter(s => s.type === 'python').length}</Text>
+              <Text>Python: {scriptStats.python}</Text>
             </Space>
           </div>
         </div>
@@ -340,10 +664,11 @@ Write-Host "数据备份完成"`,
       <Card className="shadow-lg">
         <Table
           columns={columns}
-          dataSource={scripts}
+          dataSource={filteredScripts}
+          rowKey="scriptId"
           loading={loading}
           pagination={{
-            total: scripts.length,
+            total: filteredScripts.length,
             pageSize: 10,
             showSizeChanger: true,
             showQuickJumper: true,
@@ -359,59 +684,245 @@ Write-Host "数据备份完成"`,
       <Modal
         title="创建新脚本"
         open={createModalVisible}
-        onCancel={() => setCreateModalVisible(false)}
+        onCancel={() => {
+          setCreateModalVisible(false)
+          form.resetFields()
+          uploadForm.resetFields()
+          setFileList([])
+          setActiveTab('manual')
+        }}
         footer={[
-          <Button key="cancel" onClick={() => setCreateModalVisible(false)}>
+          <Button key="cancel" onClick={() => {
+            setCreateModalVisible(false)
+            form.resetFields()
+            uploadForm.resetFields()
+            setFileList([])
+            setActiveTab('manual')
+          }}>
             取消
           </Button>,
-          <Button key="submit" type="primary" onClick={() => form.submit()}>
-            创建脚本
+          <Button key="submit" type="primary" onClick={() => {
+            if (activeTab === 'manual') {
+              form.submit()
+            } else {
+              uploadForm.submit()
+            }
+          }}>
+            {activeTab === 'manual' ? '创建脚本' : '上传脚本'}
+          </Button>
+        ]}
+        width={800}
+      >
+        <Tabs activeKey={activeTab} onChange={setActiveTab} className="mt-4">
+          <TabPane tab={<span><CodeOutlined />手动录入</span>} key="manual">
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={handleCreateScript}
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  name="name"
+                  label="脚本名称"
+                  rules={[{ required: true, message: '请输入脚本名称' }]}
+                >
+                  <Input placeholder="输入脚本名称" />
+                </Form.Item>
+                
+                <Form.Item
+                  name="filename"
+                  label="文件名"
+                  rules={[{ required: true, message: '请输入文件名' }]}
+                >
+                  <Input placeholder="例如: script.sh" />
+                </Form.Item>
+                
+                <Form.Item
+                  name="type"
+                  label="脚本类型"
+                  rules={[{ required: true, message: '请选择脚本类型' }]}
+                >
+                  <Select placeholder="选择脚本类型">
+                    <Option value="bash">Bash</Option>
+                    <Option value="powershell">PowerShell</Option>
+                    <Option value="cmd">CMD</Option>
+                    <Option value="python">Python</Option>
+                    <Option value="javascript">JavaScript</Option>
+                    <Option value="typescript">TypeScript</Option>
+                  </Select>
+                </Form.Item>
+                
+                <Form.Item
+                  name="encoding"
+                  label="编码格式"
+                  initialValue="UTF-8"
+                >
+                  <Select placeholder="选择编码格式">
+                    <Option value="UTF-8">UTF-8</Option>
+                    <Option value="GBK">GBK</Option>
+                    <Option value="GB2312">GB2312</Option>
+                    <Option value="ASCII">ASCII</Option>
+                    <Option value="ISO-8859-1">ISO-8859-1</Option>
+                  </Select>
+                </Form.Item>
+              </div>
+              
+              <Form.Item
+                name="description"
+                label="脚本描述"
+                rules={[{ required: true, message: '请输入脚本描述' }]}
+              >
+                <Input placeholder="输入脚本描述" />
+              </Form.Item>
+              
+              <Form.Item
+                name="content"
+                label="脚本内容"
+                rules={[{ required: true, message: '请输入脚本内容' }]}
+              >
+                <TextArea 
+                  rows={10} 
+                  placeholder="输入脚本代码..."
+                  className="font-mono"
+                />
+              </Form.Item>
+            </Form>
+          </TabPane>
+          
+          <TabPane tab={<span><UploadOutlined />文件上传</span>} key="upload">
+            <Form
+              form={uploadForm}
+              layout="vertical"
+              onFinish={handleUploadScript}
+            >
+              <Form.Item
+                name="file"
+                label="选择脚本文件"
+                rules={[{ required: true, message: '请选择脚本文件' }]}
+              >
+                <Dragger {...uploadProps}>
+                  <p className="ant-upload-drag-icon">
+                    <InboxOutlined />
+                  </p>
+                  <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+                  <p className="ant-upload-hint">
+                    支持 .sh, .ps1, .bat, .cmd, .py, .js, .ts 格式，文件大小不超过1MB
+                  </p>
+                </Dragger>
+              </Form.Item>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  name="name"
+                  label="脚本名称"
+                  rules={[{ required: true, message: '请输入脚本名称' }]}
+                >
+                  <Input placeholder="输入脚本名称" />
+                </Form.Item>
+                
+                <Form.Item
+                  name="type"
+                  label="脚本类型"
+                  rules={[{ required: true, message: '请选择脚本类型' }]}
+                >
+                  <Select placeholder="选择脚本类型">
+                    <Option value="bash">Bash</Option>
+                    <Option value="powershell">PowerShell</Option>
+                    <Option value="cmd">CMD</Option>
+                    <Option value="python">Python</Option>
+                    <Option value="javascript">JavaScript</Option>
+                    <Option value="typescript">TypeScript</Option>
+                  </Select>
+                </Form.Item>
+                
+                <Form.Item
+                  name="filename"
+                  label="文件名"
+                  rules={[{ required: true, message: '文件名不能为空' }]}
+                >
+                  <Input placeholder="自动填充" disabled />
+                </Form.Item>
+                
+                <Form.Item
+                  name="description"
+                  label="脚本描述"
+                  rules={[{ required: true, message: '请输入脚本描述' }]}
+                >
+                  <Input placeholder="输入脚本描述" />
+                </Form.Item>
+              </div>
+            </Form>
+          </TabPane>
+        </Tabs>
+      </Modal>
+
+      {/* 编辑脚本模态框 */}
+      <Modal
+        title="编辑脚本"
+        open={editModalVisible}
+        onCancel={() => {
+          setEditModalVisible(false)
+          editForm.resetFields()
+          setSelectedScript(null)
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setEditModalVisible(false)
+            editForm.resetFields()
+            setSelectedScript(null)
+          }}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={() => editForm.submit()}>
+            保存修改
           </Button>
         ]}
         width={800}
       >
         <Form
-          form={form}
+          form={editForm}
           layout="vertical"
-          onFinish={handleCreateScript}
+          onFinish={handleUpdateScript}
           className="mt-4"
         >
-          <Form.Item
-            name="name"
-            label="脚本名称"
-            rules={[{ required: true, message: '请输入脚本名称' }]}
-          >
-            <Input placeholder="输入脚本名称" />
-          </Form.Item>
-          
-          <Form.Item
-            name="filename"
-            label="文件名"
-            rules={[{ required: true, message: '请输入文件名' }]}
-          >
-            <Input placeholder="例如: script.sh" />
-          </Form.Item>
-          
-          <Form.Item
-            name="type"
-            label="脚本类型"
-            rules={[{ required: true, message: '请选择脚本类型' }]}
-          >
-            <Select placeholder="选择脚本类型">
-              <Option value="bash">Bash</Option>
-              <Option value="powershell">PowerShell</Option>
-              <Option value="cmd">CMD</Option>
-              <Option value="python">Python</Option>
-            </Select>
-          </Form.Item>
-          
-          <Form.Item
-            name="description"
-            label="脚本描述"
-            rules={[{ required: true, message: '请输入脚本描述' }]}
-          >
-            <Input placeholder="输入脚本描述" />
-          </Form.Item>
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item
+              name="name"
+              label="脚本名称"
+              rules={[{ required: true, message: '请输入脚本名称' }]}
+            >
+              <Input placeholder="输入脚本名称" />
+            </Form.Item>
+            
+            <Form.Item
+              name="filename"
+              label="文件名"
+              rules={[{ required: true, message: '请输入文件名' }]}
+            >
+              <Input placeholder="例如: script.sh" />
+            </Form.Item>
+            
+            <Form.Item
+              name="type"
+              label="脚本类型"
+              rules={[{ required: true, message: '请选择脚本类型' }]}
+            >
+              <Select placeholder="选择脚本类型">
+                <Option value="bash">Bash</Option>
+                <Option value="powershell">PowerShell</Option>
+                <Option value="cmd">CMD</Option>
+                <Option value="python">Python</Option>
+              </Select>
+            </Form.Item>
+            
+            <Form.Item
+              name="description"
+              label="脚本描述"
+              rules={[{ required: true, message: '请输入脚本描述' }]}
+            >
+              <Input placeholder="输入脚本描述" />
+            </Form.Item>
+          </div>
           
           <Form.Item
             name="content"
@@ -423,6 +934,88 @@ Write-Host "数据备份完成"`,
               placeholder="输入脚本代码..."
               className="font-mono"
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 重新上传脚本模态框 */}
+      <Modal
+        title="重新上传脚本"
+        open={reuploadModalVisible}
+        onCancel={() => {
+          setReuploadModalVisible(false)
+          reuploadForm.resetFields()
+          setReuploadFileList([])
+          setSelectedScript(null)
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setReuploadModalVisible(false)
+            reuploadForm.resetFields()
+            setReuploadFileList([])
+            setSelectedScript(null)
+          }}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={() => reuploadForm.submit()}>
+            重新上传
+          </Button>
+        ]}
+        width={800}
+      >
+        <Form
+          form={reuploadForm}
+          layout="vertical"
+          onFinish={handleReuploadScript}
+          className="mt-4"
+        >
+          <Form.Item
+            name="file"
+            label="选择新的脚本文件"
+            rules={[{ required: true, message: '请选择脚本文件' }]}
+          >
+            <Dragger {...reuploadProps}>
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">点击或拖拽文件到此区域重新上传</p>
+              <p className="ant-upload-hint">
+                支持 .sh, .ps1, .bat, .cmd, .py, .js, .ts 格式，文件大小不超过1MB
+              </p>
+            </Dragger>
+          </Form.Item>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item
+              name="name"
+              label="脚本名称"
+              rules={[{ required: true, message: '请输入脚本名称' }]}
+            >
+              <Input placeholder="输入脚本名称" />
+            </Form.Item>
+            
+            <Form.Item
+              name="type"
+              label="脚本类型"
+              rules={[{ required: true, message: '请选择脚本类型' }]}
+            >
+              <Select placeholder="选择脚本类型">
+                <Option value="bash">Bash</Option>
+                <Option value="powershell">PowerShell</Option>
+                <Option value="cmd">CMD</Option>
+                <Option value="python">Python</Option>
+                <Option value="javascript">JavaScript</Option>
+                <Option value="typescript">TypeScript</Option>
+              </Select>
+            </Form.Item>
+          </div>
+          
+          <Form.Item
+            name="description"
+            label="脚本描述"
+            rules={[{ required: true, message: '请输入脚本描述' }]}
+          >
+            <Input placeholder="输入脚本描述" />
           </Form.Item>
         </Form>
       </Modal>

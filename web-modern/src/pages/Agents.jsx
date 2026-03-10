@@ -5,7 +5,6 @@ import {
   SearchOutlined,
   ReloadOutlined,
   DeleteOutlined,
-  SettingOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   ClockCircleOutlined,
@@ -57,7 +56,7 @@ const Agents = () => {
           os: agent.osType,
           status: agent.status === 'ONLINE' ? 'online' : 'offline',
           lastHeartbeat: agent.lastHeartbeat ? new Date(agent.lastHeartbeat).toLocaleString('zh-CN') : 'N/A',
-          tasks: 0,
+          tasks: agent.taskCount || 0, // 直接使用Agent实体中的任务计数
           cpu: cpuPercent,
           memory: memoryPercent,
           uptime: calculateUptime(agent.createdAt),
@@ -119,8 +118,8 @@ const Agents = () => {
   }
 
   const handleDeleteAgent = async (agent) => {
-    // 检查是否在线
-    if (agent.status === 'ONLINE') {
+    // 检查是否在线 - 使用大写状态进行比较
+    if (agent.status === 'online' || agent.status === 'ONLINE') {
       message.warning('不能删除在线的客户端，请先停止客户端')
       return
     }
@@ -133,9 +132,9 @@ const Agents = () => {
       okButtonProps: { danger: true },
       async onOk() {
         try {
-          await api.delete(`/web/agents/${agent.agentId}`)
+          await api.delete(`/web/agents/${agent.id}`)
           message.success('客户端已删除')
-          fetchAgents() // 重新加载列表
+          loadAgents() // 重新加载列表
         } catch (error) {
           console.error('删除客户端失败:', error)
           message.error('删除失败: ' + (error.response?.data?.message || error.message))
@@ -360,21 +359,13 @@ ps aux --sort=-%mem | head -11
               onClick={() => handleCollectStatus(record)}
             />
           </Tooltip>
-          <Tooltip title="配置">
-            <Button 
-              type="text" 
-              icon={<SettingOutlined />} 
-              size="small"
-              className="text-blue-500 hover:bg-blue-50"
-            />
-          </Tooltip>
-          <Tooltip title={record.status === 'ONLINE' ? '在线客户端不能删除' : '删除'}>
+          <Tooltip title={record.status === 'online' ? '在线客户端不能删除' : '删除'}>
             <Button 
               type="text" 
               icon={<DeleteOutlined />} 
               size="small"
               danger
-              disabled={record.status === 'ONLINE'}
+              disabled={record.status === 'online'}
               onClick={() => handleDeleteAgent(record)}
             />
           </Tooltip>

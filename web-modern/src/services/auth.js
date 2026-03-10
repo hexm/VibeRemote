@@ -48,10 +48,18 @@ api.interceptors.response.use(
         // 重新加载页面，让App.jsx重新检查认证状态
         window.location.reload()
       }
-      
-      return Promise.reject(error.response?.data || error)
     }
-    return Promise.reject(error.response?.data || error)
+    
+    // 统一错误格式，确保错误对象包含有用的信息
+    const errorData = error.response?.data || {}
+    const errorObj = {
+      status: error.response?.status,
+      message: errorData.message || errorData.error || error.message || '请求失败',
+      error: errorData.error || error.message,
+      ...errorData
+    }
+    
+    return Promise.reject(errorObj)
   }
 )
 

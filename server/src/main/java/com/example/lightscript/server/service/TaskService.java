@@ -42,6 +42,9 @@ public class TaskService {
     @Autowired
     private TaskExecutionService taskExecutionService;
     
+    @Autowired
+    private AgentService agentService;
+    
     @Value("${lightscript.log.storage.path:logs/tasks}")
     private String logStoragePath;
     
@@ -185,6 +188,18 @@ public class TaskService {
         
         if (!newStatus.equals(oldStatus)) {
             task.setTaskStatus(newStatus);
+            
+            // 更新任务时间字段
+            if ("RUNNING".equals(newStatus) && task.getStartedAt() == null) {
+                // 任务开始运行时设置开始时间（如果还没有设置）
+                task.setStartedAt(LocalDateTime.now());
+            } else if (("SUCCESS".equals(newStatus) || "FAILED".equals(newStatus) || 
+                       "PARTIAL_SUCCESS".equals(newStatus) || "STOPPED".equals(newStatus) || 
+                       "CANCELLED".equals(newStatus)) && task.getFinishedAt() == null) {
+                // 任务完成时设置结束时间
+                task.setFinishedAt(LocalDateTime.now());
+            }
+            
             taskRepository.save(task);
             log.info("Task {} status updated: {} -> {}", taskId, oldStatus, newStatus);
         }
@@ -298,9 +313,9 @@ public class TaskService {
     }
     
     /**
-     * 获取任务（包含聚合状态）
+     * 获取任务详情
      */
-    public TaskModels.TaskDTO getTaskWithAggregatedStatus(String taskId) {
+    public TaskModels.TaskDTO getTaskWithDetails(String taskId) {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
         
@@ -323,9 +338,8 @@ public class TaskService {
         summary.setTaskName(task.getTaskName());
         summary.setTargetAgentCount(executions.size());
         
-        // 计算聚合状态和统计
+        // 计算统计信息
         Map<String, Integer> stats = computeExecutionStats(executions);
-        summary.setAggregatedStatus(computeAggregatedStatus(executions));
         summary.setCompletedExecutions(stats.get("completed"));
         summary.setExecutionProgress(stats.get("completed") + "/" + executions.size());
         summary.setSuccessCount(stats.get("success"));
@@ -337,7 +351,7 @@ public class TaskService {
     }
     
     /**
-     * 获取所有任务（包含聚合状态）
+     * 获取所有任务
      */
     public Page<TaskModels.TaskDTO> getAllTasksWithStatus(Pageable pageable) {
         Page<Task> taskPage = taskRepository.findAll(pageable);
@@ -353,7 +367,7 @@ public class TaskService {
     }
     
     /**
-     * 按状态获取任务（包含聚合状态）
+     * 按状态获取任务
      */
     public Page<TaskModels.TaskDTO> getTasksByStatus(String status, Pageable pageable) {
         Page<Task> taskPage = taskRepository.findByTaskStatus(status, pageable);
@@ -401,23 +415,41 @@ public class TaskService {
             throw new IllegalStateException("没有需要重启的执行实例");
         }
         
-        // 为每个需要重启的执行创建新的执行实例
-        int newExecutionCount = 0;
+        // 重置需要重启的执行实例状态，并递增执行次数
+        int restartedCount = 0;
         for (TaskExecution execution : toRestart) {
-            Integer nextNumber = taskExecutionService.getNextExecutionNumber(taskId, execution.getAgentId());
-            taskExecutionService.createExecution(taskId, execution.getAgentId(), nextNumber);
-            newExecutionCount++;
+            // 递增执行次数
+            execution.setExecutionNumber(execution.getExecutionNumber() + 1);
+            
+            // 重置执行状态
+            execution.setStatus("PENDING");
+            execution.setStartedAt(null);
+            execution.setFinishedAt(null);
+            execution.setSummary(null);
+            execution.setExitCode(null);
+            execution.setPulledAt(null);
+            execution.setLogFilePath(null);
+            
+            taskExecutionRepository.save(execution);
+            restartedCount++;
         }
         
-        log.info("Task {} restarted, mode: {}, new executions: {}", taskId, mode, newExecutionCount);
+        // 更新任务级别的执行次数和开始时间
+        task.setExecutionCount(task.getExecutionCount() == null ? 2 : task.getExecutionCount() + 1);
+        task.setStartedAt(LocalDateTime.now());
+        task.setFinishedAt(null); // 清空结束时间，因为任务重新开始
+        taskRepository.save(task);
+        
+        log.info("Task {} restarted, mode: {}, restarted executions: {}, task execution count: {}", 
+            taskId, mode, restartedCount, task.getExecutionCount());
         
         // 更新任务状态
         updateTaskStatus(taskId);
         
         TaskModels.RestartTaskResponse response = new TaskModels.RestartTaskResponse();
         response.setTaskId(taskId);
-        response.setNewExecutionCount(newExecutionCount);
-        response.setMessage("任务已重启，创建了 " + newExecutionCount + " 个新的执行实例");
+        response.setNewExecutionCount(restartedCount);
+        response.setMessage("任务已重启，重置了 " + restartedCount + " 个执行实例的状态");
         
         return response;
     }
@@ -432,45 +464,6 @@ public class TaskService {
         
         taskExecutionService.cancelTaskExecutions(taskId);
         log.info("Task {} cancelled (all executions)", taskId);
-    }
-    
-    /**
-     * 计算聚合状态
-     */
-    private String computeAggregatedStatus(List<TaskExecution> executions) {
-        if (executions.isEmpty()) {
-            return "PENDING";
-        }
-        
-        long pendingCount = executions.stream()
-                .filter(e -> "PENDING".equals(e.getStatus()))
-                .count();
-        
-        long runningCount = executions.stream()
-                .filter(e -> "RUNNING".equals(e.getStatus()) || "PULLED".equals(e.getStatus()))
-                .count();
-        
-        long successCount = executions.stream()
-                .filter(e -> "SUCCESS".equals(e.getStatus()))
-                .count();
-        
-        long failedCount = executions.stream()
-                .filter(e -> "FAILED".equals(e.getStatus()) || "TIMEOUT".equals(e.getStatus()))
-                .count();
-        
-        // 如果有任何执行还在运行或等待，任务状态为进行中
-        if (runningCount > 0 || pendingCount > 0) {
-            return "IN_PROGRESS";
-        }
-        
-        // 所有执行都已完成
-        if (successCount == executions.size()) {
-            return "ALL_SUCCESS";
-        } else if (failedCount == executions.size()) {
-            return "ALL_FAILED";
-        } else {
-            return "PARTIAL_SUCCESS";
-        }
     }
     
     /**
@@ -536,12 +529,16 @@ public class TaskService {
         dto.setCreatedBy(task.getCreatedBy());
         dto.setCreatedAt(task.getCreatedAt());
         
+        // 设置任务执行跟踪字段
+        dto.setExecutionCount(task.getExecutionCount());
+        dto.setStartedAt(task.getStartedAt());
+        dto.setFinishedAt(task.getFinishedAt());
+        
         // 设置任务状态
         dto.setTaskStatus(task.getTaskStatus());
         
-        // 计算聚合状态和统计
+        // 计算统计信息
         Map<String, Integer> stats = computeExecutionStats(executions);
-        dto.setAggregatedStatus(computeAggregatedStatus(executions));
         dto.setTargetAgentCount(executions.size());
         dto.setCompletedExecutions(stats.get("completed"));
         dto.setExecutionProgress(stats.get("completed") + "/" + executions.size());
@@ -650,6 +647,9 @@ public class TaskService {
         taskExecutionRepository.save(execution);
         log.info("Task execution {} acknowledged and started, log file: {}", 
             execution.getId(), logFilePath);
+        
+        // 增加Agent任务计数
+        agentService.incrementTaskCount(execution.getAgentId());
         
         // 更新任务状态
         updateTaskStatus(execution.getTaskId());

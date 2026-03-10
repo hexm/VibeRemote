@@ -47,10 +47,16 @@ public class Task {
     @Column(name = "target_agent_ids", length = 2000)
     private String targetAgentIds; // 目标代理ID列表，逗号分隔
     
-    // Transient fields for aggregated status (computed from TaskExecution records)
-    @Transient
-    private String aggregatedStatus; // ALL_SUCCESS, PARTIAL_SUCCESS, ALL_FAILED, IN_PROGRESS, PENDING
+    @Column(name = "execution_count")
+    private Integer executionCount = 1; // 任务执行次数，重启时递增
     
+    @Column(name = "started_at")
+    private LocalDateTime startedAt; // 任务开始时间（首次执行或重启时更新）
+    
+    @Column(name = "finished_at")
+    private LocalDateTime finishedAt; // 任务结束时间
+    
+    // Transient fields for display purposes (computed from TaskExecution records)
     @Transient
     private Integer targetAgentCount; // 目标代理数量
     

@@ -148,7 +148,7 @@ function App() {
   return (
     <Layout className="min-h-screen">
       <Sidebar collapsed={collapsed} />
-      <Layout style={{ marginLeft: collapsed ? 80 : 256, transition: 'margin-left 0.3s' }}>
+      <Layout style={{ marginLeft: collapsed ? 64 : 200, transition: 'margin-left 0.3s' }}>
         <Header 
           collapsed={collapsed}
           onToggle={() => setCollapsed(!collapsed)}

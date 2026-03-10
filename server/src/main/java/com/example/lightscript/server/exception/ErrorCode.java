@@ -9,9 +9,12 @@ public enum ErrorCode {
     // 通用错误 (1000-1999)
     SUCCESS(0, "操作成功"),
     SYSTEM_ERROR(1000, "系统内部错误"),
+    INTERNAL_ERROR(1000, "系统内部错误"), // 别名
     INVALID_PARAMETER(1001, "参数错误: %s"),
     RESOURCE_NOT_FOUND(1002, "资源不存在: %s"),
-    OPERATION_FAILED(1003, "操作失败: %s"),
+    RESOURCE_ALREADY_EXISTS(1003, "资源已存在: %s"),
+    OPERATION_NOT_ALLOWED(1004, "操作不被允许: %s"),
+    OPERATION_FAILED(1005, "操作失败: %s"),
     
     // 认证授权错误 (2000-2999)
     UNAUTHORIZED(2000, "未授权访问"),

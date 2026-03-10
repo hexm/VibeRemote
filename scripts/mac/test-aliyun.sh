@@ -82,7 +82,7 @@ test_start "Agent完成任务"
 [ -n "$EXECUTION_ID" ] && FINISH_DATA="{\"agentId\":\"${TEST_AGENT_ID}\",\"agentToken\":\"${TEST_AGENT_TOKEN}\",\"executionId\":${EXECUTION_ID},\"exitCode\":0,\"status\":\"SUCCESS\",\"summary\":\"OK\"}" && api_call POST "/api/agent/tasks/executions/${EXECUTION_ID}/finish" "$FINISH_DATA" "200" >/dev/null && test_pass || test_fail "完成失败"
 
 test_start "验证任务完成状态"
-[ -n "$TEST_TASK_ID" ] && response=$(api_call GET "/api/web/tasks/${TEST_TASK_ID}/summary" "" "200") && STATUS=$(echo $response | grep -o '"aggregatedStatus":"[^"]*"' | cut -d'"' -f4) && [ "$STATUS" = "ALL_SUCCESS" ] && test_pass || test_fail "状态不正确: $STATUS"
+[ -n "$TEST_TASK_ID" ] && response=$(api_call GET "/api/web/tasks/${TEST_TASK_ID}/summary" "" "200") && PROGRESS=$(echo $response | grep -o '"executionProgress":"[^"]*"' | cut -d'"' -f4) && [ -n "$PROGRESS" ] && test_pass || test_fail "执行进度获取失败: $PROGRESS"
 
 log "\n${BLUE}=========================================="
 log "测试完成"

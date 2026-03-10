@@ -387,20 +387,18 @@ else
     echo ""
 fi
 
-test_start "验证聚合状态计算"
+test_start "验证执行进度计算"
 if [ -n "$MULTI_TASK_ID" ]; then
     response=$(api_test GET "/api/web/tasks/${MULTI_TASK_ID}/summary" "" "200")
     if [ $? -eq 0 ]; then
-        AGGREGATED_STATUS=$(echo $response | grep -o '"aggregatedStatus":"[^"]*"' | cut -d'"' -f4)
         EXECUTION_PROGRESS=$(echo $response | grep -o '"executionProgress":"[^"]*"' | cut -d'"' -f4)
         
-        log "聚合状态: $AGGREGATED_STATUS"
         log "执行进度: $EXECUTION_PROGRESS"
         
-        if [ -n "$AGGREGATED_STATUS" ] && [ -n "$EXECUTION_PROGRESS" ]; then
+        if [ -n "$EXECUTION_PROGRESS" ]; then
             test_pass
         else
-            test_fail "聚合状态或执行进度为空"
+            test_fail "执行进度为空"
         fi
     else
         test_fail "获取任务摘要失败"

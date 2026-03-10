@@ -21,14 +21,19 @@ const menuItems = [
     label: '仪表盘',
   },
   {
-    key: '/agents',
+    key: 'agents-menu',
     icon: <DesktopOutlined />,
     label: '客户端管理',
-  },
-  {
-    key: '/agent-groups',
-    icon: <TeamOutlined />,
-    label: '客户端分组',
+    children: [
+      {
+        key: '/agents',
+        label: '客户端列表',
+      },
+      {
+        key: '/agent-groups',
+        label: '客户端分组',
+      },
+    ],
   },
   {
     key: '/tasks',
@@ -60,6 +65,14 @@ const Sidebar = ({ collapsed }) => {
     navigate(key)
   }
 
+  // 根据当前路径确定应该打开的子菜单
+  const getOpenKeys = () => {
+    if (location.pathname === '/agents' || location.pathname === '/agent-groups') {
+      return ['agents-menu']
+    }
+    return []
+  }
+
   return (
     <Sider
       trigger={null}
@@ -67,8 +80,8 @@ const Sidebar = ({ collapsed }) => {
       collapsed={collapsed}
       className="fixed left-0 top-0 h-screen shadow-2xl"
       theme="dark"
-      width={256}
-      collapsedWidth={80}
+      width={200}
+      collapsedWidth={64}
       style={{ zIndex: 1000 }}
     >
       <div className="flex items-center justify-center h-16 bg-gray-900 border-b border-gray-700">
@@ -84,6 +97,7 @@ const Sidebar = ({ collapsed }) => {
         theme="dark"
         mode="inline"
         selectedKeys={[location.pathname]}
+        defaultOpenKeys={getOpenKeys()}
         items={menuItems}
         onClick={handleMenuClick}
         className="border-r-0 bg-gray-800"

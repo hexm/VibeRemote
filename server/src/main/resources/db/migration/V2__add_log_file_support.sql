@@ -5,9 +5,30 @@
 -- 说明: 将日志存储从数据库改为文件系统
 -- ========================================
 
--- 1. 为Task表增加新字段
-ALTER TABLE tasks ADD COLUMN execution_count INT DEFAULT 0 COMMENT '执行次数，每次启动时累加';
-ALTER TABLE tasks ADD COLUMN log_file_path VARCHAR(500) COMMENT '日志文件路径';
+-- 1. 为Task表增加新字段（如果不存在）
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE table_name = 'tasks' 
+     AND column_name = 'execution_count' 
+     AND table_schema = DATABASE()) = 0,
+    'ALTER TABLE tasks ADD COLUMN execution_count INT DEFAULT 0 COMMENT ''执行次数，每次启动时累加''',
+    'SELECT "execution_count column already exists"'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE table_name = 'tasks' 
+     AND column_name = 'log_file_path' 
+     AND table_schema = DATABASE()) = 0,
+    'ALTER TABLE tasks ADD COLUMN log_file_path VARCHAR(500) COMMENT ''日志文件路径''',
+    'SELECT "log_file_path column already exists"'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- 2. 为已运行的任务设置execution_count
 UPDATE tasks 

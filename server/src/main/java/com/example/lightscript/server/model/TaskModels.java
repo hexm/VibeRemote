@@ -28,11 +28,15 @@ public class TaskModels {
         private String createdBy;
         private LocalDateTime createdAt;
         
+        // 任务执行跟踪字段
+        private Integer executionCount; // 执行次数
+        private LocalDateTime startedAt; // 任务开始时间
+        private LocalDateTime finishedAt; // 任务结束时间
+        
         // 任务状态
         private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
         
-        // 聚合字段（从TaskExecution计算得出）
-        private String aggregatedStatus; // ALL_SUCCESS, PARTIAL_SUCCESS, ALL_FAILED, IN_PROGRESS, PENDING
+        // 统计字段（从TaskExecution计算得出）
         private Integer targetAgentCount; // 目标代理数量
         private Integer completedExecutions; // 已完成的执行数
         private String executionProgress; // 执行进度，如 "3/5"
@@ -76,7 +80,6 @@ public class TaskModels {
     public static class TaskSummaryDTO {
         private String taskId;
         private String taskName;
-        private String aggregatedStatus;
         private Integer targetAgentCount;
         private Integer completedExecutions;
         private String executionProgress;

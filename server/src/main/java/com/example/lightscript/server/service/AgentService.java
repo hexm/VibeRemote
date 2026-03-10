@@ -269,4 +269,28 @@ public class AgentService {
     // 已删除handleAgentRecovery()方法
     // 原因：agent重连时不应立即重置任务，应由定时任务延迟处理
     // 这样可以避免短暂网络中断导致任务重复执行
+
+
+    /**
+     * 增加Agent的任务计数
+     */
+    @Transactional
+    public void incrementTaskCount(String agentId) {
+        Agent agent = agentRepository.findById(agentId).orElse(null);
+        if (agent != null) {
+            agent.setTaskCount(agent.getTaskCount() == null ? 1 : agent.getTaskCount() + 1);
+            agentRepository.save(agent);
+            log.info("Agent {} task count incremented to {}", agentId, agent.getTaskCount());
+        }
+    }
+
+    /**
+     * 批量增加多个Agent的任务计数
+     */
+    @Transactional
+    public void incrementTaskCount(List<String> agentIds) {
+        for (String agentId : agentIds) {
+            incrementTaskCount(agentId);
+        }
+    }
 }

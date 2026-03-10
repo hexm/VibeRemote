@@ -22,6 +22,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
@@ -166,7 +167,7 @@ public class WebController {
     @GetMapping("/tasks/{taskId}")
     @RequirePermission("task:view")
     public ResponseEntity<TaskModels.TaskDTO> getTask(@PathVariable String taskId) {
-        TaskModels.TaskDTO task = taskService.getTaskWithAggregatedStatus(taskId);
+        TaskModels.TaskDTO task = taskService.getTaskWithDetails(taskId);
         if (task == null) {
             return ResponseEntity.notFound().build();
         }
@@ -198,7 +199,8 @@ public class WebController {
             @RequestParam(required = false) Long groupId,
             @RequestParam String taskName,
             @RequestParam(defaultValue = "true") Boolean autoStart,
-            @RequestBody TaskSpec taskSpec) {
+            @RequestBody TaskSpec taskSpec,
+            Authentication authentication) {
         
         // 如果提供了groupId，从分组获取agentIds
         List<String> targetAgentIds = agentIds;
@@ -214,8 +216,8 @@ public class WebController {
             throw new IllegalArgumentException("至少需要选择一个代理或指定一个分组");
         }
         
-        // 使用固定的创建者，避免Principal相关问题
-        String createdBy = "web-user";
+        // 获取当前登录用户作为创建者
+        String createdBy = authentication.getName();
         taskSpec.setTaskName(taskName);
         
         // 调用新的多代理任务创建方法

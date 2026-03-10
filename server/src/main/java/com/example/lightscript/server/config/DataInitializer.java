@@ -22,7 +22,7 @@ public class DataInitializer implements CommandLineRunner {
                 java.util.List<String> adminPermissions = java.util.Arrays.asList(
                     "user:create", "user:edit", "user:delete", "user:view",
                     "task:create", "task:execute", "task:delete", "task:view",
-                    "script:create", "script:edit", "script:delete", "script:view",
+                    "script:create", "script:edit", "script:delete", "script:view", "script:list",
                     "agent:view", "agent:group",
                     "log:view", "system:settings"
                 );
