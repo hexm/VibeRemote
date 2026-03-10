@@ -8,6 +8,7 @@ import Agents from './pages/Agents'
 import AgentGroups from './pages/AgentGroups'
 import Tasks from './pages/Tasks'
 import Scripts from './pages/Scripts'
+import Files from './pages/Files'
 import Users from './pages/Users'
 import SystemSettings from './pages/SystemSettings'
 import Login from './pages/Login'
@@ -163,6 +164,7 @@ function App() {
             <Route path="/agent-groups" element={<AgentGroups />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/scripts" element={<Scripts />} />
+            <Route path="/files" element={<Files />} />
             <Route path="/users" element={<Users />} />
             <Route path="/system-settings" element={<SystemSettings />} />
           </Routes>

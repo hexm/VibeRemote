@@ -65,6 +65,25 @@ public class TaskExecution {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
+    // 文件传输相关字段
+    @Column(name = "file_id", length = 50)
+    private String fileId; // 传输的文件ID
+    
+    @Column(name = "target_path", length = 500)
+    private String targetPath; // 目标路径
+    
+    @Column(name = "transfer_size")
+    private Long transferSize; // 实际传输大小
+    
+    @Column(name = "checksum_verified")
+    private Boolean checksumVerified; // 校验是否通过
+    
+    @Column(name = "transfer_speed")
+    private Long transferSpeed; // 传输速度（字节/秒）
+    
+    @Column(name = "error_details", columnDefinition = "TEXT")
+    private String errorDetails; // 详细错误信息
+    
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {

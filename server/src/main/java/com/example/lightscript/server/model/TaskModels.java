@@ -36,6 +36,9 @@ public class TaskModels {
         // 任务状态
         private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
         
+        // 任务类型
+        private String taskType; // SCRIPT | FILE_TRANSFER
+        
         // 统计字段（从TaskExecution计算得出）
         private Integer targetAgentCount; // 目标代理数量
         private Integer completedExecutions; // 已完成的执行数
@@ -71,6 +74,16 @@ public class TaskModels {
         
         // 计算字段
         private Long durationMs; // 执行耗时（毫秒）
+        
+        // 文件传输相关字段
+        private String fileId; // 传输的文件ID
+        private String fileName; // 文件名（从File表关联）
+        private String fileSizeDisplay; // 格式化的文件大小
+        private String targetPath; // 目标路径
+        private Long transferSize; // 实际传输大小
+        private Boolean checksumVerified; // 校验是否通过
+        private Long transferSpeed; // 传输速度（字节/秒）
+        private String errorDetails; // 详细错误信息
     }
 
     /**

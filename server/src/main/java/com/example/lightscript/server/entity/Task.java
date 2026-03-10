@@ -44,6 +44,9 @@ public class Task {
     @Column(name = "task_status", length = 20)
     private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
     
+    @Column(name = "task_type", length = 20)
+    private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER
+    
     @Column(name = "target_agent_ids", length = 2000)
     private String targetAgentIds; // 目标代理ID列表，逗号分隔
     

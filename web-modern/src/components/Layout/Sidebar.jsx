@@ -6,6 +6,7 @@ import {
   DesktopOutlined,
   FileTextOutlined,
   CodeOutlined,
+  FileOutlined,
   RocketOutlined,
   UserOutlined,
   TeamOutlined,
@@ -44,6 +45,11 @@ const menuItems = [
     key: '/scripts',
     icon: <CodeOutlined />,
     label: '脚本管理',
+  },
+  {
+    key: '/files',
+    icon: <FileOutlined />,
+    label: '文件管理',
   },
   {
     key: '/users',
