@@ -4,12 +4,12 @@ import {
   DesktopOutlined,
   SearchOutlined,
   ReloadOutlined,
-  PlusOutlined,
   DeleteOutlined,
   SettingOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   ClockCircleOutlined,
+  SyncOutlined,
 } from '@ant-design/icons'
 import api from '../services/auth'
 
@@ -29,7 +29,7 @@ const Agents = () => {
     setLoading(true)
     try {
       const response = await api.get('/web/agents')
-      const agentList = response.content.map(agent => {
+      const agentList = await Promise.all(response.content.map(async agent => {
         // CPU负载转换为百分比（0.0-1.0 -> 0-100）
         const cpuPercent = agent.cpuLoad ? Math.round(agent.cpuLoad * 100) : 0
         
@@ -38,6 +38,15 @@ const Agents = () => {
         if (agent.totalMemMb && agent.freeMemMb) {
           const usedMemMb = agent.totalMemMb - agent.freeMemMb
           memoryPercent = Math.round((usedMemMb / agent.totalMemMb) * 100)
+        }
+        
+        // 获取Agent所属分组
+        let groups = []
+        try {
+          const groupsResp = await api.get(`/web/agents/${agent.agentId}/groups`)
+          groups = groupsResp.groups || []
+        } catch (error) {
+          console.error('获取分组失败', error)
         }
         
         return {
@@ -52,8 +61,9 @@ const Agents = () => {
           cpu: cpuPercent,
           memory: memoryPercent,
           uptime: calculateUptime(agent.createdAt),
+          groups: groups,
         }
-      })
+      }))
       setAgents(agentList)
     } catch (error) {
       console.error('Failed to load agents:', error)
@@ -108,17 +118,96 @@ const Agents = () => {
     message.success('数据已刷新')
   }
 
-  const handleDeleteAgent = (agent) => {
+  const handleDeleteAgent = async (agent) => {
+    // 检查是否在线
+    if (agent.status === 'ONLINE') {
+      message.warning('不能删除在线的客户端，请先停止客户端')
+      return
+    }
+    
     Modal.confirm({
       title: '确认删除',
-      content: `确定要删除客户端 ${agent.hostname} 吗？`,
+      content: `确定要删除客户端 ${agent.hostname} 吗？此操作不可恢复。`,
       okText: '确定',
       cancelText: '取消',
-      onOk() {
-        setAgents(agents.filter(a => a.key !== agent.key))
-        message.success('客户端已删除')
+      okButtonProps: { danger: true },
+      async onOk() {
+        try {
+          await api.delete(`/web/agents/${agent.agentId}`)
+          message.success('客户端已删除')
+          fetchAgents() // 重新加载列表
+        } catch (error) {
+          console.error('删除客户端失败:', error)
+          message.error('删除失败: ' + (error.response?.data?.message || error.message))
+        }
       },
     })
+  }
+
+  // 状态收集功能 - 创建一个任务来收集Agent状态
+  const handleCollectStatus = async (agent) => {
+    try {
+      // 根据操作系统选择不同的状态收集脚本
+      const isWindows = agent.os && agent.os.toLowerCase().includes('windows')
+      
+      const statusScript = isWindows 
+        ? `@echo off
+echo ===== System Information =====
+systeminfo | findstr /C:"OS Name" /C:"OS Version" /C:"System Type"
+echo.
+echo ===== CPU Usage =====
+wmic cpu get loadpercentage
+echo.
+echo ===== Memory Usage =====
+wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /Value
+echo.
+echo ===== Disk Usage =====
+wmic logicaldisk get name,size,freespace
+echo.
+echo ===== Network Interfaces =====
+ipconfig /all
+echo.
+echo ===== Running Processes (Top 10) =====
+tasklist /FO TABLE | findstr /V "Image"
+`
+        : `#!/bin/bash
+echo "===== System Information ====="
+uname -a
+cat /etc/*release 2>/dev/null | head -5
+echo ""
+echo "===== CPU Usage ====="
+top -bn1 | grep "Cpu(s)" | awk '{print "CPU Usage: " $2}'
+echo ""
+echo "===== Memory Usage ====="
+free -h
+echo ""
+echo "===== Disk Usage ====="
+df -h
+echo ""
+echo "===== Network Interfaces ====="
+ip addr show 2>/dev/null || ifconfig
+echo ""
+echo "===== Running Processes (Top 10) ====="
+ps aux --sort=-%mem | head -11
+`
+
+      const taskSpec = {
+        scriptLang: isWindows ? 'cmd' : 'shell',
+        scriptContent: statusScript,
+        timeoutSec: 60
+      }
+      
+      const params = new URLSearchParams()
+      params.append('agentIds', agent.id)
+      params.append('taskName', `状态收集 - ${agent.hostname}`)
+      params.append('autoStart', true)
+      
+      await api.post(`/web/tasks/create?${params.toString()}`, taskSpec)
+      message.success(`已为客户端 ${agent.hostname} 创建状态收集任务`)
+    } catch (error) {
+      console.error('创建状态收集任务失败:', error)
+      message.error('创建状态收集任务失败: ' + (error.response?.data?.message || error.message))
+    }
   }
 
   const columns = [
@@ -241,10 +330,36 @@ const Agents = () => {
       render: (text) => <Text className="text-sm">{text}</Text>,
     },
     {
+      title: '所属分组',
+      key: 'groups',
+      render: (_, record) => (
+        <Space size="small" wrap>
+          {record.groups && record.groups.length > 0 ? (
+            record.groups.map(group => (
+              <Tag color="purple" key={group.id}>
+                {group.name}
+              </Tag>
+            ))
+          ) : (
+            <Text type="secondary" className="text-xs">未分组</Text>
+          )}
+        </Space>
+      ),
+    },
+    {
       title: '操作',
       key: 'actions',
       render: (_, record) => (
         <Space>
+          <Tooltip title="状态收集">
+            <Button 
+              type="text" 
+              icon={<SyncOutlined />} 
+              size="small"
+              className="text-green-500 hover:bg-green-50"
+              onClick={() => handleCollectStatus(record)}
+            />
+          </Tooltip>
           <Tooltip title="配置">
             <Button 
               type="text" 
@@ -253,12 +368,13 @@ const Agents = () => {
               className="text-blue-500 hover:bg-blue-50"
             />
           </Tooltip>
-          <Tooltip title="删除">
+          <Tooltip title={record.status === 'ONLINE' ? '在线客户端不能删除' : '删除'}>
             <Button 
               type="text" 
               icon={<DeleteOutlined />} 
               size="small"
               danger
+              disabled={record.status === 'ONLINE'}
               onClick={() => handleDeleteAgent(record)}
             />
           </Tooltip>
@@ -280,22 +396,13 @@ const Agents = () => {
             管理和监控所有连接的客户端节点
           </Text>
         </div>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            className="shadow-lg"
-          >
-            添加客户端
-          </Button>
-          <Button
-            icon={<ReloadOutlined />}
-            loading={loading}
-            onClick={handleRefresh}
-          >
-            刷新
-          </Button>
-        </Space>
+        <Button
+          icon={<ReloadOutlined />}
+          loading={loading}
+          onClick={handleRefresh}
+        >
+          刷新
+        </Button>
       </div>
 
       {/* 工具栏 */}

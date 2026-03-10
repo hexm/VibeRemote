@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Layout, message } from 'antd'
+import { Layout, App as AntApp } from 'antd'
 import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
 import Dashboard from './pages/Dashboard'
@@ -9,6 +9,7 @@ import AgentGroups from './pages/AgentGroups'
 import Tasks from './pages/Tasks'
 import Scripts from './pages/Scripts'
 import Users from './pages/Users'
+import SystemSettings from './pages/SystemSettings'
 import Login from './pages/Login'
 import { authService } from './services/auth'
 
@@ -19,9 +20,36 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [userInfo, setUserInfo] = useState(null)
+  
+  // 使用Ant Design的message hook
+  const { message } = AntApp.useApp()
 
   useEffect(() => {
     checkAuth()
+    
+    // 监听storage变化（用于多标签页同步）
+    const handleStorageChange = (e) => {
+      if (e.key === 'token' && !e.newValue) {
+        // token被删除，说明在其他标签页登出或会话过期
+        setIsAuthenticated(false)
+        setUserInfo(null)
+      }
+    }
+    
+    // 监听401未授权事件
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false)
+      setUserInfo(null)
+      message.warning('会话已过期，请重新登录')
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('auth:unauthorized', handleUnauthorized)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('auth:unauthorized', handleUnauthorized)
+    }
   }, [])
 
   const checkAuth = async () => {
@@ -48,7 +76,8 @@ function App() {
     try {
       const response = await authService.login(credentials)
       localStorage.setItem('token', response.token)
-      localStorage.setItem('userInfo', JSON.stringify(response.user))
+      localStorage.setItem('user', JSON.stringify(response.user)) // Changed from 'userInfo' to 'user'
+      localStorage.setItem('userInfo', JSON.stringify(response.user)) // Keep for backward compatibility
       setUserInfo(response.user)
       setIsAuthenticated(true)
       
@@ -88,6 +117,7 @@ function App() {
 
   const handleLogout = () => {
     authService.logout()
+    localStorage.removeItem('user') // Also remove 'user' key
     setIsAuthenticated(false)
     setUserInfo(null)
     
@@ -134,6 +164,7 @@ function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/scripts" element={<Scripts />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/system-settings" element={<SystemSettings />} />
           </Routes>
         </Content>
       </Layout>

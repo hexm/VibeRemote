@@ -33,9 +33,22 @@ api.interceptors.response.use(
   (error) => {
     console.error('API Error:', error)
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('userInfo')
-      // 不要直接跳转，让React处理状态变化
+      // 如果是登录接口返回401，不要重新加载页面，让登录表单显示错误
+      const isLoginRequest = error.config?.url?.includes('/auth/login')
+      
+      if (!isLoginRequest) {
+        // 非登录请求的401：会话过期，清除认证信息并重新加载
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        localStorage.removeItem('userInfo')
+        
+        // 触发自定义事件通知App组件
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+        
+        // 重新加载页面，让App.jsx重新检查认证状态
+        window.location.reload()
+      }
+      
       return Promise.reject(error.response?.data || error)
     }
     return Promise.reject(error.response?.data || error)
@@ -51,8 +64,9 @@ export const authService = {
         token: response.token,
         user: {
           username: response.username,
-          role: response.role,
-          email: response.email
+          email: response.email,
+          realName: response.realName,
+          permissions: response.permissions || []
         }
       }
     } catch (error) {
@@ -81,6 +95,7 @@ export const authService = {
     try {
       // 清理本地存储
       localStorage.removeItem('token')
+      localStorage.removeItem('user')
       localStorage.removeItem('userInfo')
     } catch (error) {
       // 忽略退出登录的错误

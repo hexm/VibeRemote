@@ -11,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -167,9 +168,12 @@ public class UserController {
      */
     @PostMapping("/{userId}/toggle-status")
     @RequirePermission("user:edit")
-    public ResponseEntity<?> toggleUserStatus(@PathVariable Long userId) {
+    public ResponseEntity<?> toggleUserStatus(@PathVariable Long userId, Authentication authentication) {
         try {
-            User user = userService.toggleUserStatus(userId);
+            // 获取当前登录用户
+            String currentUsername = authentication.getName();
+            
+            User user = userService.toggleUserStatus(userId, currentUsername);
             Map<String, Object> response = new HashMap<>();
             response.put("status", user.getStatus());
             response.put("message", "ACTIVE".equals(user.getStatus()) ? "用户已启用" : "用户已禁用");

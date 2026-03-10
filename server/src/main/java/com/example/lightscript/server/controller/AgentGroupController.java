@@ -4,6 +4,7 @@ import com.example.lightscript.server.entity.AgentGroup;
 import com.example.lightscript.server.entity.AgentGroupMember;
 import com.example.lightscript.server.model.AgentGroupModels.*;
 import com.example.lightscript.server.repository.AgentGroupMemberRepository;
+import com.example.lightscript.server.security.RequirePermission;
 import com.example.lightscript.server.service.AgentGroupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ public class AgentGroupController {
      * 获取分组列表
      */
     @GetMapping
+    @RequirePermission("agent:group")
     public ResponseEntity<?> getGroups(@RequestParam(required = false) String type) {
         List<AgentGroup> groups;
         
@@ -51,6 +53,7 @@ public class AgentGroupController {
      * 获取分组详情
      */
     @GetMapping("/{groupId}")
+    @RequirePermission("agent:group")
     public ResponseEntity<?> getGroupById(@PathVariable Long groupId) {
         AgentGroup group = agentGroupService.getGroupById(groupId)
             .orElseThrow(() -> new IllegalArgumentException("分组不存在"));
@@ -78,6 +81,7 @@ public class AgentGroupController {
      * 创建分组
      */
     @PostMapping
+    @RequirePermission("agent:group")
     public ResponseEntity<?> createGroup(@RequestBody CreateGroupRequest request) {
         try {
             // TODO: 从认证上下文获取当前用户
@@ -104,6 +108,7 @@ public class AgentGroupController {
      * 更新分组
      */
     @PutMapping("/{groupId}")
+    @RequirePermission("agent:group")
     public ResponseEntity<?> updateGroup(
             @PathVariable Long groupId,
             @RequestBody UpdateGroupRequest request) {
@@ -127,6 +132,7 @@ public class AgentGroupController {
      * 删除分组
      */
     @DeleteMapping("/{groupId}")
+    @RequirePermission("agent:group")
     public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
         try {
             agentGroupService.deleteGroup(groupId);
@@ -140,6 +146,7 @@ public class AgentGroupController {
      * 添加Agent到分组
      */
     @PostMapping("/{groupId}/agents")
+    @RequirePermission("agent:group")
     public ResponseEntity<?> addAgentsToGroup(
             @PathVariable Long groupId,
             @RequestBody AgentIdsRequest request) {
@@ -159,6 +166,7 @@ public class AgentGroupController {
      * 从分组移除Agent
      */
     @DeleteMapping("/{groupId}/agents")
+    @RequirePermission("agent:group")
     public ResponseEntity<?> removeAgentsFromGroup(
             @PathVariable Long groupId,
             @RequestBody AgentIdsRequest request) {

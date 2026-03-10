@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Table, Button, Modal, Form, Input, Select, Tag, Space, message, Popconfirm, Checkbox } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, StopOutlined, CheckCircleOutlined, UserOutlined } from '@ant-design/icons'
-import axios from 'axios'
+import api from '../services/auth'
 
 const { Option } = Select
 
@@ -49,10 +49,15 @@ const Users = () => {
   const fetchUsers = async () => {
     setLoading(true)
     try {
-      const response = await axios.get('/api/web/users')
-      setUsers(response.data.content || [])
+      const response = await api.get('/web/users')
+      setUsers(response.content || [])
     } catch (error) {
-      message.error('获取用户列表失败')
+      console.error('获取用户列表失败:', error)
+      if (error.status === 403 || error.error === 'Forbidden') {
+        message.warning({ content: '您没有权限查看用户列表', key: 'users-permission' })
+      } else {
+        message.error({ content: '获取用户列表失败', key: 'users-error' })
+      }
     } finally {
       setLoading(false)
     }
@@ -60,10 +65,14 @@ const Users = () => {
 
   const fetchPermissions = async () => {
     try {
-      const response = await axios.get('/api/web/permissions')
-      setPermissions(response.data.permissions || [])
+      const response = await api.get('/web/permissions')
+      setPermissions(response.permissions || [])
     } catch (error) {
-      console.error('获取权限列表失败', error)
+      console.error('获取权限列表失败:', error)
+      if (error.status === 403) {
+        // 权限不足时静默失败，不显示错误消息
+        setPermissions([])
+      }
     }
   }
 
@@ -80,8 +89,8 @@ const Users = () => {
     
     // 从API获取完整的用户信息(包括权限列表)
     try {
-      const response = await axios.get(`/api/web/users/${record.id}`)
-      const fullUserData = response.data
+      const response = await api.get(`/web/users/${record.id}`)
+      const fullUserData = response
       console.log('[DEBUG] 获取到完整用户数据:', fullUserData)
       setCurrentUser(fullUserData)
     } catch (error) {
@@ -100,7 +109,7 @@ const Users = () => {
 
   const handleDelete = async (userId) => {
     try {
-      await axios.delete(`/api/web/users/${userId}`)
+      await api.delete(`/web/users/${userId}`)
       message.success('删除成功')
       fetchUsers()
     } catch (error) {
@@ -110,7 +119,7 @@ const Users = () => {
 
   const handleToggleStatus = async (userId) => {
     try {
-      await axios.post(`/api/web/users/${userId}/toggle-status`)
+      await api.post(`/web/users/${userId}/toggle-status`)
       message.success('状态更新成功')
       fetchUsers()
     } catch (error) {
@@ -123,13 +132,13 @@ const Users = () => {
       const values = await form.validateFields()
 
       if (modalType === 'create') {
-        await axios.post('/api/web/users', values)
+        await api.post('/web/users', values)
         message.success('创建成功')
       } else if (modalType === 'edit') {
-        await axios.put(`/api/web/users/${currentUser.id}`, values)
+        await api.put(`/web/users/${currentUser.id}`, values)
         message.success('更新成功')
       } else if (modalType === 'resetPassword') {
-        await axios.post(`/api/web/users/${currentUser.id}/reset-password`, values)
+        await api.post(`/web/users/${currentUser.id}/reset-password`, values)
         message.success('密码重置成功')
       }
 
@@ -228,45 +237,53 @@ const Users = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            icon={<KeyOutlined />}
-            onClick={() => handleResetPassword(record)}
-          >
-            重置密码
-          </Button>
-          <Button
-            type="link"
-            icon={record.status === 'ACTIVE' ? <StopOutlined /> : <CheckCircleOutlined />}
-            onClick={() => handleToggleStatus(record.id)}
-          >
-            {record.status === 'ACTIVE' ? '禁用' : '启用'}
-          </Button>
-          <Popconfirm
-            title="确定要删除这个用户吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
+      render: (_, record) => {
+        // 获取当前登录用户
+        const currentUser = JSON.parse(localStorage.getItem('userInfo') || '{}')
+        const isCurrentUser = currentUser.username === record.username
+        
+        return (
+          <Space>
             <Button
               type="link"
-              danger
-              icon={<DeleteOutlined />}
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
             >
-              删除
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Button
+              type="link"
+              icon={<KeyOutlined />}
+              onClick={() => handleResetPassword(record)}
+            >
+              重置密码
+            </Button>
+            <Button
+              type="link"
+              icon={record.status === 'ACTIVE' ? <StopOutlined /> : <CheckCircleOutlined />}
+              onClick={() => handleToggleStatus(record.id)}
+              disabled={isCurrentUser && record.status === 'ACTIVE'}
+              title={isCurrentUser && record.status === 'ACTIVE' ? '不能禁用自己的账号' : ''}
+            >
+              {record.status === 'ACTIVE' ? '禁用' : '启用'}
+            </Button>
+            <Popconfirm
+              title="确定要删除这个用户吗？"
+              onConfirm={() => handleDelete(record.id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                danger
+                icon={<DeleteOutlined />}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        )
+      },
     },
   ]
 
@@ -302,7 +319,6 @@ const Users = () => {
           '重置密码'
         }
         open={modalVisible}
-        onOk={handleModalOk}
         onCancel={() => {
           setModalVisible(false)
           form.resetFields()
@@ -335,8 +351,17 @@ const Users = () => {
           }
         }}
         width={modalType === 'resetPassword' ? 500 : 800}
-        okText="确定"
-        cancelText="取消"
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setModalVisible(false)
+            form.resetFields()
+          }}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={handleModalOk}>
+            确定
+          </Button>
+        ]}
       >
         <Form
           form={form}

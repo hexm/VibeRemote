@@ -7,9 +7,11 @@ import com.example.lightscript.server.entity.TaskExecution;
 import com.example.lightscript.server.model.AgentModels.TaskSpec;
 import com.example.lightscript.server.model.TaskModels;
 import com.example.lightscript.server.service.AgentService;
+import com.example.lightscript.server.service.AgentGroupService;
 import com.example.lightscript.server.service.BatchTaskService;
 import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.TaskExecutionService;
+import com.example.lightscript.server.security.RequirePermission;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -40,8 +42,10 @@ public class WebController {
     private final TaskService taskService;
     private final BatchTaskService batchTaskService;
     private final TaskExecutionService taskExecutionService;
+    private final AgentGroupService agentGroupService;
     
     @GetMapping("/dashboard/stats")
+    @RequirePermission("agent:view")
     public ResponseEntity<Map<String, Object>> getDashboardStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("onlineAgents", agentService.getOnlineAgentCount());
@@ -54,6 +58,7 @@ public class WebController {
     }
     
     @GetMapping("/agents")
+    @RequirePermission("agent:view")
     public ResponseEntity<Page<Agent>> getAgents(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -63,12 +68,14 @@ public class WebController {
     }
     
     @GetMapping("/agents/{agentId}")
+    @RequirePermission("agent:view")
     public ResponseEntity<Agent> getAgent(@PathVariable String agentId) {
         Optional<Agent> agent = agentService.getAgent(agentId);
         return agent.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
     
     @GetMapping("/agents/{agentId}/tasks")
+    @RequirePermission("agent:view")
     public ResponseEntity<List<TaskModels.TaskExecutionDTO>> getAgentTasks(
             @PathVariable String agentId) {
         // 返回该代理的所有执行实例（按创建时间倒序）
@@ -81,6 +88,7 @@ public class WebController {
      * 获取Agent所属的分组
      */
     @GetMapping("/agents/{agentId}/groups")
+    @RequirePermission("agent:view")
     public ResponseEntity<?> getAgentGroups(@PathVariable String agentId) {
         List<com.example.lightscript.server.entity.AgentGroup> groups = agentGroupService.getAgentGroups(agentId);
 
@@ -100,6 +108,34 @@ public class WebController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 删除Agent
+     * 只能删除离线的Agent
+     */
+    @DeleteMapping("/agents/{agentId}")
+    @RequirePermission("agent:delete")
+    public ResponseEntity<?> deleteAgent(@PathVariable String agentId) {
+        Agent agent = agentService.getAgentById(agentId);
+        if (agent == null) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "客户端不存在");
+            return ResponseEntity.status(404).body(error);
+        }
+
+        // 检查Agent是否在线
+        if ("ONLINE".equals(agent.getStatus())) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "不能删除在线的客户端，请先停止客户端");
+            return ResponseEntity.status(400).body(error);
+        }
+
+        agentService.deleteAgent(agentId);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "客户端已删除");
+        return ResponseEntity.ok(response);
+    }
+
+
     
     // ========== 任务管理API（新版 - 支持多代理）==========
     
@@ -107,6 +143,7 @@ public class WebController {
      * 获取所有任务（含聚合状态）
      */
     @GetMapping("/tasks")
+    @RequirePermission("task:view")
     public ResponseEntity<Page<TaskModels.TaskDTO>> getAllTasks(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -127,6 +164,7 @@ public class WebController {
      * 获取任务详情（含聚合状态）
      */
     @GetMapping("/tasks/{taskId}")
+    @RequirePermission("task:view")
     public ResponseEntity<TaskModels.TaskDTO> getTask(@PathVariable String taskId) {
         TaskModels.TaskDTO task = taskService.getTaskWithAggregatedStatus(taskId);
         if (task == null) {
@@ -139,6 +177,7 @@ public class WebController {
      * 获取任务摘要（聚合状态和统计信息）
      */
     @GetMapping("/tasks/{taskId}/summary")
+    @RequirePermission("task:view")
     public ResponseEntity<TaskModels.TaskSummaryDTO> getTaskSummary(@PathVariable String taskId) {
         TaskModels.TaskSummaryDTO summary = taskService.getTaskSummary(taskId);
         if (summary == null) {
@@ -153,6 +192,7 @@ public class WebController {
      * 支持通过分组ID选择代理
      */
     @PostMapping("/tasks/create")
+    @RequirePermission("task:create")
     public ResponseEntity<Map<String, Object>> createTask(
             @RequestParam(required = false) List<String> agentIds,
             @RequestParam(required = false) Long groupId,
@@ -195,6 +235,7 @@ public class WebController {
      * 启动任务（草稿状态的任务）
      */
     @PostMapping("/tasks/{taskId}/start")
+    @RequirePermission("task:execute")
     public ResponseEntity<TaskModels.StartTaskResponse> startTask(
             @PathVariable String taskId,
             @RequestParam(required = false) List<String> agentIds) {
@@ -207,6 +248,7 @@ public class WebController {
      * 停止任务（待执行或执行中的任务）
      */
     @PostMapping("/tasks/{taskId}/stop")
+    @RequirePermission("task:execute")
     public ResponseEntity<TaskModels.StopTaskResponse> stopTask(@PathVariable String taskId) {
         TaskModels.StopTaskResponse response = taskService.stopTask(taskId);
         return ResponseEntity.ok(response);
@@ -216,6 +258,7 @@ public class WebController {
      * 获取任务的所有执行实例
      */
     @GetMapping("/tasks/{taskId}/executions")
+    @RequirePermission("task:view")
     public ResponseEntity<List<TaskExecution>> getTaskExecutions(@PathVariable String taskId) {
         List<TaskExecution> executions = taskService.getTaskExecutionHistory(taskId);
         return ResponseEntity.ok(executions);
@@ -226,6 +269,7 @@ public class WebController {
      * @param mode 重启模式：ALL（重启所有）或 FAILED_ONLY（仅重启失败的）
      */
     @PostMapping("/tasks/{taskId}/restart")
+    @RequirePermission("task:execute")
     public ResponseEntity<Map<String, Object>> restartTask(
             @PathVariable String taskId,
             @RequestParam(defaultValue = "ALL") String mode) {
@@ -254,6 +298,7 @@ public class WebController {
      * 取消任务（取消所有执行实例）
      */
     @PostMapping("/tasks/{taskId}/cancel")
+    @RequirePermission("task:execute")
     public ResponseEntity<Map<String, String>> cancelTask(@PathVariable String taskId) {
         taskService.cancelTask(taskId);
         Map<String, String> response = new HashMap<>();
@@ -266,6 +311,7 @@ public class WebController {
      * 取消特定执行实例
      */
     @PostMapping("/tasks/executions/{executionId}/cancel")
+    @RequirePermission("task:execute")
     public ResponseEntity<Map<String, String>> cancelExecution(@PathVariable Long executionId) {
         taskService.cancelExecution(executionId);
         Map<String, String> response = new HashMap<>();
@@ -278,6 +324,7 @@ public class WebController {
      * 查看执行实例日志
      */
     @GetMapping("/tasks/executions/{executionId}/logs")
+    @RequirePermission("log:view")
     public ResponseEntity<Map<String, Object>> getExecutionLogs(
             @PathVariable Long executionId,
             @RequestParam(defaultValue = "0") int offset,
@@ -293,6 +340,7 @@ public class WebController {
      * 下载执行实例日志
      */
     @GetMapping("/tasks/executions/{executionId}/download")
+    @RequirePermission("log:view")
     public ResponseEntity<Resource> downloadExecutionLog(@PathVariable Long executionId) {
         TaskExecution execution = taskService.getTaskExecution(executionId)
             .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
@@ -450,8 +498,4 @@ public class WebController {
             throw new RuntimeException("读取日志文件失败: " + logFilePath, e);
         }
     }
-
-
-    private final com.example.lightscript.server.service.AgentGroupService agentGroupService;
-
 }

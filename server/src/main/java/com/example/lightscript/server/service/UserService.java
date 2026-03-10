@@ -186,9 +186,14 @@ public class UserService {
      * 切换用户状态（启用/禁用）
      */
     @Transactional
-    public User toggleUserStatus(Long userId) {
+    public User toggleUserStatus(Long userId, String currentUsername) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在: " + userId));
+        
+        // 防止用户禁用自己
+        if (user.getUsername().equals(currentUsername) && "ACTIVE".equals(user.getStatus())) {
+            throw new IllegalArgumentException("不能禁用自己的账号");
+        }
         
         String newStatus = "ACTIVE".equals(user.getStatus()) ? "DISABLED" : "ACTIVE";
         user.setStatus(newStatus);

@@ -237,6 +237,34 @@ public class AgentService {
             log.info("[Scheduled] Marked {} agents as OFFLINE", offlineCount);
         }
     }
+
+    /**
+     * 删除Agent
+     * 注意：只能删除离线的Agent
+     */
+    @Transactional
+    public void deleteAgent(String agentId) {
+        Agent agent = agentRepository.findById(agentId).orElse(null);
+        if (agent == null) {
+            throw new IllegalArgumentException("客户端不存在");
+        }
+
+        if ("ONLINE".equals(agent.getStatus())) {
+            throw new IllegalStateException("不能删除在线的客户端");
+        }
+
+        agentRepository.deleteById(agentId);
+        log.info("[Agent] Deleted agent: {} ({})", agent.getHostname(), agentId);
+        LogUtil.logAgent("DELETE", agentId, agent.getHostname(), "Agent deleted");
+    }
+
+    /**
+     * 根据ID获取Agent
+     */
+    public Agent getAgentById(String agentId) {
+        return agentRepository.findById(agentId).orElse(null);
+    }
+
     
     // 已删除handleAgentRecovery()方法
     // 原因：agent重连时不应立即重置任务，应由定时任务延迟处理

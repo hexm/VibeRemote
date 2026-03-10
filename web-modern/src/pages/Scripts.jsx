@@ -360,7 +360,14 @@ Write-Host "数据备份完成"`,
         title="创建新脚本"
         open={createModalVisible}
         onCancel={() => setCreateModalVisible(false)}
-        footer={null}
+        footer={[
+          <Button key="cancel" onClick={() => setCreateModalVisible(false)}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={() => form.submit()}>
+            创建脚本
+          </Button>
+        ]}
         width={800}
       >
         <Form
@@ -416,17 +423,6 @@ Write-Host "数据备份完成"`,
               placeholder="输入脚本代码..."
               className="font-mono"
             />
-          </Form.Item>
-          
-          <Form.Item className="mb-0 text-right">
-            <Space>
-              <Button onClick={() => setCreateModalVisible(false)}>
-                取消
-              </Button>
-              <Button type="primary" htmlType="submit">
-                创建脚本
-              </Button>
-            </Space>
           </Form.Item>
         </Form>
       </Modal>

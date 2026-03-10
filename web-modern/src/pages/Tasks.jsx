@@ -55,6 +55,59 @@ const Tasks = () => {
   const [onlineAgents, setOnlineAgents] = useState([])
   const [agentGroups, setAgentGroups] = useState([])
   const [selectionMode, setSelectionMode] = useState('manual') // manual or group
+  
+  // 脚本相关状态
+  const [scriptSource, setScriptSource] = useState('custom') // custom or existing
+  const [availableScripts, setAvailableScripts] = useState([])
+
+  // 获取可用脚本列表（从Scripts页面的模拟数据）
+  const fetchAvailableScripts = () => {
+    // 这里使用Scripts页面的模拟数据
+    const scripts = [
+      {
+        id: 'S001',
+        name: '系统更新脚本',
+        type: 'shell',
+        content: `#!/bin/bash
+echo "开始系统更新..."
+apt update
+apt upgrade -y
+echo "系统更新完成"`,
+      },
+      {
+        id: 'S002',
+        name: '日志清理脚本',
+        type: 'shell',
+        content: `#!/bin/bash
+echo "开始清理日志..."
+find /var/log -name "*.log" -mtime +30 -delete
+echo "日志清理完成"`,
+      },
+      {
+        id: 'S003',
+        name: '数据备份脚本',
+        type: 'powershell',
+        content: `# PowerShell 数据备份脚本
+Write-Host "开始数据备份..."
+$source = "C:\\Data"
+$destination = "C:\\Backup"
+Copy-Item -Path $source -Destination $destination -Recurse
+Write-Host "数据备份完成"`,
+      },
+    ]
+    setAvailableScripts(scripts)
+  }
+
+  // 处理脚本选择
+  const handleScriptSelect = (scriptId) => {
+    const script = availableScripts.find(s => s.id === scriptId)
+    if (script) {
+      form.setFieldsValue({
+        scriptLang: script.type,
+        scriptContent: script.content
+      })
+    }
+  }
 
   // 获取在线代理列表
   const fetchOnlineAgents = async () => {
@@ -137,6 +190,7 @@ const Tasks = () => {
     fetchTasks()
     fetchOnlineAgents()
     fetchAgentGroups()
+    fetchAvailableScripts()
   }, [currentPage, pageSize, statusFilter])
 
   // 自动刷新日志
@@ -658,6 +712,7 @@ const Tasks = () => {
             icon={<PlusOutlined />}
             onClick={() => {
               fetchOnlineAgents()
+              setScriptSource('custom') // 重置脚本来源
               setCreateModalVisible(true)
             }}
             className="shadow-lg"
@@ -757,8 +812,15 @@ const Tasks = () => {
         title="创建多代理任务"
         open={createModalVisible}
         onCancel={() => setCreateModalVisible(false)}
-        footer={null}
-        width={700}
+        footer={[
+          <Button key="cancel" onClick={() => setCreateModalVisible(false)}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={handleCreateTask}>
+            创建任务
+          </Button>
+        ]}
+        width={800}
       >
         <Form
           form={form}
@@ -767,139 +829,244 @@ const Tasks = () => {
           className="mt-4"
           initialValues={{
             timeoutSec: 300,
-            scriptLang: 'shell'
+            scriptLang: 'shell',
+            taskName: `任务_${new Date().toLocaleString('zh-CN', { 
+              year: 'numeric', 
+              month: '2-digit', 
+              day: '2-digit', 
+              hour: '2-digit', 
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false 
+            }).replace(/\//g, '').replace(/:/g, '').replace(/\s/g, '_')}`
           }}
         >
-          <Form.Item
-            name="taskName"
-            label="任务名称"
-            rules={[{ required: true, message: '请输入任务名称' }]}
-          >
-            <Input placeholder="输入任务名称（必填）" maxLength={100} showCount />
-          </Form.Item>
-          
-          <Form.Item
-            label="选择方式"
-          >
-            <Radio.Group value={selectionMode} onChange={(e) => setSelectionMode(e.target.value)}>
-              <Radio value="manual">手动选择</Radio>
-              <Radio value="group">按分组选择</Radio>
-            </Radio.Group>
-          </Form.Item>
-
-          {selectionMode === 'group' && (
-            <Form.Item
-              name="groupId"
-              label="选择分组"
-            >
-              <Select
-                placeholder="选择Agent分组"
-                onChange={handleGroupChange}
-                allowClear
-              >
-                {agentGroups.map(group => (
-                  <Option key={group.id} value={group.id}>
-                    <Space>
-                      <TeamOutlined />
-                      {group.name}
-                      <Tag color="blue">{group.agentCount}个Agent</Tag>
-                    </Space>
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
-          
-          <Form.Item
-            name="selectedAgents"
-            label={
-              <span>
-                目标节点（可多选）
-                {onlineAgents.length > 0 && (
-                  <Text type="secondary" className="ml-2 text-xs">
-                    (共{onlineAgents.length}个节点)
-                  </Text>
-                )}
-              </span>
-            }
-            rules={[{ required: true, message: '请选择至少一个执行节点' }]}
-          >
-            <Select
-              mode="multiple"
-              placeholder={onlineAgents.length === 0 ? '正在加载节点列表...' : '选择执行节点（可多选）'}
-              notFoundContent={onlineAgents.length === 0 ? '暂无可用节点' : '未找到匹配节点'}
-              style={{ width: '100%' }}
-              disabled={selectionMode === 'group'}
-            >
-              {onlineAgents.map(agent => (
-                <Option key={agent.agentId} value={agent.agentId}>
-                  <Space>
-                    <Tag color={agent.status === 'ONLINE' ? 'green' : 'gray'} size="small">
-                      {agent.status === 'ONLINE' ? '在线' : '离线'}
-                    </Tag>
-                    {agent.hostname}
-                  </Space>
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-          
-          <Form.Item
-            name="scriptLang"
-            label="脚本类型"
-            rules={[{ required: true, message: '请选择脚本类型' }]}
-          >
-            <Select placeholder="选择脚本类型">
-              <Option value="shell">Shell</Option>
-              <Option value="python">Python</Option>
-              <Option value="javascript">JavaScript</Option>
-            </Select>
-          </Form.Item>
-          
-          <Form.Item
-            name="scriptContent"
-            label="脚本内容"
-            rules={[{ required: true, message: '请输入脚本内容' }]}
-          >
-            <TextArea 
-              rows={8} 
-              placeholder="输入要执行的脚本内容..."
-              style={{ fontFamily: 'monospace' }}
-            />
-          </Form.Item>
-          
-          <Form.Item
-            name="timeoutSec"
-            label="超时时间（秒）"
-          >
-            <Input type="number" min={1} />
-          </Form.Item>
-          
-          <Form.Item
-            name="autoStart"
-            label="启动选项"
-            valuePropName="checked"
-            initialValue={true}
-          >
-            <Switch 
-              checkedChildren="立即启动" 
-              unCheckedChildren="保存为草稿"
-            />
-          </Form.Item>
-          <div className="text-xs text-gray-500 -mt-4 mb-4">
-            取消勾选后，任务将保存为草稿，需要手动启动
+          {/* 基本信息 */}
+          <div className="mb-6">
+            <div className="flex items-center mb-3">
+              <div className="w-1 h-5 bg-blue-500 mr-2"></div>
+              <Text strong className="text-base">基本信息</Text>
+            </div>
+            <div className="pl-3 space-y-4">
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
+                    name="taskName"
+                    label="任务名称"
+                    rules={[{ required: true, message: '请输入任务名称' }]}
+                  >
+                    <Input placeholder="输入任务名称（必填）" maxLength={100} showCount />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
+                    name="taskDescription"
+                    label="任务描述"
+                  >
+                    <TextArea 
+                      rows={2} 
+                      placeholder="输入任务描述（可选）"
+                      maxLength={500}
+                      showCount
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
           </div>
-          
-          <Form.Item className="mb-0 text-right">
-            <Space>
-              <Button onClick={() => setCreateModalVisible(false)}>
-                取消
-              </Button>
-              <Button type="primary" htmlType="submit">
-                创建任务
-              </Button>
-            </Space>
-          </Form.Item>
+
+          {/* 执行客户端 */}
+          <div className="mb-6">
+            <div className="flex items-center mb-3">
+              <div className="w-1 h-5 bg-green-500 mr-2"></div>
+              <Text strong className="text-base">执行客户端</Text>
+            </div>
+            <div className="pl-3 space-y-4">
+              <Form.Item label="选择方式">
+                <Radio.Group 
+                  value={selectionMode} 
+                  onChange={(e) => setSelectionMode(e.target.value)}
+                  style={{ display: 'inline-flex', gap: '16px' }}
+                >
+                  <Radio value="manual">手动选择</Radio>
+                  <Radio value="group">按分组选择</Radio>
+                </Radio.Group>
+              </Form.Item>
+
+              {selectionMode === 'group' && (
+                <Form.Item name="groupId" label="选择分组">
+                  <Select
+                    placeholder="选择客户端分组"
+                    onChange={handleGroupChange}
+                    allowClear
+                  >
+                    {agentGroups.map(group => (
+                      <Option key={group.id} value={group.id}>
+                        <Space>
+                          <TeamOutlined />
+                          {group.name}
+                          <Tag color="blue">{group.agentCount}个客户端</Tag>
+                        </Space>
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              )}
+              
+              <Form.Item
+                name="selectedAgents"
+                label={
+                  <span>
+                    目标节点（可多选）
+                    {onlineAgents.length > 0 && (
+                      <Text type="secondary" className="ml-2 text-xs">
+                        (共{onlineAgents.length}个节点)
+                      </Text>
+                    )}
+                  </span>
+                }
+                rules={[{ required: true, message: '请选择至少一个执行节点' }]}
+              >
+                <Select
+                  mode="multiple"
+                  placeholder={onlineAgents.length === 0 ? '正在加载节点列表...' : '选择执行节点（可多选）'}
+                  notFoundContent={onlineAgents.length === 0 ? '暂无可用节点' : '未找到匹配节点'}
+                  disabled={selectionMode === 'group'}
+                  maxTagCount="responsive"
+                >
+                  {onlineAgents.map(agent => (
+                    <Option key={agent.agentId} value={agent.agentId}>
+                      <Space>
+                        <Tag color={agent.status === 'ONLINE' ? 'green' : 'gray'} size="small">
+                          {agent.status === 'ONLINE' ? '在线' : '离线'}
+                        </Tag>
+                        {agent.hostname}
+                      </Space>
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </div>
+          </div>
+
+          {/* 脚本内容 */}
+          <div className="mb-6">
+            <div className="flex items-center mb-3">
+              <div className="w-1 h-5 bg-purple-500 mr-2"></div>
+              <Text strong className="text-base">脚本内容</Text>
+            </div>
+            <div className="pl-3 space-y-4">
+              <Form.Item label="脚本来源">
+                <Radio.Group 
+                  value={scriptSource} 
+                  onChange={(e) => setScriptSource(e.target.value)}
+                  style={{ display: 'inline-flex', gap: '16px' }}
+                >
+                  <Radio value="custom">自定义输入</Radio>
+                  <Radio value="existing">选择已有脚本</Radio>
+                </Radio.Group>
+              </Form.Item>
+
+              {scriptSource === 'existing' && (
+                <Form.Item label="选择脚本">
+                  <Select
+                    placeholder="从脚本管理中选择"
+                    onChange={handleScriptSelect}
+                    allowClear
+                    onClear={() => {
+                      form.setFieldsValue({
+                        scriptLang: 'shell',
+                        scriptContent: ''
+                      })
+                    }}
+                  >
+                    {availableScripts.map(script => (
+                      <Option key={script.id} value={script.id}>
+                        <Space>
+                          <Tag color="purple">{script.type}</Tag>
+                          {script.name}
+                        </Space>
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              )}
+              
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="scriptLang"
+                    label="脚本类型"
+                    rules={[{ required: true, message: '请选择脚本类型' }]}
+                  >
+                    <Select placeholder="选择脚本类型" disabled={scriptSource === 'existing'}>
+                      <Option value="shell">Shell</Option>
+                      <Option value="python">Python</Option>
+                      <Option value="javascript">JavaScript</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              
+              <Form.Item
+                name="scriptContent"
+                label="脚本内容"
+                rules={[{ required: true, message: '请输入脚本内容' }]}
+              >
+                <TextArea 
+                  rows={8} 
+                  placeholder="输入要执行的脚本内容..."
+                  style={{ fontFamily: 'monospace' }}
+                  disabled={scriptSource === 'existing'}
+                />
+              </Form.Item>
+              {scriptSource === 'existing' && (
+                <div className="text-xs text-gray-500 -mt-3 mb-2">
+                  已选择脚本内容为只读，如需修改请切换到"自定义输入"
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 执行参数 */}
+          <div className="mb-6">
+            <div className="flex items-center mb-3">
+              <div className="w-1 h-5 bg-orange-500 mr-2"></div>
+              <Text strong className="text-base">执行参数</Text>
+            </div>
+            <div className="pl-3 space-y-4">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="timeoutSec"
+                    label="超时时间（秒）"
+                  >
+                    <Input type="number" min={1} placeholder="默认300秒" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="autoStart"
+                    label="启动选项"
+                    valuePropName="checked"
+                    initialValue={true}
+                  >
+                    <div>
+                      <Switch 
+                        checkedChildren="立即启动" 
+                        unCheckedChildren="保存为草稿"
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        取消勾选后，任务将保存为草稿
+                      </div>
+                    </div>
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
+          </div>
         </Form>
       </Modal>
 
