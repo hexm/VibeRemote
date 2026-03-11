@@ -17,6 +17,12 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     // 按状态分页查询
     Page<Task> findByTaskStatus(String taskStatus, Pageable pageable);
     
+    // 按任务类型分页查询
+    Page<Task> findByTaskType(String taskType, Pageable pageable);
+    
+    // 按状态和任务类型分页查询
+    Page<Task> findByTaskStatusAndTaskType(String taskStatus, String taskType, Pageable pageable);
+    
     // 任务名称唯一性检查
     boolean existsByTaskName(String taskName);
     

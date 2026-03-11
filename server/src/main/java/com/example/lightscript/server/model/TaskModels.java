@@ -39,6 +39,13 @@ public class TaskModels {
         // 任务类型
         private String taskType; // SCRIPT | FILE_TRANSFER
         
+        // 文件传输相关字段
+        private String fileId; // 文件ID
+        private String fileName; // 文件名
+        private String targetPath; // 目标路径
+        private Boolean overwriteExisting; // 是否覆盖已存在文件
+        private Boolean verifyChecksum; // 是否验证校验和
+        
         // 统计字段（从TaskExecution计算得出）
         private Integer targetAgentCount; // 目标代理数量
         private Integer completedExecutions; // 已完成的执行数
@@ -105,24 +112,51 @@ public class TaskModels {
     /**
      * 创建任务请求
      */
+/**
+     * 创建任务请求
+     */
     @Data
     public static class CreateTaskRequest {
         @NotEmpty(message = "至少需要选择一个代理")
         private List<String> agentIds;
-        
+
         @NotBlank(message = "任务名称不能为空")
         private String taskName;
-        
+
         @NotBlank(message = "脚本语言不能为空")
         private String scriptLang;
-        
+
         @NotBlank(message = "脚本内容不能为空")
         private String scriptContent;
-        
+
         @NotNull(message = "超时时间不能为空")
         private Integer timeoutSec;
-        
+
         private Map<String, String> env;
+    }
+
+    /**
+     * 创建文件传输任务请求
+     */
+    @Data
+    public static class CreateFileTransferTaskRequest {
+        @NotEmpty(message = "至少需要选择一个代理")
+        private List<String> agentIds;
+
+        @NotBlank(message = "任务名称不能为空")
+        private String taskName;
+
+        @NotBlank(message = "文件ID不能为空")
+        private String fileId;
+
+        @NotBlank(message = "目标路径不能为空")
+        private String targetPath;
+
+        @NotNull(message = "超时时间不能为空")
+        private Integer timeoutSec = 300; // 默认5分钟
+
+        private Boolean overwriteExisting = false; // 是否覆盖已存在的文件
+        private Boolean verifyChecksum = true; // 是否验证校验和
     }
 
     /**

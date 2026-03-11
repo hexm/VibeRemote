@@ -5,6 +5,7 @@ import com.example.lightscript.server.entity.TaskExecution;
 import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.model.TaskModels;
+import com.example.lightscript.server.model.FileModels;
 import com.example.lightscript.server.repository.TaskRepository;
 import com.example.lightscript.server.repository.TaskExecutionRepository;
 import com.example.lightscript.server.repository.TaskLogRepository;
@@ -44,6 +45,9 @@ public class TaskService {
     
     @Autowired
     private AgentService agentService;
+    
+    @Autowired
+    private FileService fileService;
     
     @Value("${lightscript.log.storage.path:logs/tasks}")
     private String logStoragePath;
@@ -118,6 +122,81 @@ public class TaskService {
             response.setMessage("任务创建成功（草稿状态），需要手动启动");
         }
         
+        return response;
+    }
+    /**
+     * 创建文件传输任务
+     */
+    @Transactional
+    public TaskModels.CreateTaskResponse createFileTransferTask(
+            TaskModels.CreateFileTransferTaskRequest request,
+            String createdBy) {
+
+        // 验证参数
+        if (request.getAgentIds() == null || request.getAgentIds().isEmpty()) {
+            throw new IllegalArgumentException("至少需要选择一个代理");
+        }
+
+        // 验证文件是否存在
+        if (!fileService.existsById(request.getFileId())) {
+            throw new IllegalArgumentException("文件不存在: " + request.getFileId());
+        }
+
+        // 验证任务名称唯一性
+        if (request.getTaskName() != null && !request.getTaskName().trim().isEmpty()) {
+            if (taskRepository.existsByTaskName(request.getTaskName())) {
+                throw new IllegalArgumentException("任务名称已存在: " + request.getTaskName());
+            }
+        }
+
+        // 1. 创建任务记录
+        Task task = new Task();
+        task.setTaskId(UUID.randomUUID().toString());
+        task.setTaskName(request.getTaskName());
+        task.setTaskType("FILE_TRANSFER");
+        task.setTimeoutSec(request.getTimeoutSec());
+        task.setCreatedBy(createdBy);
+        task.setCreatedAt(LocalDateTime.now());
+        task.setTargetAgentIds(String.join(",", request.getAgentIds()));
+        task.setTaskStatus("PENDING"); // 文件传输任务自动启动
+        
+        // 设置文件传输配置
+        task.setOverwriteExisting(request.getOverwriteExisting());
+        task.setVerifyChecksum(request.getVerifyChecksum());
+
+        task = taskRepository.save(task);
+        log.info("File transfer task created: {}, file: {}, targets: {}",
+            task.getTaskId(), request.getFileId(), request.getAgentIds().size());
+
+        // 2. 为每个代理创建执行实例
+        List<TaskExecution> executions = new ArrayList<>();
+        for (String agentId : request.getAgentIds()) {
+            TaskExecution execution = new TaskExecution();
+            execution.setTaskId(task.getTaskId());
+            execution.setAgentId(agentId);
+            execution.setExecutionNumber(1);
+            execution.setStatus("PENDING");
+            execution.setFileId(request.getFileId());
+            execution.setTargetPath(request.getTargetPath());
+            execution.setCreatedAt(LocalDateTime.now());
+
+            executions.add(execution);
+        }
+
+        taskExecutionRepository.saveAll(executions);
+        log.info("Created {} file transfer execution instances for task {}",
+            executions.size(), task.getTaskId());
+
+        // 3. 更新任务状态
+        updateTaskStatus(task.getTaskId());
+
+        // 4. 返回响应
+        TaskModels.CreateTaskResponse response = new TaskModels.CreateTaskResponse();
+        response.setTaskId(task.getTaskId());
+        response.setTaskStatus(task.getTaskStatus());
+        response.setTargetAgentCount(request.getAgentIds().size());
+        response.setMessage("文件传输任务创建成功，已分配给 " + request.getAgentIds().size() + " 个代理");
+
         return response;
     }
     
@@ -383,6 +462,36 @@ public class TaskService {
     }
     
     /**
+     * 按筛选条件获取任务
+     */
+    public Page<TaskModels.TaskDTO> getTasksByFilters(String status, String taskType, Pageable pageable) {
+        Page<Task> taskPage;
+        
+        if (status != null && !status.isEmpty() && taskType != null && !taskType.isEmpty()) {
+            // 同时按状态和类型筛选
+            taskPage = taskRepository.findByTaskStatusAndTaskType(status, taskType, pageable);
+        } else if (status != null && !status.isEmpty()) {
+            // 只按状态筛选
+            taskPage = taskRepository.findByTaskStatus(status, pageable);
+        } else if (taskType != null && !taskType.isEmpty()) {
+            // 只按类型筛选
+            taskPage = taskRepository.findByTaskType(taskType, pageable);
+        } else {
+            // 无筛选条件
+            taskPage = taskRepository.findAll(pageable);
+        }
+        
+        List<TaskModels.TaskDTO> taskDTOs = taskPage.getContent().stream()
+                .map(task -> {
+                    List<TaskExecution> executions = taskExecutionService.getExecutionsByTaskId(task.getTaskId());
+                    return toTaskDTO(task, executions);
+                })
+                .collect(Collectors.toList());
+        
+        return new PageImpl<>(taskDTOs, pageable, taskPage.getTotalElements());
+    }
+    
+    /**
      * 重启任务
      */
     @Transactional
@@ -537,6 +646,32 @@ public class TaskService {
         // 设置任务状态
         dto.setTaskStatus(task.getTaskStatus());
         
+        // 设置任务类型
+        dto.setTaskType(task.getTaskType());
+        
+        // 设置文件传输配置
+        dto.setOverwriteExisting(task.getOverwriteExisting());
+        dto.setVerifyChecksum(task.getVerifyChecksum());
+        
+        // 如果是文件传输任务，获取文件信息
+        if ("FILE_TRANSFER".equals(task.getTaskType()) && !executions.isEmpty()) {
+            TaskExecution firstExecution = executions.get(0);
+            if (firstExecution.getFileId() != null) {
+                dto.setFileId(firstExecution.getFileId());
+                dto.setTargetPath(firstExecution.getTargetPath());
+                
+                // 获取文件名
+                try {
+                    if (fileService.existsById(firstExecution.getFileId())) {
+                        FileModels.FileDTO fileInfo = fileService.getFileById(firstExecution.getFileId());
+                        dto.setFileName(fileInfo.getName());
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to get file info for fileId: {}", firstExecution.getFileId(), e);
+                }
+            }
+        }
+        
         // 计算统计信息
         Map<String, Integer> stats = computeExecutionStats(executions);
         dto.setTargetAgentCount(executions.size());
@@ -607,7 +742,7 @@ public class TaskService {
                     // 获取任务信息并转换为 TaskSpec
                     Task task = taskRepository.findById(execution.getTaskId()).orElse(null);
                     if (task != null) {
-                        TaskSpec spec = convertToTaskSpec(task);
+                        TaskSpec spec = convertToTaskSpec(task, execution);
                         spec.setTaskId(execution.getTaskId());
                         spec.setExecutionId(execution.getId()); // 设置执行实例ID
                         return spec;
@@ -788,13 +923,28 @@ public class TaskService {
     }
     
     private TaskSpec convertToTaskSpec(Task task) {
+        return convertToTaskSpec(task, null);
+    }
+    
+    private TaskSpec convertToTaskSpec(Task task, TaskExecution execution) {
         TaskSpec spec = new TaskSpec();
         spec.setTaskId(task.getTaskId());
         spec.setTaskName(task.getTaskName());
+        spec.setTaskType(task.getTaskType());
         spec.setScriptLang(task.getScriptLang());
         spec.setScriptContent(task.getScriptContent());
         spec.setTimeoutSec(task.getTimeoutSec());
         spec.setEnv(task.getEnv());
+        
+        // 如果是文件传输任务且有执行实例，设置文件传输相关信息
+        if ("FILE_TRANSFER".equals(task.getTaskType()) && execution != null) {
+            spec.setFileId(execution.getFileId());
+            spec.setTargetPath(execution.getTargetPath());
+            // 从任务配置中获取这些信息
+            spec.setOverwriteExisting(task.getOverwriteExisting() != null ? task.getOverwriteExisting() : false);
+            spec.setVerifyChecksum(task.getVerifyChecksum() != null ? task.getVerifyChecksum() : true);
+        }
+        
         return spec;
     }
     

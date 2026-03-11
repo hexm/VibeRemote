@@ -48,6 +48,10 @@ class AgentApi {
 	}
 
 	void heartbeat(String agentId, String agentToken) throws Exception {
+		heartbeat(agentId, agentToken, false);
+	}
+	
+	void heartbeat(String agentId, String agentToken, boolean includeSystemInfo) throws Exception {
 		Double cpuLoad = getCpuLoad();
 		Long freeMemMb = getFreeMemoryMb();
 		Long totalMemMb = getTotalMemoryMb();
@@ -59,6 +63,22 @@ class AgentApi {
 		payload.put("cpuLoad", cpuLoad);
 		payload.put("freeMemMb", freeMemMb);
 		payload.put("totalMemMb", totalMemMb);
+		
+		// 如果需要包含系统信息（首次心跳或定期更新）
+		if (includeSystemInfo) {
+			try {
+				payload.put("startUser", getStartUser());
+				payload.put("workingDir", getWorkingDirectory());
+				payload.put("diskSpaceGb", getDiskSpaceGb());
+				payload.put("freeSpaceGb", getFreeSpaceGb());
+				payload.put("osVersion", getOsVersion());
+				payload.put("javaVersion", getJavaVersion());
+				payload.put("agentVersion", getAgentVersion());
+			} catch (Exception e) {
+				System.err.println("Failed to collect system info: " + e.getMessage());
+				// 继续发送心跳，即使系统信息收集失败
+			}
+		}
 		
 		// 打印资源使用情况
 		System.out.println(String.format("Resource Usage - CPU: %.2f%%, Memory: %d/%d MB (%.2f%% used)", 
@@ -221,5 +241,171 @@ class AgentApi {
 		try (CloseableHttpResponse response = httpClient.execute(post)) {
 			// 完成通知不需要检查响应
 		}
+	}
+	
+	boolean downloadFile(String agentId, String agentToken, String fileId, String targetPath, 
+	                    boolean overwriteExisting, boolean verifyChecksum) throws Exception {
+		String url = baseUrl + "/api/agent/files/" + fileId + "/download?agentId=" + agentId + "&agentToken=" + agentToken;
+		HttpGet get = new HttpGet(url);
+		
+		try (CloseableHttpResponse response = httpClient.execute(get)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+				throw new RuntimeException("Download file failed: " + responseBody);
+			}
+			
+			// 获取文件大小
+			long contentLength = response.getEntity().getContentLength();
+			String contentLengthHeader = response.getFirstHeader("Content-Length") != null ? 
+				response.getFirstHeader("Content-Length").getValue() : null;
+			
+			if (contentLengthHeader != null) {
+				contentLength = Long.parseLong(contentLengthHeader);
+			}
+			
+			// 检查文件大小限制
+			if (contentLength > 0 && contentLength > 100 * 1024 * 1024L) { // 100MB限制
+				throw new RuntimeException("File too large: " + contentLength + " bytes (max 100MB)");
+			}
+			
+			// 检查目标文件是否存在
+			java.io.File targetFile = new java.io.File(targetPath);
+			if (targetFile.exists() && !overwriteExisting) {
+				throw new RuntimeException("Target file already exists and overwrite is disabled: " + targetPath);
+			}
+			
+			// 创建目标目录
+			java.io.File parentDir = targetFile.getParentFile();
+			if (parentDir != null && !parentDir.exists()) {
+				parentDir.mkdirs();
+			}
+			
+			// 使用流式下载，避免内存溢出
+			try (java.io.InputStream inputStream = response.getEntity().getContent();
+			     java.io.FileOutputStream outputStream = new java.io.FileOutputStream(targetFile);
+			     java.io.BufferedInputStream bufferedInput = new java.io.BufferedInputStream(inputStream);
+			     java.io.BufferedOutputStream bufferedOutput = new java.io.BufferedOutputStream(outputStream)) {
+				
+				byte[] buffer = new byte[64 * 1024]; // 64KB缓冲区，提高性能
+				int bytesRead;
+				long totalBytes = 0;
+				long lastProgressReport = 0;
+				
+				System.out.println("Starting file download: " + targetPath);
+				
+				while ((bytesRead = bufferedInput.read(buffer)) != -1) {
+					bufferedOutput.write(buffer, 0, bytesRead);
+					totalBytes += bytesRead;
+					
+					// 每下载10MB显示一次进度
+					if (totalBytes - lastProgressReport >= 10 * 1024 * 1024L) {
+						double progressMB = totalBytes / 1024.0 / 1024.0;
+						if (contentLength > 0) {
+							double progressPercent = (totalBytes * 100.0) / contentLength;
+							System.out.printf("Download progress: %.1f MB (%.1f%%)\n", progressMB, progressPercent);
+						} else {
+							System.out.printf("Download progress: %.1f MB\n", progressMB);
+						}
+						lastProgressReport = totalBytes;
+					}
+				}
+				
+				// 确保数据写入磁盘
+				bufferedOutput.flush();
+				outputStream.getFD().sync();
+				
+				System.out.println("File downloaded successfully: " + targetPath + " (" + totalBytes + " bytes)");
+				
+				// 可选：验证文件完整性
+				if (verifyChecksum && contentLength > 0 && totalBytes != contentLength) {
+					throw new RuntimeException("File size mismatch: expected " + contentLength + ", got " + totalBytes);
+				}
+				
+				return true;
+			}
+			
+		} catch (Exception e) {
+			System.err.println("Failed to download file: " + e.getMessage());
+			// 如果下载失败，清理部分下载的文件
+			java.io.File targetFile = new java.io.File(targetPath);
+			if (targetFile.exists()) {
+				targetFile.delete();
+			}
+			return false;
+		}
+	}
+	
+	// 获取启动用户
+	private String getStartUser() {
+		try {
+			return System.getProperty("user.name");
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取工作目录
+	private String getWorkingDirectory() {
+		try {
+			return System.getProperty("user.dir");
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取磁盘总空间(GB)
+	private Long getDiskSpaceGb() {
+		try {
+			java.io.File root = new java.io.File(System.getProperty("user.dir"));
+			long totalSpace = root.getTotalSpace();
+			return totalSpace / (1024 * 1024 * 1024); // 转换为GB
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取磁盘可用空间(GB)
+	private Long getFreeSpaceGb() {
+		try {
+			java.io.File root = new java.io.File(System.getProperty("user.dir"));
+			long freeSpace = root.getFreeSpace();
+			return freeSpace / (1024 * 1024 * 1024); // 转换为GB
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取操作系统版本
+	private String getOsVersion() {
+		try {
+			String osName = System.getProperty("os.name");
+			String osVersion = System.getProperty("os.version");
+			String osArch = System.getProperty("os.arch");
+			return osName + " " + osVersion + " (" + osArch + ")";
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取Java版本
+	private String getJavaVersion() {
+		try {
+			String javaVersion = System.getProperty("java.version");
+			String javaVendor = System.getProperty("java.vendor");
+			return javaVersion + " (" + javaVendor + ")";
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	// 获取Agent版本
+	private String getAgentVersion() {
+		// 可以从配置文件或者manifest中读取，这里先返回固定版本
+		return "1.0.0";
 	}
 }

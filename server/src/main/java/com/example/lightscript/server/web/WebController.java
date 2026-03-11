@@ -13,6 +13,7 @@ import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.TaskExecutionService;
 import com.example.lightscript.server.security.RequirePermission;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -37,6 +38,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/web")
 @RequiredArgsConstructor
+@Slf4j
 public class WebController {
     
     private final AgentService agentService;
@@ -148,12 +150,13 @@ public class WebController {
     public ResponseEntity<Page<TaskModels.TaskDTO>> getAllTasks(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String taskType) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<TaskModels.TaskDTO> tasks;
         
-        if (status != null && !status.isEmpty()) {
-            tasks = taskService.getTasksByStatus(status, pageable);
+        if ((status != null && !status.isEmpty()) || (taskType != null && !taskType.isEmpty())) {
+            tasks = taskService.getTasksByFilters(status, taskType, pageable);
         } else {
             tasks = taskService.getAllTasksWithStatus(pageable);
         }
@@ -224,12 +227,44 @@ public class WebController {
         TaskModels.CreateTaskResponse createResponse = taskService.createMultiAgentTask(
             targetAgentIds, taskSpec, createdBy, autoStart);
         
+        // 检查是否是深度检查任务，如果是则更新Agent的深度检查任务信息
+        if (taskName != null && taskName.startsWith("深度检查_") && targetAgentIds.size() == 1) {
+            // 深度检查任务通常只针对单个Agent
+            String agentId = targetAgentIds.get(0);
+            log.info("Detected deep check task: {} for agent: {}", taskName, agentId);
+            agentService.updateLastDiagnosticTask(agentId, createResponse.getTaskId(), taskName);
+            log.info("Updated deep check task info for agent: {}", agentId);
+        }
+        
         Map<String, Object> response = new HashMap<>();
         response.put("taskId", createResponse.getTaskId());
         response.put("taskStatus", createResponse.getTaskStatus());
         response.put("targetAgentCount", createResponse.getTargetAgentCount());
         response.put("message", createResponse.getMessage());
         
+        return ResponseEntity.ok(response);
+    }
+    /**
+     * 创建文件传输任务
+     */
+    @PostMapping("/tasks/file-transfer/create")
+    @RequirePermission("task:create")
+    public ResponseEntity<Map<String, Object>> createFileTransferTask(
+            @RequestBody TaskModels.CreateFileTransferTaskRequest request,
+            Authentication authentication) {
+
+        // 获取当前登录用户作为创建者
+        String createdBy = authentication.getName();
+
+        // 调用文件传输任务创建方法
+        TaskModels.CreateTaskResponse createResponse = taskService.createFileTransferTask(request, createdBy);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("taskId", createResponse.getTaskId());
+        response.put("taskStatus", createResponse.getTaskStatus());
+        response.put("targetAgentCount", createResponse.getTargetAgentCount());
+        response.put("message", createResponse.getMessage());
+
         return ResponseEntity.ok(response);
     }
     

@@ -59,6 +59,13 @@ public class Task {
     @Column(name = "finished_at")
     private LocalDateTime finishedAt; // 任务结束时间
     
+    // 文件传输任务配置字段
+    @Column(name = "overwrite_existing")
+    private Boolean overwriteExisting; // 是否覆盖已存在的文件
+    
+    @Column(name = "verify_checksum")
+    private Boolean verifyChecksum; // 是否验证校验和
+    
     // Transient fields for display purposes (computed from TaskExecution records)
     @Transient
     private Integer targetAgentCount; // 目标代理数量

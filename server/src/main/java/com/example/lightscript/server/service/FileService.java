@@ -35,6 +35,9 @@ public class FileService {
     // 文件存储目录
     private static final String FILE_STORAGE_DIR = "files";
     
+    // 文件大小限制 (100MB)
+    private static final long MAX_FILE_SIZE = 100 * 1024 * 1024L;
+    
     /**
      * 分页查询文件列表
      */
@@ -64,6 +67,12 @@ public class FileService {
             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在"));
         return convertToDTO(file);
     }
+    /**
+     * 检查文件是否存在
+     */
+    public boolean existsById(String fileId) {
+        return fileRepository.findByFileId(fileId).isPresent();
+    }
     
     /**
      * 上传文件
@@ -73,6 +82,14 @@ public class FileService {
         // 验证文件
         if (multipartFile.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "上传文件不能为空");
+        }
+        
+        // 验证文件大小
+        if (multipartFile.getSize() > MAX_FILE_SIZE) {
+            throw new BusinessException(ErrorCode.FILE_SIZE_EXCEEDED, 
+                String.format("文件大小超过限制，最大允许 %s，当前文件 %s", 
+                    formatFileSize(MAX_FILE_SIZE), 
+                    formatFileSize(multipartFile.getSize())));
         }
         
         // 检查文件名是否重复
@@ -132,12 +149,24 @@ public class FileService {
     
     /**
      * 获取文件内容（用于下载）
+     * @deprecated 使用getFilePath()和流式传输代替，避免内存溢出
      */
+    @Deprecated
     public byte[] getFileContent(String fileId) {
         File file = fileRepository.findByFileId(fileId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在"));
         
         return readFileContent(file.getFilePath());
+    }
+    
+    /**
+     * 获取文件路径（用于流式下载）
+     */
+    public String getFilePath(String fileId) {
+        File file = fileRepository.findByFileId(fileId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在"));
+        
+        return file.getFilePath();
     }
     
     /**

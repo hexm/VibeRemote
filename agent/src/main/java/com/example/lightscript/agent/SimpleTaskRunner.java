@@ -30,6 +30,49 @@ class SimpleTaskRunner {
     }
 
     void runTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
+        runTask(executionId, taskId, "SCRIPT", scriptLang, scriptContent, timeoutSec, null, null, false, true);
+    }
+    
+    void runTask(Long executionId, String taskId, String taskType, String scriptLang, String scriptContent, 
+                 int timeoutSec, String fileId, String targetPath, boolean overwriteExisting, boolean verifyChecksum) {
+        if ("FILE_TRANSFER".equals(taskType)) {
+            runFileTransferTask(executionId, taskId, fileId, targetPath, timeoutSec, overwriteExisting, verifyChecksum);
+        } else {
+            runScriptTask(executionId, taskId, scriptLang, scriptContent, timeoutSec);
+        }
+    }
+    
+    private void runFileTransferTask(Long executionId, String taskId, String fileId, String targetPath, 
+                                   int timeoutSec, boolean overwriteExisting, boolean verifyChecksum) {
+        int seq = 0;
+        try {
+            // 确认任务开始执行
+            api.ackTask(agentId, agentToken, executionId);
+            api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer task started (fileId: " + fileId + ", target: " + targetPath + ")");
+            
+            // 下载文件
+            api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Downloading file from server...");
+            boolean success = api.downloadFile(agentId, agentToken, fileId, targetPath, overwriteExisting, verifyChecksum);
+            
+            if (success) {
+                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer completed successfully");
+                api.finish(agentId, agentToken, executionId, 0, "SUCCESS", "File transferred successfully");
+            } else {
+                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer failed");
+                api.finish(agentId, agentToken, executionId, 1, "FAILED", "File transfer failed");
+            }
+            
+        } catch (Exception e) {
+            try {
+                api.sendLog(agentId, agentToken, executionId, ++seq, "stderr", "Exception: " + e.getMessage());
+                api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+            } catch (Exception ignored) {
+                System.err.println("Failed to report task failure: " + ignored.getMessage());
+            }
+        }
+    }
+
+    private void runScriptTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
         int seq = 0;
         try {
             // 首先确认任务开始执行

@@ -58,6 +58,38 @@ public class Agent {
     @Column(name = "task_count")
     private Integer taskCount = 0; // 任务执行总数
     
+    // 扩展字段 - 系统详细信息
+    @Column(name = "start_user", length = 100)
+    private String startUser; // 启动用户
+    
+    @Column(name = "working_dir", length = 500)
+    private String workingDir; // 工作目录
+    
+    @Column(name = "disk_space_gb")
+    private Long diskSpaceGb; // 磁盘总空间(GB)
+    
+    @Column(name = "free_space_gb")
+    private Long freeSpaceGb; // 磁盘可用空间(GB)
+    
+    @Column(name = "os_version", length = 200)
+    private String osVersion; // 操作系统版本
+    
+    @Column(name = "java_version", length = 100)
+    private String javaVersion; // Java版本
+    
+    @Column(name = "agent_version", length = 50)
+    private String agentVersion; // Agent版本
+    
+    // 最后一次深度检查任务信息
+    @Column(name = "last_diagnostic_task_id", length = 64)
+    private String lastDiagnosticTaskId; // 最后一次深度检查任务ID
+    
+    @Column(name = "last_diagnostic_task_name", length = 200)
+    private String lastDiagnosticTaskName; // 最后一次深度检查任务名称
+    
+    @Column(name = "last_diagnostic_time")
+    private LocalDateTime lastDiagnosticTime; // 最后一次深度检查时间
+    
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     

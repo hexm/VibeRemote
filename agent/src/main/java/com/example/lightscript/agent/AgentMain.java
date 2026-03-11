@@ -129,8 +129,10 @@ public class AgentMain {
 
         // 主循环
         long lastHeartbeat = 0L;
+        final long[] lastSystemInfoHeartbeat = {0L}; // 上次发送系统信息心跳的时间
         int heartbeatFailures = 0;
         final int MAX_HEARTBEAT_FAILURES = 3; // 连续失败3次触发重连
+        boolean reRegistered = false; // 是否刚刚重新注册
         
         while (!Thread.currentThread().isInterrupted()) {
             long now = System.currentTimeMillis();
@@ -144,7 +146,6 @@ public class AgentMain {
                     
                     retryCount = 0;
                     retryDelay = 1000;
-                    boolean reRegistered = false;
                     
                     while (!reRegistered && !Thread.currentThread().isInterrupted()) {
                         try {
@@ -191,10 +192,19 @@ public class AgentMain {
                 if (now - lastHeartbeat > 30_000) {
                     try {
                         System.out.println("Sending heartbeat...");
-                        api.heartbeat(currentAgentId[0], currentAgentToken[0]);
-                        System.out.println("Heartbeat sent at " + new java.util.Date());
+                        // 每10分钟发送一次包含系统信息的心跳，或者首次心跳后发送
+                        boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > 600_000) || reRegistered;
+                        if (includeSystemInfo) {
+                            api.heartbeat(currentAgentId[0], currentAgentToken[0], true);
+                            lastSystemInfoHeartbeat[0] = now;
+                            System.out.println("Heartbeat with system info sent at " + new java.util.Date());
+                        } else {
+                            api.heartbeat(currentAgentId[0], currentAgentToken[0], false);
+                            System.out.println("Heartbeat sent at " + new java.util.Date());
+                        }
                         lastHeartbeat = now;
                         heartbeatFailures = 0; // 重置失败计数
+                        reRegistered = false; // 重置重新注册标志
                     } catch (Exception e) {
                         heartbeatFailures++;
                         System.err.println("Heartbeat failed (" + heartbeatFailures + "/" + MAX_HEARTBEAT_FAILURES + "): " + e.getMessage());
@@ -221,24 +231,49 @@ public class AgentMain {
                         String taskId = String.valueOf(task.get("taskId"));
                         Long executionId = task.get("executionId") != null ? 
                             ((Number) task.get("executionId")).longValue() : null;
+                        String taskType = String.valueOf(task.getOrDefault("taskType", "SCRIPT"));
                         String scriptLang = String.valueOf(task.get("scriptLang"));
                         String scriptContent = String.valueOf(task.get("scriptContent"));
                         Integer timeoutSec = (Integer) task.getOrDefault("timeoutSec", 300);
-
-                        System.out.println("Received task: " + taskId + " (executionId: " + executionId + ", lang: " + scriptLang + ")");
                         
-                        // 检查是否所有必要字段都存在
-                        if (taskId == null || "null".equals(taskId) || 
-                            executionId == null ||
-                            scriptContent == null || "null".equals(scriptContent)) {
-                            System.err.println("ERROR: Invalid task data - taskId, executionId or scriptContent is null");
+                        // 文件传输相关字段
+                        String fileId = String.valueOf(task.get("fileId"));
+                        String targetPath = String.valueOf(task.get("targetPath"));
+                        Boolean overwriteExisting = (Boolean) task.getOrDefault("overwriteExisting", false);
+                        Boolean verifyChecksum = (Boolean) task.getOrDefault("verifyChecksum", true);
+
+                        System.out.println("Received task: " + taskId + " (executionId: " + executionId + ", type: " + taskType + ")");
+                        
+                        // 检查基本字段
+                        if (taskId == null || "null".equals(taskId) || executionId == null) {
+                            System.err.println("ERROR: Invalid task data - taskId or executionId is null");
                             continue;
+                        }
+                        
+                        // 根据任务类型检查必要字段
+                        if ("FILE_TRANSFER".equals(taskType)) {
+                            if (fileId == null || "null".equals(fileId) || targetPath == null || "null".equals(targetPath)) {
+                                System.err.println("ERROR: Invalid file transfer task - fileId or targetPath is null");
+                                continue;
+                            }
+                        } else {
+                            if (scriptContent == null || "null".equals(scriptContent)) {
+                                System.err.println("ERROR: Invalid script task - scriptContent is null");
+                                continue;
+                            }
                         }
                         
                         // 异步执行任务
                         final Long finalExecutionId = executionId;
+                        final String finalTaskType = taskType;
+                        final String finalFileId = fileId;
+                        final String finalTargetPath = targetPath;
+                        final boolean finalOverwriteExisting = overwriteExisting;
+                        final boolean finalVerifyChecksum = verifyChecksum;
+                        
                         taskExecutor.submit(() -> {
-                            taskRunner.runTask(finalExecutionId, taskId, scriptLang, scriptContent, timeoutSec);
+                            taskRunner.runTask(finalExecutionId, taskId, finalTaskType, scriptLang, scriptContent, 
+                                             timeoutSec, finalFileId, finalTargetPath, finalOverwriteExisting, finalVerifyChecksum);
                         });
                     }
                 }

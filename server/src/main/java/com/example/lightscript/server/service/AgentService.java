@@ -137,6 +137,8 @@ public class AgentService {
             agent.setLastHeartbeat(LocalDateTime.now());
             agent.setStatus("ONLINE");
             log.debug("[Agent] Heartbeat received from {} ({})", agent.getHostname(), agentId);
+            
+            // 更新资源信息
             if (request.getCpuLoad() != null) {
                 agent.setCpuLoad(request.getCpuLoad());
             }
@@ -146,6 +148,30 @@ public class AgentService {
             if (request.getTotalMemMb() != null) {
                 agent.setTotalMemMb(request.getTotalMemMb());
             }
+            
+            // 更新扩展系统信息（如果提供）
+            if (request.getStartUser() != null) {
+                agent.setStartUser(request.getStartUser());
+            }
+            if (request.getWorkingDir() != null) {
+                agent.setWorkingDir(request.getWorkingDir());
+            }
+            if (request.getDiskSpaceGb() != null) {
+                agent.setDiskSpaceGb(request.getDiskSpaceGb());
+            }
+            if (request.getFreeSpaceGb() != null) {
+                agent.setFreeSpaceGb(request.getFreeSpaceGb());
+            }
+            if (request.getOsVersion() != null) {
+                agent.setOsVersion(request.getOsVersion());
+            }
+            if (request.getJavaVersion() != null) {
+                agent.setJavaVersion(request.getJavaVersion());
+            }
+            if (request.getAgentVersion() != null) {
+                agent.setAgentVersion(request.getAgentVersion());
+            }
+            
             agentRepository.save(agent);
             return true;
         }
@@ -291,6 +317,30 @@ public class AgentService {
     public void incrementTaskCount(List<String> agentIds) {
         for (String agentId : agentIds) {
             incrementTaskCount(agentId);
+        }
+    }
+
+    /**
+     * 更新Agent的最后一次深度检查任务信息
+     */
+    @Transactional
+    public void updateLastDiagnosticTask(String agentId, String taskId, String taskName) {
+        try {
+            Agent agent = agentRepository.findById(agentId).orElse(null);
+            if (agent != null) {
+                log.info("Updating deep check task info for agent {}: taskId={}, taskName={}", 
+                        agentId, taskId, taskName);
+                agent.setLastDiagnosticTaskId(taskId);
+                agent.setLastDiagnosticTaskName(taskName);
+                agent.setLastDiagnosticTime(LocalDateTime.now());
+                agentRepository.save(agent);
+                log.info("Successfully updated deep check task info for agent {}", agentId);
+            } else {
+                log.warn("Agent not found when updating deep check task info: {}", agentId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to update deep check task info for agent {}: {}", agentId, e.getMessage(), e);
+            throw e;
         }
     }
 }

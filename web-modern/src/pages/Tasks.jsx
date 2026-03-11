@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Modal, Form, message, Tooltip, Progress, Statistic, Row, Col, Switch, Badge, Radio } from 'antd'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Modal, Form, message, Tooltip, Progress, Statistic, Row, Col, Switch, Badge, Radio, Tabs } from 'antd'
 import {
   FileTextOutlined,
   SearchOutlined,
@@ -17,6 +17,8 @@ import {
   RedoOutlined,
   ClearOutlined,
   PlayCircleOutlined,
+  CodeOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons'
 import api from '../services/auth'
 import scriptService from '../services/scriptService'
@@ -35,11 +37,13 @@ const Tasks = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [taskTypeFilter, setTaskTypeFilter] = useState('all')
   const [createModalVisible, setCreateModalVisible] = useState(false)
   const [detailModalVisible, setDetailModalVisible] = useState(false)
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [selectedTask, setSelectedTask] = useState(null)
   const [form] = Form.useForm()
+  const [fileTransferForm] = Form.useForm()
   
   // 任务详情相关状态
   const [taskExecutions, setTaskExecutions] = useState([])
@@ -52,6 +56,10 @@ const Tasks = () => {
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(false)
   const logIntervalRef = useRef(null)
   
+  // 脚本内容查看状态
+  const [scriptModalVisible, setScriptModalVisible] = useState(false)
+  const [selectedScript, setSelectedScript] = useState(null)
+  
   // 在线代理数据
   const [onlineAgents, setOnlineAgents] = useState([])
   const [agentGroups, setAgentGroups] = useState([])
@@ -60,14 +68,29 @@ const Tasks = () => {
   // 脚本相关状态
   const [scriptSource, setScriptSource] = useState('custom') // custom or existing
   const [availableScripts, setAvailableScripts] = useState([])
+  
+  // 任务类型和文件传输相关状态
+  const [taskType, setTaskType] = useState('SCRIPT')
+  const [availableFiles, setAvailableFiles] = useState([])
+  const [activeTaskTab, setActiveTaskTab] = useState('script') // 任务创建TAB状态
 
-  // 获取可用脚本列表（从scriptService获取）
+  // 获取可用脚本列表
   const fetchAvailableScripts = async () => {
     try {
       const scripts = await scriptService.getScriptsForTask()
       setAvailableScripts(scripts)
     } catch (error) {
       console.error('获取脚本列表失败:', error)
+    }
+  }
+
+  // 获取可用文件列表
+  const fetchAvailableFiles = async () => {
+    try {
+      const response = await api.get('/web/files/for-task')
+      setAvailableFiles(response || [])
+    } catch (error) {
+      console.error('获取文件列表失败:', error)
     }
   }
 
@@ -85,18 +108,11 @@ const Tasks = () => {
   // 获取在线代理列表
   const fetchOnlineAgents = async () => {
     try {
-      console.log('开始获取代理列表...')
       const response = await api.get('/web/agents')
-      console.log('代理列表API响应:', response)
       const agents = response.content || response || []
-      console.log('解析后的代理列表:', agents)
       setOnlineAgents(agents)
-      if (agents.length === 0) {
-        console.warn('警告：代理列表为空')
-      }
     } catch (error) {
       console.error('获取代理列表失败:', error)
-      console.error('错误详情:', error.response)
       message.error('获取代理列表失败: ' + (error.response?.data?.message || error.message))
     }
   }
@@ -115,6 +131,7 @@ const Tasks = () => {
   const handleGroupChange = async (groupId) => {
     if (!groupId) {
       form.setFieldsValue({ selectedAgents: [] })
+      fileTransferForm.setFieldsValue({ selectedAgents: [] })
       return
     }
     
@@ -122,6 +139,7 @@ const Tasks = () => {
       const response = await api.get(`/web/agent-groups/${groupId}`)
       const agentIds = response.agents?.map(a => a.agentId) || []
       form.setFieldsValue({ selectedAgents: agentIds })
+      fileTransferForm.setFieldsValue({ selectedAgents: agentIds })
     } catch (error) {
       message.error('获取分组成员失败')
     }
@@ -136,9 +154,12 @@ const Tasks = () => {
         size: pageSize
       }
       
-      // 添加状态筛选参数
       if (statusFilter && statusFilter !== 'all') {
         params.status = statusFilter
+      }
+      
+      if (taskTypeFilter && taskTypeFilter !== 'all') {
+        params.taskType = taskTypeFilter
       }
       
       const response = await api.get('/web/tasks', { params })
@@ -164,8 +185,8 @@ const Tasks = () => {
     fetchOnlineAgents()
     fetchAgentGroups()
     fetchAvailableScripts()
+    fetchAvailableFiles()
     
-    // 监听脚本数据变化
     const handleScriptsChange = () => {
       fetchAvailableScripts()
     }
@@ -175,7 +196,30 @@ const Tasks = () => {
     return () => {
       scriptService.removeListener(handleScriptsChange)
     }
-  }, [currentPage, pageSize, statusFilter])
+  }, [currentPage, pageSize, statusFilter, taskTypeFilter])
+
+  // 处理URL参数，自动打开任务详情
+  useEffect(() => {
+    if (tasks.length === 0) return // 等待任务列表加载完成
+    
+    // 从标准 URL 查询参数获取
+    const urlParams = new URLSearchParams(window.location.search)
+    const autoOpen = urlParams.get('autoOpen')
+    const taskName = urlParams.get('taskName')
+    const taskId = urlParams.get('taskId')
+    
+    if (autoOpen === 'true' && taskName) {
+      // 根据任务名查找任务
+      const task = tasks.find(t => t.taskName === taskName)
+      if (task) {
+        handleViewDetail(task)
+        // 清除URL参数，避免重复打开
+        window.history.replaceState({}, '', window.location.pathname)
+      } else {
+        message.info(`正在查找任务: ${taskName}，请稍候...`)
+      }
+    }
+  }, [tasks]) // 依赖tasks数组，当任务列表更新时执行
 
   // 自动刷新日志
   useEffect(() => {
@@ -196,7 +240,6 @@ const Tasks = () => {
       }
     }
   }, [autoRefreshLogs, logModalVisible, selectedExecution])
-
   // 辅助函数
   const getTaskStatusColor = (status) => {
     const map = {
@@ -276,38 +319,60 @@ const Tasks = () => {
       return `${seconds}s`
     }
   }
-
-  // 创建多代理任务
+  // 创建任务
   const handleCreateTask = async (values) => {
     try {
-      // 如果values是事件对象（从按钮点击触发），需要先验证表单
-      if (values && values.preventDefault) {
-        values = await form.validateFields()
+      // 根据当前TAB获取正确的表单值
+      let formValues = values
+      if (!formValues || Object.keys(formValues).length === 0) {
+        if (activeTaskTab === 'script') {
+          formValues = await form.validateFields()
+        } else {
+          formValues = await fileTransferForm.validateFields()
+        }
       }
       
-      // 验证必填字段
-      if (!values.selectedAgents || values.selectedAgents.length === 0) {
+      if (!formValues.selectedAgents || formValues.selectedAgents.length === 0) {
         message.error('请选择至少一个客户端')
         return
       }
       
-      const taskSpec = {
-        scriptLang: values.scriptLang || 'shell',
-        scriptContent: values.scriptContent,
-        timeoutSec: values.timeoutSec || 300
+      const currentTaskType = activeTaskTab === 'file-transfer' ? 'FILE_TRANSFER' : 'SCRIPT'
+      
+      if (currentTaskType === 'FILE_TRANSFER') {
+        const fileTransferRequest = {
+          agentIds: formValues.selectedAgents,
+          taskName: formValues.taskName,
+          fileId: formValues.fileId,
+          targetPath: formValues.targetPath,
+          timeoutSec: formValues.timeoutSec || 300,
+          overwriteExisting: formValues.overwriteExisting || false,
+          verifyChecksum: formValues.verifyChecksum !== false
+        }
+        
+        await api.post('/web/tasks/file-transfer/create', fileTransferRequest)
+        message.success('文件传输任务创建成功')
+      } else {
+        const taskSpec = {
+          scriptLang: formValues.scriptLang || 'shell',
+          scriptContent: formValues.scriptContent,
+          timeoutSec: formValues.timeoutSec || 300
+        }
+        
+        const params = new URLSearchParams()
+        formValues.selectedAgents.forEach(id => params.append('agentIds', id))
+        params.append('taskName', formValues.taskName)
+        const autoStart = formValues.autoStart === undefined ? true : formValues.autoStart
+        params.append('autoStart', autoStart)
+        
+        await api.post(`/web/tasks/create?${params.toString()}`, taskSpec)
+        message.success(autoStart ? '任务创建成功' : '任务创建成功（草稿状态）')
       }
       
-      const params = new URLSearchParams()
-      values.selectedAgents.forEach(id => params.append('agentIds', id))
-      params.append('taskName', values.taskName)
-      // 修复：正确传递autoStart值，如果未定义则默认为true
-      const autoStart = values.autoStart === undefined ? true : values.autoStart
-      params.append('autoStart', autoStart)
-      
-      await api.post(`/web/tasks/create?${params.toString()}`, taskSpec)
-      message.success(autoStart ? '任务创建成功' : '任务创建成功（草稿状态）')
       setCreateModalVisible(false)
       form.resetFields()
+      fileTransferForm.resetFields()
+      setActiveTaskTab('script')
       fetchTasks()
     } catch (error) {
       console.error('创建任务失败:', error)
@@ -331,12 +396,17 @@ const Tasks = () => {
       setDetailLoading(false)
     }
   }
-
   // 查看执行实例日志
   const handleViewLog = async (execution) => {
     setSelectedExecution(execution)
     setLogModalVisible(true)
     await refreshLogs(execution)
+  }
+
+  // 查看脚本内容
+  const handleViewScript = (task) => {
+    setSelectedScript(task)
+    setScriptModalVisible(true)
   }
 
   // 刷新日志
@@ -399,30 +469,6 @@ const Tasks = () => {
       message.error(`下载日志失败: ${error.message}`)
     }
   }
-
-  // 取消任务（取消所有执行实例）
-  const handleCancelTask = async (task) => {
-    Modal.confirm({
-      title: '确认取消',
-      content: `确定要取消任务"${task.taskName || task.taskId}"吗？这将取消所有未完成的执行实例。`,
-      okText: '确定',
-      cancelText: '取消',
-      async onOk() {
-        try {
-          await api.post(`/web/tasks/${task.taskId}/cancel`)
-          message.success('任务已取消')
-          fetchTasks()
-          if (detailModalVisible && selectedTask?.taskId === task.taskId) {
-            handleViewDetail(task)
-          }
-        } catch (error) {
-          console.error('取消任务失败:', error)
-          message.error('取消任务失败')
-        }
-      }
-    })
-  }
-
   // 取消单个执行实例
   const handleCancelExecution = async (execution) => {
     Modal.confirm({
@@ -494,7 +540,6 @@ const Tasks = () => {
       cancelText: '取消',
       async onOk() {
         try {
-          // 不传递agentIds参数，使用任务创建时保存的代理列表
           const response = await api.post(`/web/tasks/${task.taskId}/start`)
           message.success(`任务已启动，创建了${response.executionCount}个执行实例`)
           fetchTasks()
@@ -509,7 +554,6 @@ const Tasks = () => {
       }
     })
   }
-
   // 停止任务
   const handleStopTask = async (task) => {
     Modal.confirm({
@@ -536,21 +580,29 @@ const Tasks = () => {
   // 任务表格列定义
   const columns = [
     {
-      title: '任务信息',
-      key: 'info',
-      width: 200,
+      title: '任务名称',
+      key: 'taskName',
+      width: 160,
       render: (_, record) => (
-        <div>
-          <Text strong className="block">{record.taskName || '未命名任务'}</Text>
-          <Text code className="text-xs text-gray-500">{record.taskId}</Text>
-        </div>
+        <Text strong>{record.taskName || '未命名任务'}</Text>
       ),
     },
     {
-      title: '任务状态',
+      title: '类型',
+      dataIndex: 'taskType',
+      key: 'taskType',
+      width: 80,
+      render: (taskType) => (
+        <Tag color={taskType === 'FILE_TRANSFER' ? 'blue' : 'purple'}>
+          {taskType === 'FILE_TRANSFER' ? '文件传输' : '脚本执行'}
+        </Tag>
+      ),
+    },
+    {
+      title: '状态',
       dataIndex: 'taskStatus',
       key: 'taskStatus',
-      width: 120,
+      width: 90,
       render: (status) => {
         const statusIcons = {
           'DRAFT': <FileTextOutlined />,
@@ -570,24 +622,24 @@ const Tasks = () => {
       },
     },
     {
-      title: '目标节点',
+      title: '节点数',
       dataIndex: 'targetAgentCount',
       key: 'targetAgentCount',
-      width: 120,
+      width: 80,
       render: (count) => (
         <Tag color="blue" icon={<TeamOutlined />}>
-          {count || 0} 个节点
+          {count || 0} 个
         </Tag>
       ),
     },
     {
-      title: '执行进度',
+      title: '进度',
       key: 'progress',
-      width: 150,
+      width: 120,
       render: (_, record) => (
         <div>
           <Text className="text-sm">
-            {record.completedExecutions || 0}/{record.targetAgentCount || 0} 已完成
+            {record.completedExecutions || 0}/{record.targetAgentCount || 0}
           </Text>
           <Progress 
             percent={record.targetAgentCount > 0 
@@ -601,9 +653,9 @@ const Tasks = () => {
       ),
     },
     {
-      title: '执行统计',
+      title: '统计',
       key: 'stats',
-      width: 200,
+      width: 140,
       render: (_, record) => (
         <Space size="small" wrap>
           {record.successCount > 0 && <Tag color="success">成功: {record.successCount}</Tag>}
@@ -614,51 +666,57 @@ const Tasks = () => {
       ),
     },
     {
-      title: '脚本类型',
+      title: '脚本',
       dataIndex: 'scriptLang',
       key: 'scriptLang',
-      width: 100,
-      render: (lang) => <Tag color="purple">{lang || 'shell'}</Tag>,
+      width: 80,
+      render: (lang, record) => {
+        // 文件传输任务不显示脚本类型
+        if (record.taskType === 'FILE_TRANSFER') {
+          return '-'
+        }
+        return <Tag color="purple">{lang || 'shell'}</Tag>
+      },
     },
     {
       title: '创建者',
       dataIndex: 'createdBy',
       key: 'createdBy',
-      width: 100,
+      width: 80,
       render: (createdBy) => <Text>{createdBy || 'admin'}</Text>,
     },
     {
-      title: '执行次数',
+      title: '次数',
       dataIndex: 'executionCount',
       key: 'executionCount',
-      width: 100,
+      width: 80,
       render: (count) => <Tag color="cyan">第 {count || 1} 次</Tag>,
     },
     {
       title: '开始时间',
       dataIndex: 'startedAt',
       key: 'startedAt',
-      width: 160,
+      width: 120,
       render: (time) => <Text className="text-xs">{time ? formatDateTime(time) : '-'}</Text>,
     },
     {
       title: '结束时间',
       dataIndex: 'finishedAt',
       key: 'finishedAt',
-      width: 160,
+      width: 120,
       render: (time) => <Text className="text-xs">{time ? formatDateTime(time) : '-'}</Text>,
     },
     {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 160,
+      width: 120,
       render: (time) => <Text className="text-xs">{formatDateTime(time)}</Text>,
     },
     {
       title: '操作',
       key: 'actions',
-      width: 240,
+      width: 180,
       fixed: 'right',
       render: (_, record) => (
         <Space size="small" wrap>
@@ -671,7 +729,6 @@ const Tasks = () => {
             详情
           </Button>
           
-          {/* 草稿状态：显示启动按钮 */}
           {record.taskStatus === 'DRAFT' && (
             <Button 
               type="link" 
@@ -683,7 +740,6 @@ const Tasks = () => {
             </Button>
           )}
           
-          {/* 待执行或执行中：显示停止按钮 */}
           {(record.taskStatus === 'PENDING' || record.taskStatus === 'RUNNING') && (
             <Button 
               type="link" 
@@ -696,7 +752,6 @@ const Tasks = () => {
             </Button>
           )}
           
-          {/* 失败、部分成功、已停止、已取消：显示重启按钮（成功的任务不能重启）*/}
           {(record.taskStatus === 'FAILED' || 
             record.taskStatus === 'PARTIAL_SUCCESS' || record.taskStatus === 'STOPPED' ||
             record.taskStatus === 'CANCELLED') && (
@@ -733,7 +788,10 @@ const Tasks = () => {
             icon={<PlusOutlined />}
             onClick={() => {
               fetchOnlineAgents()
-              setScriptSource('custom') // 重置脚本来源
+              setScriptSource('custom')
+              setActiveTaskTab('script')
+              form.resetFields()
+              fileTransferForm.resetFields()
               setCreateModalVisible(true)
             }}
             className="shadow-lg"
@@ -749,10 +807,8 @@ const Tasks = () => {
           </Button>
         </Space>
       </div>
-
       {/* 任务列表 */}
       <Card className="shadow-lg">
-        {/* 工具栏 */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
           <Space wrap>
             <Search
@@ -765,9 +821,9 @@ const Tasks = () => {
               value={statusFilter}
               onChange={(value) => {
                 setStatusFilter(value)
-                setCurrentPage(1) // 重置到第一页
+                setCurrentPage(1)
               }}
-              style={{ width: 150 }}
+              style={{ width: 120 }}
             >
               <Option value="all">全部状态</Option>
               <Option value="DRAFT">草稿</Option>
@@ -778,6 +834,18 @@ const Tasks = () => {
               <Option value="PARTIAL_SUCCESS">部分成功</Option>
               <Option value="STOPPED">已停止</Option>
               <Option value="CANCELLED">已取消</Option>
+            </Select>
+            <Select
+              value={taskTypeFilter}
+              onChange={(value) => {
+                setTaskTypeFilter(value)
+                setCurrentPage(1)
+              }}
+              style={{ width: 120 }}
+            >
+              <Option value="all">全部类型</Option>
+              <Option value="SCRIPT">脚本执行</Option>
+              <Option value="FILE_TRANSFER">文件传输</Option>
             </Select>
           </Space>
           
@@ -824,92 +892,89 @@ const Tasks = () => {
             }
           }}
           className="rounded-lg overflow-hidden"
-          scroll={{ x: 1600 }}
+          scroll={{ x: 1420 }}
         />
       </Card>
-
       {/* 创建任务模态框 */}
       <Modal
-        title="创建多代理任务"
+        title="创建新任务"
         open={createModalVisible}
-        onCancel={() => setCreateModalVisible(false)}
+        onCancel={() => {
+          setCreateModalVisible(false)
+          form.resetFields()
+          fileTransferForm.resetFields()
+          setActiveTaskTab('script')
+        }}
         footer={[
-          <Button key="cancel" onClick={() => setCreateModalVisible(false)}>
+          <Button key="cancel" onClick={() => {
+            setCreateModalVisible(false)
+            form.resetFields()
+            fileTransferForm.resetFields()
+            setActiveTaskTab('script')
+          }}>
             取消
           </Button>,
-          <Button key="submit" type="primary" onClick={handleCreateTask}>
-            创建任务
+          <Button key="submit" type="primary" onClick={() => {
+            if (activeTaskTab === 'script') {
+              form.submit()
+            } else {
+              fileTransferForm.submit()
+            }
+          }}>
+            {activeTaskTab === 'script' ? '创建脚本任务' : '创建文件传输任务'}
           </Button>
         ]}
         width={800}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateTask}
+        <Tabs 
+          activeKey={activeTaskTab} 
+          onChange={setActiveTaskTab} 
           className="mt-4"
-          initialValues={{
-            timeoutSec: 300,
-            scriptLang: 'shell',
-            taskName: `任务_${new Date().toLocaleString('zh-CN', { 
-              year: 'numeric', 
-              month: '2-digit', 
-              day: '2-digit', 
-              hour: '2-digit', 
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: false 
-            }).replace(/\//g, '').replace(/:/g, '').replace(/\s/g, '_')}`
-          }}
-        >
-          {/* 基本信息 */}
-          <div className="mb-6">
-            <div className="flex items-center mb-3">
-              <div className="w-1 h-5 bg-blue-500 mr-2"></div>
-              <Text strong className="text-base">基本信息</Text>
-            </div>
-            <div className="pl-3 space-y-4">
-              <Row gutter={16}>
-                <Col span={24}>
-                  <Form.Item
-                    name="taskName"
-                    label="任务名称"
-                    rules={[{ required: true, message: '请输入任务名称' }]}
-                  >
-                    <Input placeholder="输入任务名称（必填）" maxLength={100} showCount />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={24}>
-                  <Form.Item
-                    name="taskDescription"
-                    label="任务描述"
-                  >
-                    <TextArea 
-                      rows={2} 
-                      placeholder="输入任务描述（可选）"
-                      maxLength={500}
-                      showCount
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </div>
-          </div>
+          items={[
+            {
+              key: 'script',
+              label: <span><CodeOutlined />脚本执行</span>,
+              children: (
+                <Form
+                  form={form}
+                  layout="vertical"
+                  onFinish={handleCreateTask}
+                  initialValues={{
+                    timeoutSec: 300,
+                    scriptLang: 'shell',
+                    autoStart: true,
+                    taskName: `脚本任务_${new Date().toLocaleString('zh-CN', { 
+                      year: 'numeric', 
+                      month: '2-digit', 
+                      day: '2-digit', 
+                      hour: '2-digit', 
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false 
+                    }).replace(/\//g, '').replace(/:/g, '').replace(/\s/g, '_')}`
+                  }}
+                >
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  name="taskName"
+                  label="任务名称"
+                  rules={[{ required: true, message: '请输入任务名称' }]}
+                >
+                  <Input placeholder="输入任务名称" />
+                </Form.Item>
+                
+                <Form.Item
+                  name="timeoutSec"
+                  label="超时时间（秒）"
+                >
+                  <Input type="number" min={1} placeholder="默认300秒" />
+                </Form.Item>
+              </div>
 
-          {/* 执行客户端 */}
-          <div className="mb-6">
-            <div className="flex items-center mb-3">
-              <div className="w-1 h-5 bg-green-500 mr-2"></div>
-              <Text strong className="text-base">执行客户端</Text>
-            </div>
-            <div className="pl-3 space-y-4">
               <Form.Item label="选择方式">
                 <Radio.Group 
                   value={selectionMode} 
                   onChange={(e) => setSelectionMode(e.target.value)}
-                  style={{ display: 'inline-flex', gap: '16px' }}
                 >
                   <Radio value="manual">手动选择</Radio>
                   <Radio value="group">按分组选择</Radio>
@@ -938,16 +1003,7 @@ const Tasks = () => {
               
               <Form.Item
                 name="selectedAgents"
-                label={
-                  <span>
-                    目标节点（可多选）
-                    {onlineAgents.length > 0 && (
-                      <Text type="secondary" className="ml-2 text-xs">
-                        (共{onlineAgents.length}个节点)
-                      </Text>
-                    )}
-                  </span>
-                }
+                label="目标节点（可多选）"
                 rules={[{ required: true, message: '请选择至少一个执行节点' }]}
               >
                 <Select
@@ -969,21 +1025,11 @@ const Tasks = () => {
                   ))}
                 </Select>
               </Form.Item>
-            </div>
-          </div>
 
-          {/* 脚本内容 */}
-          <div className="mb-6">
-            <div className="flex items-center mb-3">
-              <div className="w-1 h-5 bg-purple-500 mr-2"></div>
-              <Text strong className="text-base">脚本内容</Text>
-            </div>
-            <div className="pl-3 space-y-4">
               <Form.Item label="脚本来源">
                 <Radio.Group 
                   value={scriptSource} 
                   onChange={(e) => setScriptSource(e.target.value)}
-                  style={{ display: 'inline-flex', gap: '16px' }}
                 >
                   <Radio value="custom">自定义输入</Radio>
                   <Radio value="existing">选择已有脚本</Radio>
@@ -1015,21 +1061,17 @@ const Tasks = () => {
                 </Form.Item>
               )}
               
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="scriptLang"
-                    label="脚本类型"
-                    rules={[{ required: true, message: '请选择脚本类型' }]}
-                  >
-                    <Select placeholder="选择脚本类型" disabled={scriptSource === 'existing'}>
-                      <Option value="shell">Shell</Option>
-                      <Option value="python">Python</Option>
-                      <Option value="javascript">JavaScript</Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              </Row>
+              <Form.Item
+                name="scriptLang"
+                label="脚本类型"
+                rules={[{ required: true, message: '请选择脚本类型' }]}
+              >
+                <Select placeholder="选择脚本类型" disabled={scriptSource === 'existing'}>
+                  <Option value="shell">Shell</Option>
+                  <Option value="python">Python</Option>
+                  <Option value="javascript">JavaScript</Option>
+                </Select>
+              </Form.Item>
               
               <Form.Item
                 name="scriptContent"
@@ -1037,60 +1079,171 @@ const Tasks = () => {
                 rules={[{ required: true, message: '请输入脚本内容' }]}
               >
                 <TextArea 
-                  rows={8} 
+                  rows={6} 
                   placeholder="输入要执行的脚本内容..."
-                  style={{ fontFamily: 'monospace' }}
+                  className="font-mono"
                   disabled={scriptSource === 'existing'}
                 />
               </Form.Item>
-              {scriptSource === 'existing' && (
-                <div className="text-xs text-gray-500 -mt-3 mb-2">
-                  已选择脚本内容为只读，如需修改请切换到"自定义输入"
-                </div>
+
+              <Form.Item
+                name="autoStart"
+                label="启动选项"
+                valuePropName="checked"
+              >
+                <Switch 
+                  checkedChildren="立即启动" 
+                  unCheckedChildren="保存为草稿"
+                />
+              </Form.Item>
+                </Form>
+              )
+            },
+            {
+              key: 'file-transfer',
+              label: <span><CloudDownloadOutlined />文件传输</span>,
+              children: (
+                <Form
+                  form={fileTransferForm}
+                  layout="vertical"
+                  onFinish={handleCreateTask}
+                  initialValues={{
+                    timeoutSec: 300,
+                    overwriteExisting: false,
+                    verifyChecksum: true,
+                    taskName: `文件传输任务_${new Date().toLocaleString('zh-CN', { 
+                      year: 'numeric', 
+                      month: '2-digit', 
+                      day: '2-digit', 
+                      hour: '2-digit', 
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false 
+                    }).replace(/\//g, '').replace(/:/g, '').replace(/\s/g, '_')}`
+                  }}
+                >
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  name="taskName"
+                  label="任务名称"
+                  rules={[{ required: true, message: '请输入任务名称' }]}
+                >
+                  <Input placeholder="输入任务名称" />
+                </Form.Item>
+                
+                <Form.Item
+                  name="timeoutSec"
+                  label="超时时间（秒）"
+                >
+                  <Input type="number" min={1} placeholder="默认300秒" />
+                </Form.Item>
+              </div>
+
+              <Form.Item label="选择方式">
+                <Radio.Group 
+                  value={selectionMode} 
+                  onChange={(e) => setSelectionMode(e.target.value)}
+                >
+                  <Radio value="manual">手动选择</Radio>
+                  <Radio value="group">按分组选择</Radio>
+                </Radio.Group>
+              </Form.Item>
+
+              {selectionMode === 'group' && (
+                <Form.Item name="groupId" label="选择分组">
+                  <Select
+                    placeholder="选择客户端分组"
+                    onChange={handleGroupChange}
+                    allowClear
+                  >
+                    {agentGroups.map(group => (
+                      <Option key={group.id} value={group.id}>
+                        <Space>
+                          <TeamOutlined />
+                          {group.name}
+                          <Tag color="blue">{group.agentCount}个客户端</Tag>
+                        </Space>
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
               )}
-            </div>
-          </div>
+              
+              <Form.Item
+                name="selectedAgents"
+                label="目标节点（可多选）"
+                rules={[{ required: true, message: '请选择至少一个执行节点' }]}
+              >
+                <Select
+                  mode="multiple"
+                  placeholder={onlineAgents.length === 0 ? '正在加载节点列表...' : '选择执行节点（可多选）'}
+                  notFoundContent={onlineAgents.length === 0 ? '暂无可用节点' : '未找到匹配节点'}
+                  disabled={selectionMode === 'group'}
+                  maxTagCount="responsive"
+                >
+                  {onlineAgents.map(agent => (
+                    <Option key={agent.agentId} value={agent.agentId}>
+                      <Space>
+                        <Tag color={agent.status === 'ONLINE' ? 'green' : 'gray'} size="small">
+                          {agent.status === 'ONLINE' ? '在线' : '离线'}
+                        </Tag>
+                        {agent.hostname}
+                      </Space>
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  name="fileId"
+                  label="选择文件"
+                  rules={[{ required: true, message: '请选择要传输的文件' }]}
+                >
+                  <Select placeholder="选择要传输的文件">
+                    {availableFiles.map(file => (
+                      <Option key={file.fileId} value={file.fileId}>
+                        <Space>
+                          <Tag color="blue">{file.category}</Tag>
+                          {file.name}
+                          <Text type="secondary">({file.sizeDisplay})</Text>
+                        </Space>
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+                
+                <Form.Item
+                  name="targetPath"
+                  label="目标路径"
+                  rules={[{ required: true, message: '请输入目标路径' }]}
+                >
+                  <Input placeholder="例如: /tmp/myfile.txt" />
+                </Form.Item>
+              </div>
 
-          {/* 执行参数 */}
-          <div className="mb-6">
-            <div className="flex items-center mb-3">
-              <div className="w-1 h-5 bg-orange-500 mr-2"></div>
-              <Text strong className="text-base">执行参数</Text>
-            </div>
-            <div className="pl-3 space-y-4">
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="timeoutSec"
-                    label="超时时间（秒）"
-                  >
-                    <Input type="number" min={1} placeholder="默认300秒" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="autoStart"
-                    label="启动选项"
-                    valuePropName="checked"
-                    initialValue={true}
-                  >
-                    <div>
-                      <Switch 
-                        checkedChildren="立即启动" 
-                        unCheckedChildren="保存为草稿"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        取消勾选后，任务将保存为草稿
-                      </div>
-                    </div>
-                  </Form.Item>
-                </Col>
-              </Row>
-            </div>
-          </div>
-        </Form>
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  name="overwriteExisting"
+                  label="覆盖选项"
+                  valuePropName="checked"
+                >
+                  <Switch checkedChildren="覆盖已存在文件" unCheckedChildren="跳过已存在文件" />
+                </Form.Item>
+                
+                <Form.Item
+                  name="verifyChecksum"
+                  label="校验选项"
+                  valuePropName="checked"
+                >
+                  <Switch checkedChildren="验证文件完整性" unCheckedChildren="跳过完整性验证" />
+                </Form.Item>
+              </div>
+                </Form>
+              )
+            }
+          ]}
+        />
       </Modal>
-
       {/* 任务详情模态框 */}
       <Modal
         title={`任务详情 - ${selectedTask?.taskName || selectedTask?.taskId}`}
@@ -1113,8 +1266,47 @@ const Tasks = () => {
       >
         {selectedTask && (
           <div className="space-y-4">
-            {/* 统计卡片 */}
-            <Card>
+            {/* 任务信息卡片 */}
+            <Card title="任务信息">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <div className="space-y-2">
+                    <div><Text strong>任务名称:</Text> {selectedTask.taskName || '未命名任务'}</div>
+                    <div><Text strong>任务ID:</Text> <Text code>{selectedTask.taskId}</Text></div>
+                    <div><Text strong>任务类型:</Text> 
+                      <Tag color={selectedTask.taskType === 'FILE_TRANSFER' ? 'blue' : 'purple'} className="ml-2">
+                        {selectedTask.taskType === 'FILE_TRANSFER' ? '文件传输' : '脚本执行'}
+                      </Tag>
+                    </div>
+                    <div><Text strong>创建者:</Text> {selectedTask.createdBy || 'admin'}</div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div className="space-y-2">
+                    <div><Text strong>创建时间:</Text> {formatDateTime(selectedTask.createdAt)}</div>
+                    {selectedTask.taskType === 'FILE_TRANSFER' ? (
+                      <>
+                        <div><Text strong>源文件:</Text> {selectedTask.fileName || selectedTask.fileId || '-'}</div>
+                        <div><Text strong>目标路径:</Text> <Text code>{selectedTask.targetPath || '-'}</Text></div>
+                        <div><Text strong>超时时间:</Text> {selectedTask.timeoutSec || 300}秒</div>
+                        <div><Text strong>覆盖模式:</Text> {selectedTask.overwriteExisting ? '覆盖已存在文件' : '跳过已存在文件'}</div>
+                        <div><Text strong>校验模式:</Text> {selectedTask.verifyChecksum !== false ? '验证文件完整性' : '跳过完整性验证'}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div><Text strong>脚本类型:</Text> 
+                          <Tag color="purple" className="ml-2">{selectedTask.scriptLang || 'shell'}</Tag>
+                        </div>
+                        <div><Text strong>超时时间:</Text> {selectedTask.timeoutSec || 300}秒</div>
+                      </>
+                    )}
+                  </div>
+                </Col>
+              </Row>
+            </Card>
+            
+            {/* 执行统计卡片 */}
+            <Card title="执行统计">
               <Row gutter={16}>
                 <Col span={6}>
                   <Statistic
@@ -1163,165 +1355,117 @@ const Tasks = () => {
                   }}
                 />
               </div>
-
-              {/* 任务详细信息 - 两列布局 */}
-              <div className="mt-4">
-                <Text strong className="text-base">任务详细信息</Text>
-                <Row gutter={32} className="mt-3">
-                  <Col span={12}>
-                    <div className="space-y-2">
-                      <div><Text strong>任务状态：</Text>
-                        <Tag color={getTaskStatusColor(selectedTask.taskStatus)}>
-                          {getTaskStatusText(selectedTask.taskStatus)}
-                        </Tag>
-                      </div>
-                      <div><Text strong>脚本类型：</Text><Tag color="purple">{selectedTask.scriptLang}</Tag></div>
-                      <div><Text strong>创建者：</Text>{selectedTask.createdBy}</div>
-                      <div><Text strong>创建时间：</Text>{formatDateTime(selectedTask.createdAt)}</div>
-                      <div><Text strong>执行次数：</Text>
-                        <Tag color="cyan">第 {selectedTask.executionCount || 1} 次</Tag>
-                      </div>
-                    </div>
-                  </Col>
-                  <Col span={12}>
-                    <div className="space-y-2">
-                      <div><Text strong>超时设置：</Text>{selectedTask.timeoutSec}秒</div>
-                      <div><Text strong>开始时间：</Text>
-                        {selectedTask.startedAt ? formatDateTime(selectedTask.startedAt) : '-'}
-                      </div>
-                      <div><Text strong>结束时间：</Text>
-                        {selectedTask.finishedAt ? formatDateTime(selectedTask.finishedAt) : '-'}
-                      </div>
-                      <div><Text strong>执行耗时：</Text>
-                        {selectedTask.startedAt && selectedTask.finishedAt 
-                          ? formatDuration(new Date(selectedTask.finishedAt) - new Date(selectedTask.startedAt))
-                          : selectedTask.startedAt && !selectedTask.finishedAt
-                          ? formatDuration(new Date() - new Date(selectedTask.startedAt)) + ' (进行中)'
-                          : '-'
-                        }
-                      </div>
-                      <div><Text strong>执行进度：</Text>
-                        {selectedTask.executionProgress || '0/0'}
-                      </div>
-                    </div>
-                  </Col>
-                </Row>
-              </div>
             </Card>
-
-            {/* 执行实例列表 */}
-            <Card title="执行实例列表">
+            <Card title="执行实例">
               <Table
                 dataSource={taskExecutions}
                 loading={detailLoading}
                 rowKey="id"
+                size="small"
                 pagination={false}
                 scroll={{ y: 400 }}
-                size="small"
                 columns={[
                   {
-                    title: '执行ID',
-                    dataIndex: 'id',
-                    key: 'id',
-                    width: 80,
-                    render: (id) => <Text code>{id}</Text>
-                  },
-                  {
-                    title: 'Agent',
+                    title: '代理节点',
                     dataIndex: 'agentId',
                     key: 'agentId',
-                    width: 150,
+                    width: 140,
                     render: (agentId) => (
-                      <Tag color="blue" size="small">
-                        {getAgentName(agentId)}
+                      <div>
+                        <Text strong>{getAgentName(agentId)}</Text>
+                        <br />
+                        <Text code className="text-xs">{agentId?.substring(0, 8)}...</Text>
+                      </div>
+                    ),
+                  },
+                  {
+                    title: '执行状态',
+                    dataIndex: 'status',
+                    key: 'status',
+                    width: 80,
+                    render: (status) => (
+                      <Tag color={getExecutionStatusColor(status)}>
+                        {getExecutionStatusText(status)}
                       </Tag>
-                    )
+                    ),
                   },
                   {
                     title: '执行次数',
                     dataIndex: 'executionNumber',
                     key: 'executionNumber',
-                    width: 100,
-                    render: (num) => <Tag color="cyan">第{num}次</Tag>
-                  },
-                  {
-                    title: '状态',
-                    dataIndex: 'status',
-                    key: 'status',
-                    width: 100,
-                    render: (status) => (
-                      <Tag color={getExecutionStatusColor(status)} size="small">
-                        {getExecutionStatusText(status)}
-                      </Tag>
-                    )
+                    width: 70,
+                    render: (num) => <Tag color="cyan">第 {num} 次</Tag>,
                   },
                   {
                     title: '开始时间',
                     dataIndex: 'startedAt',
                     key: 'startedAt',
-                    width: 160,
-                    render: (time) => <Text className="text-xs">{formatDateTime(time)}</Text>
+                    width: 120,
+                    render: (time) => <Text className="text-xs">{formatDateTime(time)}</Text>,
                   },
                   {
-                    title: '完成时间',
+                    title: '结束时间',
                     dataIndex: 'finishedAt',
                     key: 'finishedAt',
-                    width: 160,
-                    render: (time) => <Text className="text-xs">{formatDateTime(time)}</Text>
+                    width: 120,
+                    render: (time) => <Text className="text-xs">{formatDateTime(time)}</Text>,
                   },
                   {
                     title: '耗时',
                     key: 'duration',
-                    width: 100,
+                    width: 80,
                     render: (_, record) => {
                       if (record.startedAt && record.finishedAt) {
                         const duration = new Date(record.finishedAt) - new Date(record.startedAt)
-                        return formatDuration(duration)
+                        return <Text className="text-xs">{formatDuration(duration)}</Text>
                       }
                       return '-'
-                    }
+                    },
                   },
                   {
                     title: '退出码',
                     dataIndex: 'exitCode',
                     key: 'exitCode',
-                    width: 80,
+                    width: 60,
                     render: (code) => {
-                      if (code === null || code === undefined) return <Text type="secondary">-</Text>
-                      return <Tag color={code === 0 ? 'success' : 'error'} size="small">{code}</Tag>
-                    }
+                      if (code === null || code === undefined) return '-'
+                      return (
+                        <Tag color={code === 0 ? 'success' : 'error'}>
+                          {code}
+                        </Tag>
+                      )
+                    },
                   },
                   {
                     title: '操作',
                     key: 'actions',
-                    width: 180,
+                    width: 140,
                     render: (_, record) => (
-                      <Space size="small" wrap>
-                        {record.logFilePath && (
+                      <Space size="small">
+                        <Button 
+                          type="link" 
+                          icon={<EyeOutlined />} 
+                          size="small"
+                          onClick={() => handleViewLog(record)}
+                          disabled={!record.logFilePath}
+                        >
+                          日志
+                        </Button>
+                        {selectedTask?.taskType === 'SCRIPT' && (
                           <Button 
                             type="link" 
+                            icon={<CodeOutlined />} 
                             size="small"
-                            icon={<EyeOutlined />}
-                            onClick={() => handleViewLog(record)}
+                            onClick={() => handleViewScript(selectedTask)}
                           >
-                            日志
+                            脚本
                           </Button>
                         )}
-                        {record.logFilePath && (
+                        {(record.status === 'PENDING' || record.status === 'PULLED' || record.status === 'RUNNING') && (
                           <Button 
                             type="link" 
+                            icon={<StopOutlined />} 
                             size="small"
-                            icon={<DownloadOutlined />}
-                            onClick={() => downloadExecutionLog(record)}
-                          >
-                            下载
-                          </Button>
-                        )}
-                        {(record.status === 'PENDING' || record.status === 'RUNNING' || record.status === 'PULLED') && (
-                          <Button 
-                            type="link" 
-                            size="small"
-                            icon={<StopOutlined />}
                             danger
                             onClick={() => handleCancelExecution(record)}
                           >
@@ -1329,65 +1473,105 @@ const Tasks = () => {
                           </Button>
                         )}
                       </Space>
-                    )
-                  }
+                    ),
+                  },
                 ]}
               />
             </Card>
           </div>
         )}
       </Modal>
-
-      {/* 执行日志模态框 */}
+      {/* 日志查看模态框 */}
       <Modal
-        title={
-          <div className="flex items-center justify-between">
-            <span>执行日志 - 第{selectedExecution?.executionNumber}次 - {getAgentName(selectedExecution?.agentId)}</span>
-            <Space>
-              <Switch 
-                checked={autoRefreshLogs}
-                onChange={setAutoRefreshLogs}
-                checkedChildren="自动刷新"
-                unCheckedChildren="手动刷新"
-              />
-              <Text type="secondary" className="text-sm">
-                共 {logTotalLines} 行
-              </Text>
-            </Space>
-          </div>
-        }
+        title={`执行日志 - ${selectedExecution?.agentId ? getAgentName(selectedExecution.agentId) : ''}`}
         open={logModalVisible}
         onCancel={() => {
           setLogModalVisible(false)
           setAutoRefreshLogs(false)
         }}
         footer={[
-          <Button key="clear" icon={<ClearOutlined />} onClick={clearLogs}>
-            清空显示
-          </Button>,
-          <Button key="refresh" icon={<ReloadOutlined />} onClick={() => refreshLogs()}>
-            刷新日志
-          </Button>,
-          <Button 
-            key="download" 
-            type="primary" 
-            icon={<DownloadOutlined />} 
-            onClick={() => downloadExecutionLog(selectedExecution)}
-          >
-            下载日志
-          </Button>,
-          <Button key="close" onClick={() => {
-            setLogModalVisible(false)
-            setAutoRefreshLogs(false)
-          }}>
+          <div key="controls" className="flex items-center justify-between w-full">
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={autoRefreshLogs}
+                onChange={setAutoRefreshLogs}
+                checkedChildren="自动刷新"
+                unCheckedChildren="手动刷新"
+                size="small"
+              />
+              <Text type="secondary" className="text-xs">
+                {logTotalLines > 0 && `共 ${logTotalLines} 行`}
+              </Text>
+            </div>
+            <Space>
+              <Button 
+                icon={<DownloadOutlined />} 
+                size="small"
+                onClick={() => selectedExecution && downloadExecutionLog(selectedExecution)}
+                disabled={!selectedExecution?.logFilePath}
+              >
+                下载日志
+              </Button>
+              <Button 
+                icon={<ClearOutlined />} 
+                size="small"
+                onClick={clearLogs}
+              >
+                清空显示
+              </Button>
+              <Button 
+                icon={<ReloadOutlined />} 
+                size="small"
+                onClick={() => refreshLogs()}
+              >
+                刷新
+              </Button>
+              <Button onClick={() => {
+                setLogModalVisible(false)
+                setAutoRefreshLogs(false)
+              }}>
+                关闭
+              </Button>
+            </Space>
+          </div>
+        ]}
+        width={1000}
+      >
+        <div className="bg-black text-green-400 p-4 rounded font-mono text-sm max-h-96 overflow-y-auto">
+          <pre className="whitespace-pre-wrap">
+            {logContent || '暂无日志内容'}
+          </pre>
+        </div>
+      </Modal>
+      
+      {/* 脚本内容查看模态框 */}
+      <Modal
+        title={`脚本内容 - ${selectedScript?.taskName || selectedScript?.taskId}`}
+        open={scriptModalVisible}
+        onCancel={() => setScriptModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setScriptModalVisible(false)}>
             关闭
           </Button>
         ]}
-        width={900}
+        width={800}
       >
-        <div className="bg-black text-green-400 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto whitespace-pre-wrap">
-          {logContent || '暂无日志内容'}
-        </div>
+        {selectedScript && (
+          <div className="space-y-4">
+            <div>
+              <Text strong>脚本类型:</Text> 
+              <Tag color="purple" className="ml-2">{selectedScript.scriptLang || 'shell'}</Tag>
+            </div>
+            <div>
+              <Text strong>脚本内容:</Text>
+            </div>
+            <div className="bg-gray-900 text-green-400 p-4 rounded font-mono text-sm max-h-96 overflow-y-auto">
+              <pre className="whitespace-pre-wrap">
+                {selectedScript.scriptContent || '无脚本内容'}
+              </pre>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

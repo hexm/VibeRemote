@@ -3,13 +3,20 @@ package com.example.lightscript.server.web;
 import com.example.lightscript.server.exception.BusinessException;
 import com.example.lightscript.server.exception.ErrorCode;
 import com.example.lightscript.server.model.AgentModels.*;
+import com.example.lightscript.server.model.FileModels;
 import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.TaskService;
+import com.example.lightscript.server.service.FileService;
 import com.example.lightscript.server.entity.TaskLog;
 import javax.validation.Valid;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,10 +27,12 @@ import java.util.stream.Collectors;
 public class AgentController {
 	private final AgentService agentService;
 	private final TaskService taskService;
+	private final FileService fileService;
 
-	public AgentController(AgentService agentService, TaskService taskService) {
+	public AgentController(AgentService agentService, TaskService taskService, FileService fileService) {
 		this.agentService = agentService;
 		this.taskService = taskService;
+		this.fileService = fileService;
 	}
 
 	@PostMapping("/register")
@@ -99,6 +108,46 @@ public class AgentController {
 		Map<String, String> response = new HashMap<>();
 		response.put("taskId", taskId);
 		return ResponseEntity.ok(response);
+	}
+	/**
+	 * Agent下载文件 - 支持流式传输，避免内存溢出
+	 */
+	@GetMapping("/files/{fileId}/download")
+	public ResponseEntity<Resource> downloadFile(
+			@PathVariable String fileId,
+			@RequestParam String agentId,
+			@RequestParam String agentToken) {
+
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+
+		try {
+			// 获取文件信息
+			FileModels.FileDTO fileInfo = fileService.getFileById(fileId);
+			
+			// 获取文件路径
+			String filePath = fileService.getFilePath(fileId);
+			Path path = Paths.get(filePath);
+			
+			if (!Files.exists(path)) {
+				throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在: " + filePath);
+			}
+
+			// 创建文件资源，支持流式传输
+			Resource resource = new FileSystemResource(path);
+
+			return ResponseEntity.ok()
+					.header("Content-Disposition", "attachment; filename=\"" + fileInfo.getOriginalName() + "\"")
+					.header("Content-Type", fileInfo.getFileType() != null ? fileInfo.getFileType() : "application/octet-stream")
+					.header("Content-Length", String.valueOf(fileInfo.getFileSize()))
+					.header("X-File-MD5", fileInfo.getMd5())
+					.header("X-File-SHA256", fileInfo.getSha256())
+					.header("Accept-Ranges", "bytes") // 支持断点续传
+					.body(resource);
+		} catch (Exception e) {
+			throw new BusinessException(ErrorCode.INTERNAL_ERROR, "文件下载失败: " + e.getMessage());
+		}
 	}
 
 	@GetMapping("/tasks/{taskId}/logs")
