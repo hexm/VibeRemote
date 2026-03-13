@@ -10,7 +10,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -18,12 +20,17 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 升级执行器
  * 负责处理Agent升级流程
  */
 class UpgradeExecutor {
+    private static final Logger logger = LoggerFactory.getLogger(UpgradeExecutor.class);
     private static final String UPGRADER_JAR = "upgrader.jar";
     private final UpgradeStatusReporter statusReporter;
     private final TaskStatusMonitor taskStatusMonitor;
@@ -50,8 +57,7 @@ class UpgradeExecutor {
         String toVersion = versionInfo.getVersion();
         boolean forceUpgrade = versionInfo.isForceUpgrade();
         
-        System.out.println("[UpgradeExecutor] Starting upgrade: " + fromVersion + " -> " + toVersion + 
-                          " (force: " + forceUpgrade + ")");
+        logger.info("[UpgradeExecutor] Starting upgrade: {} -> {} (force: {})", fromVersion, toVersion, forceUpgrade);
         
         try {
             // 1. 报告升级开始
@@ -60,7 +66,7 @@ class UpgradeExecutor {
             // 2. 检查升级器是否存在
             if (!Files.exists(Paths.get(UPGRADER_JAR))) {
                 statusReporter.reportUpgradeStatus("FAILED", "Upgrader not found: " + UPGRADER_JAR);
-                System.err.println("[UpgradeExecutor] Upgrader not found: " + UPGRADER_JAR);
+                logger.error("[UpgradeExecutor] Upgrader not found: {}", UPGRADER_JAR);
                 return;
             }
             
@@ -74,19 +80,15 @@ class UpgradeExecutor {
                 return;
             }
             
-            // 5. 启动升级器
+            // 5. 启动升级器（只传递必要参数）
             startUpgrader(newVersionPath);
             
-            // 6. 保存凭证供升级器使用
-            saveCredentialsForUpgrader();
-            
             // 7. 主程序退出
-            System.out.println("[UpgradeExecutor] Upgrade initiated, main process exiting...");
+            logger.info("[UpgradeExecutor] Upgrade initiated, main process exiting...");
             System.exit(0);
             
         } catch (Exception e) {
-            System.err.println("[UpgradeExecutor] Upgrade failed: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("[UpgradeExecutor] Upgrade failed: {}", e.getMessage(), e);
             statusReporter.reportUpgradeStatus("FAILED", e.getMessage());
         }
     }
@@ -105,17 +107,16 @@ class UpgradeExecutor {
         // 普通升级：进入升级状态，等待任务完成
         // 注意：此时Agent状态应该已经设为UPGRADING，不再接收新任务
         
-        System.out.println("[UpgradeExecutor] Entering upgrade waiting state, monitoring task completion...");
+        logger.info("[UpgradeExecutor] Entering upgrade waiting state, monitoring task completion...");
         
         // 启动任务完成监控
         scheduler.scheduleWithFixedDelay(() -> {
             if (canUpgrade()) {
-                System.out.println("[UpgradeExecutor] All tasks completed, starting upgrade now");
+                logger.info("[UpgradeExecutor] All tasks completed, starting upgrade now");
                 executeUpgrade(versionInfo);
                 return; // 停止监控
             } else {
-                System.out.println("[UpgradeExecutor] Still waiting for " + 
-                                 taskStatusMonitor.getRunningTaskCount() + " tasks to complete...");
+                logger.info("[UpgradeExecutor] Still waiting for {} tasks to complete...", taskStatusMonitor.getRunningTaskCount());
             }
         }, 10, 10, TimeUnit.SECONDS); // 每10秒检查一次任务状态
     }
@@ -132,8 +133,8 @@ class UpgradeExecutor {
             String currentDir = System.getProperty("user.dir");
             String downloadPath = currentDir + File.separator + fileName;
             
-            System.out.println("[UpgradeExecutor] Downloading new version from: " + downloadUrl);
-            System.out.println("[UpgradeExecutor] Saving to: " + downloadPath);
+            logger.info("[UpgradeExecutor] Downloading new version from: {}", downloadUrl);
+            logger.info("[UpgradeExecutor] Saving to: {}", downloadPath);
             
             // 使用HTTP客户端下载文件
             try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
@@ -169,13 +170,13 @@ class UpgradeExecutor {
                         }
                     }
                     
-                    System.out.println("[UpgradeExecutor] New version downloaded and verified: " + downloadPath);
+                    logger.info("[UpgradeExecutor] New version downloaded and verified: {}", downloadPath);
                     return downloadPath;
                 }
             }
             
         } catch (Exception e) {
-            System.err.println("[UpgradeExecutor] Failed to download new version: " + e.getMessage());
+            logger.error("[UpgradeExecutor] Failed to download new version: {}", e.getMessage());
             return null;
         }
     }
@@ -202,31 +203,87 @@ class UpgradeExecutor {
     }
     
     /**
-     * 启动升级器
+     * 启动升级器（只传递新版本文件名）
      */
     private void startUpgrader(String newVersionPath) throws IOException {
-        String agentHome = System.getProperty("user.dir");
-        Long upgradeLogId = statusReporter.getCurrentUpgradeLogId();
-        
-        if (upgradeLogId == null) {
-            throw new RuntimeException("No upgrade log ID available");
-        }
+        // 从完整路径中提取文件名
+        String newVersionFilename = Paths.get(newVersionPath).getFileName().toString();
         
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command("java", "-jar", UPGRADER_JAR, 
-                  newVersionPath, agentHome, 
-                  upgradeLogId.toString(),
-                  baseUrl);
-        pb.directory(new File(agentHome));
+        // 只传递1个参数：新版本文件名
+        pb.command("java", "-jar", UPGRADER_JAR, newVersionFilename);
+        pb.directory(new File(System.getProperty("user.dir")));
         
         // 重定向输出到日志文件
         File logsDir = new File("logs");
-        logsDir.mkdirs(); // 确保logs目录存在
+        logsDir.mkdirs();
         pb.redirectOutput(new File(logsDir, "upgrade.log"));
         pb.redirectError(new File(logsDir, "upgrade-error.log"));
         
         Process process = pb.start();
-        System.out.println("[UpgradeExecutor] Upgrader started");
+        logger.info("[UpgradeExecutor] Upgrader started with parameter: newVersionFile={}", newVersionFilename);
+    }
+    
+    /**
+     * 获取当前主程序JAR文件名
+     */
+    private String getMainJarName() {
+        // 方法1: 从系统属性获取（如果启动时设置了）
+        String jarName = System.getProperty("agent.jar.name");
+        if (jarName != null && !jarName.isEmpty()) {
+            return jarName;
+        }
+        
+        // 方法2: 从当前运行的JAR路径推断
+        try {
+            String jarPath = AgentMain.class.getProtectionDomain()
+                .getCodeSource().getLocation().getPath();
+            if (jarPath.endsWith(".jar")) {
+                return Paths.get(jarPath).getFileName().toString();
+            }
+        } catch (Exception e) {
+            logger.debug("[UpgradeExecutor] Failed to get JAR name from code source: {}", e.getMessage());
+        }
+        
+        // 方法3: 检查常见的JAR文件名
+        String[] commonNames = {"agent.jar", "lightscript-agent.jar", "app.jar"};
+        String currentDir = System.getProperty("user.dir");
+        for (String name : commonNames) {
+            if (Files.exists(Paths.get(currentDir, name))) {
+                logger.info("[UpgradeExecutor] Found main JAR: {}", name);
+                return name;
+            }
+        }
+        
+        // 默认值
+        logger.warn("[UpgradeExecutor] Could not determine main JAR name, using default: agent.jar");
+        return "agent.jar";
+    }
+    
+    /**
+     * 保存升级上下文信息
+     */
+    private void saveUpgradeContext(String fromVersion, String toVersion, boolean forceUpgrade) {
+        try {
+            Map<String, Object> context = new HashMap<>();
+            context.put("fromVersion", fromVersion);
+            context.put("toVersion", toVersion);
+            context.put("forceUpgrade", forceUpgrade);
+            context.put("agentId", agentId);
+            context.put("agentToken", agentToken);
+            context.put("serverUrl", baseUrl);
+            context.put("upgradeLogId", statusReporter.getCurrentUpgradeLogId());
+            context.put("timestamp", System.currentTimeMillis());
+            
+            // 保存为JSON文件
+            Path contextFile = Paths.get(".upgrade-context.json");
+            String json = new ObjectMapper().writeValueAsString(context);
+            Files.write(contextFile, json.getBytes(StandardCharsets.UTF_8));
+            
+            logger.info("[UpgradeExecutor] Upgrade context saved");
+        } catch (Exception e) {
+            logger.error("[UpgradeExecutor] Failed to save upgrade context: {}", e.getMessage());
+        }
     }
     
     /**
@@ -237,16 +294,16 @@ class UpgradeExecutor {
     }
     
     /**
-     * 保存凭证供升级器使用
+     * 保存凭证供升级器使用（保持兼容性）
      */
     private void saveCredentialsForUpgrader() {
         try {
             Path credentialsFile = Paths.get(".agent-credentials");
             List<String> lines = Arrays.asList(agentId, agentToken);
             Files.write(credentialsFile, lines, StandardCharsets.UTF_8);
-            System.out.println("[UpgradeExecutor] Credentials saved for upgrader");
+            logger.info("[UpgradeExecutor] Credentials saved for upgrader");
         } catch (Exception e) {
-            System.err.println("[UpgradeExecutor] Failed to save credentials: " + e.getMessage());
+            logger.error("[UpgradeExecutor] Failed to save credentials: {}", e.getMessage());
         }
     }
     public static class VersionInfo {

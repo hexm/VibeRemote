@@ -431,15 +431,23 @@ public class AgentMain {
     
     /**
      * 获取文件锁，确保单实例运行
+     * 使用工作目录路径哈希作为锁文件名，支持多项目并行运行
      * @return true 如果成功获取锁，false 如果已有其他实例在运行
      */
     private static boolean acquireLock() {
         try {
-            // 锁文件位置：用户目录/.lightscript/.agent.lock
+            // 获取当前工作目录的绝对路径
+            String workingDir = System.getProperty("user.dir");
+            
+            // 生成基于工作目录的唯一标识符
+            String dirHash = Integer.toHexString(workingDir.hashCode());
+            String lockFileName = ".agent-" + dirHash + ".lock";
+            
+            // 锁文件位置：用户目录/.lightscript/下，使用目录哈希命名
             String userHome = System.getProperty("user.home");
             Path lockDir = Paths.get(userHome, ".lightscript");
             Files.createDirectories(lockDir);
-            Path lockFile = lockDir.resolve(".agent.lock");
+            Path lockFile = lockDir.resolve(lockFileName);
             
             // 打开文件通道（读写模式）
             lockChannel = FileChannel.open(lockFile, 
@@ -458,13 +466,15 @@ public class AgentMain {
             
             // 写入当前进程信息（用于调试）
             lockChannel.truncate(0);
-            String lockInfo = String.format("PID: %s, Started: %s", 
+            String lockInfo = String.format("PID: %s, Started: %s, WorkingDir: %s", 
                 ManagementFactory.getRuntimeMXBean().getName(),
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                workingDir
             );
             lockChannel.write(ByteBuffer.wrap(lockInfo.getBytes()));
             
             System.out.println("Instance lock acquired: " + lockFile);
+            System.out.println("Working directory: " + workingDir);
             return true;
             
         } catch (IOException e) {

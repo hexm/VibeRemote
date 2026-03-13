@@ -68,8 +68,10 @@ fi
 # 清理环境
 echo ""
 echo "5. 清理测试环境..."
-# 清理可能存在的锁文件
-rm -f ~/.lightscript/.agent.lock
+# 清理基于当前工作目录的锁文件
+WORKING_DIR=$(pwd)
+DIR_HASH=$(echo -n "$WORKING_DIR" | shasum -a 256 | cut -d' ' -f1 | head -c8)
+rm -f ~/.lightscript/.agent-${DIR_HASH}.lock
 # 清理旧的日志文件（现在在logs目录下）
 rm -rf logs/
 echo "✅ 环境清理完成"
