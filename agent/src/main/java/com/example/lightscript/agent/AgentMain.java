@@ -3,6 +3,8 @@ package com.example.lightscript.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
@@ -21,6 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 public class AgentMain {
+    private static final Logger logger = LoggerFactory.getLogger(AgentMain.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static FileChannel lockChannel;
     private static FileLock lock;
@@ -35,6 +38,9 @@ public class AgentMain {
             System.exit(1);
         }
         
+        System.out.println("Instance lock acquired");
+        System.out.println("Working directory: " + System.getProperty("user.dir"));
+        
         // 加载配置
         AgentConfig config = AgentConfig.getInstance();
         
@@ -42,9 +48,9 @@ public class AgentMain {
         String server = args.length > 0 ? args[0] : config.getServerUrl();
         String registerToken = args.length > 1 ? args[1] : config.getRegisterToken();
 
-        System.out.println("Starting LightScript Agent...");
-        System.out.println("Server: " + server);
-        System.out.println("Register Token: " + (registerToken.length() > 10 ? registerToken.substring(0, 10) + "..." : registerToken));
+        logger.info("Starting LightScript Agent...");
+        logger.info("Server: {}", server);
+        logger.info("Register Token: {}", (registerToken.length() > 10 ? registerToken.substring(0, 10) + "..." : registerToken));
         
         // 打印配置信息（调试模式）
         if ("DEBUG".equalsIgnoreCase(config.getLogLevel())) {
@@ -75,23 +81,23 @@ public class AgentMain {
         
         while (agentId == null) {
             try {
-                System.out.println("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
+                logger.info("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
                 Map<String, Object> reg = api.register(registerToken, hostname, osType);
                 agentId = String.valueOf(reg.get("agentId"));
                 agentToken = String.valueOf(reg.get("agentToken"));
                 
-                System.out.println("Agent registered successfully!");
-                System.out.println("Agent ID: " + agentId);
-                System.out.println("Agent Token: " + agentToken);
+                logger.info("Agent registered successfully!");
+                logger.info("Agent ID: {}", agentId);
+                logger.info("Agent Token: {}", agentToken);
             } catch (Exception e) {
                 retryCount++;
-                System.err.println("Failed to register agent: " + e.getMessage());
-                System.out.println("Retrying in " + (retryDelay / 1000) + " seconds...");
+                logger.error("Failed to register agent: {}", e.getMessage());
+                logger.info("Retrying in {} seconds...", (retryDelay / 1000));
                 
                 try {
                     Thread.sleep(retryDelay);
                 } catch (InterruptedException ie) {
-                    System.out.println("Registration cancelled by user");
+                    logger.info("Registration cancelled by user");
                     releaseLock();
                     return;
                 }
@@ -130,19 +136,22 @@ public class AgentMain {
 
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Agent shutting down...");
+            logger.info("Agent shutting down...");
             taskRunner.shutdown();
             taskExecutor.shutdown();
             upgradeScheduler.shutdown();
             try {
-                client.close();
-            } catch (IOException e) {
-                // 忽略关闭错误
+                if (client != null) {
+                    client.close();
+                }
+            } catch (Exception e) {
+                // 忽略关闭错误，避免在关闭过程中抛出异常
+                logger.warn("Warning: Error closing HTTP client: {}", e.getMessage());
             }
             releaseLock(); // 释放文件锁
         }));
 
-        System.out.println("Agent started. Waiting for tasks...");
+        logger.info("Agent started. Waiting for tasks...");
 
         // 主循环
         long lastHeartbeat = 0L;
@@ -157,9 +166,9 @@ public class AgentMain {
             try {
                 // 检查是否需要重新注册
                 if (needReRegister[0]) {
-                    System.out.println("========================================");
-                    System.out.println("Connection lost. Re-registering agent...");
-                    System.out.println("========================================");
+                    logger.info("========================================");
+                    logger.info("Connection lost. Re-registering agent...");
+                    logger.info("========================================");
                     
                     retryCount = 0;
                     retryDelay = 1000;
@@ -167,7 +176,7 @@ public class AgentMain {
                     while (!reRegistered && !Thread.currentThread().isInterrupted()) {
                         try {
                             retryCount++;
-                            System.out.println("Re-registration attempt " + retryCount + "...");
+                            logger.info("Re-registration attempt {}...", retryCount);
                             Map<String, Object> reg = api.register(registerToken, hostname, osType);
                             currentAgentId[0] = String.valueOf(reg.get("agentId"));
                             currentAgentToken[0] = String.valueOf(reg.get("agentToken"));
@@ -179,10 +188,10 @@ public class AgentMain {
                             upgradeReporter = new UpgradeStatusReporter(server, client, MAPPER, currentAgentId[0], currentAgentToken[0]);
                             upgradeExecutor = new UpgradeExecutor(upgradeReporter, taskStatusMonitor, upgradeScheduler, server, currentAgentId[0], currentAgentToken[0]);
                             
-                            System.out.println("Agent re-registered successfully!");
-                            System.out.println("New Agent ID: " + currentAgentId[0]);
-                            System.out.println("New Agent Token: " + currentAgentToken[0]);
-                            System.out.println("========================================");
+                            logger.info("Agent re-registered successfully!");
+                            logger.info("New Agent ID: {}", currentAgentId[0]);
+                            logger.info("New Agent Token: {}", currentAgentToken[0]);
+                            logger.info("========================================");
                             
                             needReRegister[0] = false;
                             heartbeatFailures = 0;
@@ -190,8 +199,8 @@ public class AgentMain {
                             reRegistered = true;
                             
                         } catch (Exception e) {
-                            System.err.println("Re-registration failed: " + e.getMessage());
-                            System.out.println("Retrying in " + (retryDelay / 1000) + " seconds...");
+                            logger.error("Re-registration failed: {}", e.getMessage());
+                            logger.info("Retrying in {} seconds...", (retryDelay / 1000));
                             
                             Thread.sleep(retryDelay);
                             
@@ -212,7 +221,7 @@ public class AgentMain {
                 // 心跳检测 - 使用配置的间隔时间
                 if (now - lastHeartbeat > config.getHeartbeatInterval()) {
                     try {
-                        System.out.println("Sending heartbeat...");
+                        logger.debug("Sending heartbeat...");
                         // 使用配置的系统信息间隔时间
                         boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > config.getSystemInfoInterval()) || reRegistered;
                         
@@ -220,10 +229,10 @@ public class AgentMain {
                         if (includeSystemInfo) {
                             heartbeatResponse = api.heartbeat(currentAgentId[0], currentAgentToken[0], true);
                             lastSystemInfoHeartbeat[0] = now;
-                            System.out.println("Heartbeat with system info sent at " + new java.util.Date());
+                            logger.info("Heartbeat with system info sent at {}", new java.util.Date());
                         } else {
                             heartbeatResponse = api.heartbeat(currentAgentId[0], currentAgentToken[0], false);
-                            System.out.println("Heartbeat sent at " + new java.util.Date());
+                            logger.debug("Heartbeat sent at {}", new java.util.Date());
                         }
                         
                         // 处理心跳响应中的版本检查信息
@@ -269,7 +278,7 @@ public class AgentMain {
                         Boolean overwriteExisting = (Boolean) task.getOrDefault("overwriteExisting", false);
                         Boolean verifyChecksum = (Boolean) task.getOrDefault("verifyChecksum", true);
 
-                        System.out.println("Received task: " + taskId + " (executionId: " + executionId + ", type: " + taskType + ")");
+                        logger.info("Received task: {} (executionId: {}, type: {})", taskId, executionId, taskType);
                         
                         // 检查基本字段
                         if (taskId == null || "null".equals(taskId) || executionId == null) {
@@ -309,7 +318,7 @@ public class AgentMain {
                 Thread.sleep(config.getTaskPullInterval());
 
             } catch (InterruptedException e) {
-                System.out.println("Agent interrupted, shutting down...");
+                logger.info("Agent interrupted, shutting down...");
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
@@ -343,7 +352,7 @@ public class AgentMain {
             }
         }
         
-        System.out.println("Agent main loop ended");
+        logger.info("Agent main loop ended");
     }
     
     /**
@@ -369,7 +378,7 @@ public class AgentMain {
             }
             
             String message = (String) versionCheck.get("message");
-            System.out.println("[VersionCheck] Update available: " + message);
+            logger.info("[VersionCheck] Update available: {}", message);
             
             @SuppressWarnings("unchecked")
             Map<String, Object> latestVersionMap = (Map<String, Object>) versionCheck.get("latestVersion");
@@ -390,11 +399,11 @@ public class AgentMain {
             
             // 根据强制升级标志决定升级策略
             if (versionInfo.isForceUpgrade()) {
-                System.out.println("[VersionCheck] Force upgrade detected, setting status to UPGRADING...");
+                logger.info("[VersionCheck] Force upgrade detected, setting status to UPGRADING...");
                 // 主动设置Agent状态为UPGRADING
                 try {
                     agentApi.setUpgrading(agentId, agentToken);
-                    System.out.println("[VersionCheck] Status set to UPGRADING, stopping all tasks and starting upgrade immediately...");
+                    logger.info("[VersionCheck] Status set to UPGRADING, stopping all tasks and starting upgrade immediately...");
                 } catch (Exception e) {
                     System.err.println("[VersionCheck] Failed to set upgrading status: " + e.getMessage());
                     return;
@@ -404,11 +413,11 @@ public class AgentMain {
                 taskStatusMonitor.stopAllTasks();
                 upgradeExecutor.executeUpgrade(versionInfo);
             } else {
-                System.out.println("[VersionCheck] Normal upgrade detected, setting status to UPGRADING...");
+                logger.info("[VersionCheck] Normal upgrade detected, setting status to UPGRADING...");
                 // 主动设置Agent状态为UPGRADING
                 try {
                     agentApi.setUpgrading(agentId, agentToken);
-                    System.out.println("[VersionCheck] Status set to UPGRADING, entering upgrade waiting state...");
+                    logger.info("[VersionCheck] Status set to UPGRADING, entering upgrade waiting state...");
                 } catch (Exception e) {
                     System.err.println("[VersionCheck] Failed to set upgrading status: " + e.getMessage());
                     return;
@@ -416,10 +425,10 @@ public class AgentMain {
                 
                 // 普通升级：进入升级状态，等待任务完成后升级
                 if (upgradeExecutor.canUpgrade()) {
-                    System.out.println("[VersionCheck] No running tasks, starting upgrade immediately...");
+                    logger.info("[VersionCheck] No running tasks, starting upgrade immediately...");
                     upgradeExecutor.executeUpgrade(versionInfo);
                 } else {
-                    System.out.println("[VersionCheck] Tasks are running, waiting for completion before upgrade...");
+                    logger.info("[VersionCheck] Tasks are running, waiting for completion before upgrade...");
                     upgradeExecutor.scheduleUpgradeRetry(versionInfo);
                 }
             }
@@ -431,23 +440,16 @@ public class AgentMain {
     
     /**
      * 获取文件锁，确保单实例运行
-     * 使用工作目录路径哈希作为锁文件名，支持多项目并行运行
+     * 一台机器上只能启动一个Agent进程
      * @return true 如果成功获取锁，false 如果已有其他实例在运行
      */
     private static boolean acquireLock() {
         try {
-            // 获取当前工作目录的绝对路径
-            String workingDir = System.getProperty("user.dir");
-            
-            // 生成基于工作目录的唯一标识符
-            String dirHash = Integer.toHexString(workingDir.hashCode());
-            String lockFileName = ".agent-" + dirHash + ".lock";
-            
-            // 锁文件位置：用户目录/.lightscript/下，使用目录哈希命名
+            // 锁文件位置：用户目录/.lightscript/.agent.lock（全局唯一）
             String userHome = System.getProperty("user.home");
             Path lockDir = Paths.get(userHome, ".lightscript");
             Files.createDirectories(lockDir);
-            Path lockFile = lockDir.resolve(lockFileName);
+            Path lockFile = lockDir.resolve(".agent.lock");
             
             // 打开文件通道（读写模式）
             lockChannel = FileChannel.open(lockFile, 
@@ -466,6 +468,7 @@ public class AgentMain {
             
             // 写入当前进程信息（用于调试）
             lockChannel.truncate(0);
+            String workingDir = System.getProperty("user.dir");
             String lockInfo = String.format("PID: %s, Started: %s, WorkingDir: %s", 
                 ManagementFactory.getRuntimeMXBean().getName(),
                 LocalDateTime.now(),
@@ -496,9 +499,9 @@ public class AgentMain {
                 lockChannel.close();
                 lockChannel = null;
             }
-            System.out.println("Instance lock released");
+            logger.info("Instance lock released");
         } catch (IOException e) {
-            System.err.println("Failed to release lock: " + e.getMessage());
+            logger.error("Failed to release lock: {}", e.getMessage());
         }
     }
 }

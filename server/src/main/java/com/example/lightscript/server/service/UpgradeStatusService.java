@@ -96,6 +96,16 @@ public class UpgradeStatusService {
     }
     
     /**
+     * 获取Agent的升级历史（限制数量）
+     */
+    public List<AgentUpgradeLog> getUpgradeHistory(String agentId, int limit) {
+        return upgradeLogRepository.findByAgentIdOrderByCreatedAtDesc(agentId)
+                .stream()
+                .limit(limit)
+                .collect(java.util.stream.Collectors.toList());
+    }
+    
+    /**
      * 检查Agent是否正在升级
      */
     public boolean isAgentUpgrading(String agentId) {

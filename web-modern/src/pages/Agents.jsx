@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider } from 'antd'
 import {
   DesktopOutlined,
@@ -31,6 +31,8 @@ const Agents = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [upgradeHistoryModalVisible, setUpgradeHistoryModalVisible] = useState(false)
+  const [selectedAgentForHistory, setSelectedAgentForHistory] = useState(null)
 
   // 处理单个 Agent 数据的辅助函数
   const processAgentData = async (agent) => {
@@ -602,6 +604,9 @@ env | sort
         title={`客户端详情 - ${selectedAgent?.hostname || ''}`}
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
+        width={800}
+        style={{ top: 20 }}
+        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
         footer={[
           <Button 
             key="collect" 
@@ -657,7 +662,20 @@ env | sort
                   <Text>{selectedAgent.javaVersion || 'N/A'}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Agent版本">
-                  <Text>{selectedAgent.agentVersion || 'N/A'}</Text>
+                  <Space>
+                    <Text>{selectedAgent.agentVersion || 'N/A'}</Text>
+                    <Button 
+                      type="link" 
+                      size="small"
+                      style={{ padding: 0, height: 'auto' }}
+                      onClick={() => {
+                        setSelectedAgentForHistory(selectedAgent)
+                        setUpgradeHistoryModalVisible(true)
+                      }}
+                    >
+                      查看历史
+                    </Button>
+                  </Space>
                 </Descriptions.Item>
                 <Descriptions.Item label="启动用户">
                   <Space>
@@ -767,11 +785,6 @@ env | sort
               </Row>
             </Card>
 
-            {/* 升级历史 */}
-            <Card title="升级历史" size="small">
-              <UpgradeHistory agentId={selectedAgent.agentId || selectedAgent.id} />
-            </Card>
-
             {/* 所属分组 */}
             <Card title="所属分组" size="small">
               <Space size="small" wrap>
@@ -789,6 +802,23 @@ env | sort
           </div>
         )}
       </Modal>
+
+      {/* 升级历史弹窗 */}
+      <Modal
+        title={`升级历史 - ${selectedAgentForHistory?.hostname || ''}`}
+        open={upgradeHistoryModalVisible}
+        onCancel={() => setUpgradeHistoryModalVisible(false)}
+        width={900}
+        footer={[
+          <Button key="close" onClick={() => setUpgradeHistoryModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+      >
+        {selectedAgentForHistory && (
+          <UpgradeHistory agentId={selectedAgentForHistory.agentId || selectedAgentForHistory.id} />
+        )}
+      </Modal>
     </div>
   )
 }
@@ -798,16 +828,12 @@ const UpgradeHistory = ({ agentId }) => {
   const [upgradeHistory, setUpgradeHistory] = useState([])
   const [loading, setLoading] = useState(false)
   
-  useEffect(() => {
-    if (agentId) {
-      loadUpgradeHistory()
-    }
-  }, [agentId])
-  
-  const loadUpgradeHistory = async () => {
+  const loadUpgradeHistory = useCallback(async () => {
+    if (!agentId) return
+    
     setLoading(true)
     try {
-      const response = await api.get(`/web/upgrade/agents/${agentId}/history`)
+      const response = await api.get(`/agent/${agentId}/upgrade-history`)
       setUpgradeHistory(response || [])
     } catch (error) {
       console.error('加载升级历史失败:', error)
@@ -815,7 +841,11 @@ const UpgradeHistory = ({ agentId }) => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [agentId])
+  
+  useEffect(() => {
+    loadUpgradeHistory()
+  }, [loadUpgradeHistory])
   
   const columns = [
     {
@@ -869,7 +899,14 @@ const UpgradeHistory = ({ agentId }) => {
       rowKey="id"
       loading={loading}
       size="small"
-      pagination={{ pageSize: 5 }}
+      scroll={{ y: 300 }}
+      pagination={{ 
+        pageSize: 10,
+        showSizeChanger: true,
+        showQuickJumper: true,
+        showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+        pageSizeOptions: ['5', '10', '20', '50']
+      }}
       locale={{ emptyText: '暂无升级记录' }}
     />
   )

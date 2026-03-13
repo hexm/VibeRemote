@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.example</groupId>
   <artifactId>lightscript-parent</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.3.0</version>
   <packaging>pom</packaging>
   <modules>
     <module>server</module>

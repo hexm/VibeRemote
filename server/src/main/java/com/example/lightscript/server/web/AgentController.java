@@ -263,11 +263,16 @@ public class AgentController {
 	}
 	
 	/**
-	 * 获取Agent升级历史
+	 * 获取Agent升级历史（支持分页和限制）
 	 */
 	@GetMapping("/{agentId}/upgrade-history")
-	public ResponseEntity<List<AgentUpgradeLog>> getUpgradeHistory(@PathVariable String agentId) {
-		List<AgentUpgradeLog> history = upgradeStatusService.getUpgradeHistory(agentId);
+	public ResponseEntity<List<AgentUpgradeLog>> getUpgradeHistory(
+			@PathVariable String agentId,
+			@RequestParam(defaultValue = "50") int limit) {
+		
+		// 限制最大返回数量，防止数据过多
+		int maxLimit = Math.min(Math.max(limit, 1), 100);
+		List<AgentUpgradeLog> history = upgradeStatusService.getUpgradeHistory(agentId, maxLimit);
 		return ResponseEntity.ok(history);
 	}
 }
