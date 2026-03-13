@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # LightScript Agent 启动脚本 (Unix/Linux/macOS)
 
 # 脚本目录
@@ -28,10 +27,38 @@ if [ ! -f "$AGENT_JAR" ]; then
     exit 1
 fi
 
-# 启动Agent
+# 创建logs目录
+mkdir -p logs
+
+# 检查是否已有Agent在运行
+if [ -f ~/.lightscript/.agent.lock ]; then
+    echo "WARNING: Another Agent instance may be running (lock file exists)"
+    echo "If you're sure no other Agent is running, delete ~/.lightscript/.agent.lock and try again"
+    exit 1
+fi
+
+# 启动Agent（后台运行）
 echo "Starting LightScript Agent..."
 echo "Java Command: $JAVA_CMD"
 echo "JVM Options: $JVM_OPTS"
 echo "Working Directory: $SCRIPT_DIR"
+echo "Logs Directory: $SCRIPT_DIR/logs"
 
-exec "$JAVA_CMD" $JVM_OPTS -jar "$AGENT_JAR"
+nohup "$JAVA_CMD" $JVM_OPTS -jar "$AGENT_JAR" > logs/agent-startup.log 2>&1 &
+AGENT_PID=$!
+
+# 等待几秒检查启动状态
+sleep 3
+
+# 检查进程是否还在运行
+if kill -0 $AGENT_PID 2>/dev/null; then
+    echo "✅ Agent started successfully (PID: $AGENT_PID)"
+    echo "   Log files: $SCRIPT_DIR/logs/"
+    echo "   Startup log: tail -f logs/agent-startup.log"
+    echo "   Main log: tail -f logs/agent.log"
+    echo "   To stop: ./stop-agent.sh"
+else
+    echo "❌ Agent failed to start"
+    echo "Check startup log: cat logs/agent-startup.log"
+    exit 1
+fi
