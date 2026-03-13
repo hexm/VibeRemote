@@ -72,3 +72,19 @@ demo/
 
 # Deprecated/redundant files
 server/src/main/resources/static/
+# Test directories and files
+agent/localtest/
+*/localtest/
+test-*.sh
+create-test-*.sh
+debug-*.md
+insert-test-*.sql
+test-*.jar
+*-test.jar
+
+# Temporary documents and conversations
+对话.txt
+功能清单.txt
+
+# Agent credentials (should be configured per deployment)
+.agent-credentials
