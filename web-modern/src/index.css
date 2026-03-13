@@ -208,3 +208,8 @@ input, textarea, select, button {
 .ant-input-affix-wrapper-disabled {
   background-color: #f5f5f5 !important;
 }
+
+/* 简单修复复选框对齐问题 */
+.ant-checkbox-wrapper {
+  align-items: center !important;
+}

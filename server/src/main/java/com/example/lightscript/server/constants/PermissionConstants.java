@@ -24,9 +24,18 @@ public class PermissionConstants {
     public static final String SCRIPT_EDIT = "script:edit";
     public static final String SCRIPT_DELETE = "script:delete";
     public static final String SCRIPT_VIEW = "script:view";
+    public static final String SCRIPT_LIST = "script:list";
+    
+    // 文件管理权限
+    public static final String FILE_LIST = "file:list";
+    public static final String FILE_VIEW = "file:view";
+    public static final String FILE_UPLOAD = "file:upload";
+    public static final String FILE_DELETE = "file:delete";
+    public static final String FILE_DOWNLOAD = "file:download";
     
     // Agent管理权限
     public static final String AGENT_VIEW = "agent:view";
+    public static final String AGENT_DELETE = "agent:delete";
     public static final String AGENT_GROUP = "agent:group";
     
     // 系统管理权限
@@ -75,10 +84,19 @@ public class PermissionConstants {
         new PermissionInfo(SCRIPT_CREATE, "创建脚本", "SCRIPT", "可以创建新脚本"),
         new PermissionInfo(SCRIPT_EDIT, "编辑脚本", "SCRIPT", "可以编辑脚本"),
         new PermissionInfo(SCRIPT_DELETE, "删除脚本", "SCRIPT", "可以删除脚本"),
-        new PermissionInfo(SCRIPT_VIEW, "查看脚本", "SCRIPT", "可以查看脚本列表"),
+        new PermissionInfo(SCRIPT_VIEW, "查看脚本", "SCRIPT", "可以查看脚本详情"),
+        new PermissionInfo(SCRIPT_LIST, "脚本列表", "SCRIPT", "可以查看脚本列表"),
+        
+        // 文件管理
+        new PermissionInfo(FILE_LIST, "文件列表", "FILE", "可以查看文件列表"),
+        new PermissionInfo(FILE_VIEW, "查看文件", "FILE", "可以查看文件详情"),
+        new PermissionInfo(FILE_UPLOAD, "上传文件", "FILE", "可以上传文件"),
+        new PermissionInfo(FILE_DELETE, "删除文件", "FILE", "可以删除文件"),
+        new PermissionInfo(FILE_DOWNLOAD, "下载文件", "FILE", "可以下载文件"),
         
         // Agent管理
         new PermissionInfo(AGENT_VIEW, "查看Agent", "AGENT", "可以查看Agent列表"),
+        new PermissionInfo(AGENT_DELETE, "删除Agent", "AGENT", "可以删除Agent"),
         new PermissionInfo(AGENT_GROUP, "Agent分组", "AGENT", "可以管理Agent分组"),
         
         // 系统管理
@@ -89,7 +107,7 @@ public class PermissionConstants {
     /**
      * 权限分类
      */
-    public static final List<String> CATEGORIES = Arrays.asList("USER", "TASK", "SCRIPT", "AGENT", "SYSTEM");
+    public static final List<String> CATEGORIES = Arrays.asList("USER", "TASK", "SCRIPT", "FILE", "AGENT", "SYSTEM");
     
     /**
      * 获取所有权限代码

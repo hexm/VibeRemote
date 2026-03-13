@@ -3,7 +3,7 @@
   <parent>
     <groupId>com.example</groupId>
     <artifactId>lightscript-parent</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
   </parent>
   <artifactId>server</artifactId>
   <name>lightscript-server</name>

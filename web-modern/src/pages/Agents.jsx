@@ -625,8 +625,6 @@ env | sort
             关闭
           </Button>
         ]}
-        width={800}
-        style={{ top: 20 }}
       >
         {selectedAgent && (
           <div className="space-y-6">

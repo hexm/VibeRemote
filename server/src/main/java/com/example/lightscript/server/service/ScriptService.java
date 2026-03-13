@@ -277,12 +277,28 @@ public class ScriptService {
     private String readFileContent(String filePath) {
         try {
             Path path = Paths.get(filePath);
+            
+            // 检查文件是否存在
+            if (!Files.exists(path)) {
+                log.warn("脚本文件不存在: {}", filePath);
+                return "# 文件不存在\n# 文件路径: " + filePath + "\n# 请重新上传脚本文件";
+            }
+            
+            // 检查是否为文件（不是目录）
+            if (!Files.isRegularFile(path)) {
+                log.warn("路径不是有效文件: {}", filePath);
+                return "# 无效的文件路径\n# 路径: " + filePath + "\n# 请检查文件路径";
+            }
+            
             // Java 8兼容的文件读取方式
             byte[] bytes = Files.readAllBytes(path);
             return new String(bytes, "UTF-8");
         } catch (IOException e) {
             log.error("读取文件内容失败: {}", filePath, e);
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "读取文件内容失败");
+            return "# 读取文件失败\n# 文件路径: " + filePath + "\n# 错误信息: " + e.getMessage() + "\n# 请检查文件是否存在且有读取权限";
+        } catch (Exception e) {
+            log.error("读取文件时发生未知错误: {}", filePath, e);
+            return "# 读取文件时发生未知错误\n# 文件路径: " + filePath + "\n# 错误信息: " + e.getMessage();
         }
     }
     
@@ -308,7 +324,13 @@ public class ScriptService {
         
         // 获取脚本内容
         if (script.getIsUploaded()) {
-            dto.setContent(readFileContent(script.getFilePath()));
+            String filePath = script.getFilePath();
+            if (filePath == null || filePath.trim().isEmpty()) {
+                log.warn("上传脚本的文件路径为空: scriptId={}, name={}", script.getScriptId(), script.getName());
+                dto.setContent("# 文件路径为空\n# 脚本ID: " + script.getScriptId() + "\n# 脚本名称: " + script.getName() + "\n# 请重新上传脚本文件");
+            } else {
+                dto.setContent(readFileContent(filePath));
+            }
         } else {
             dto.setContent(script.getContent());
         }
