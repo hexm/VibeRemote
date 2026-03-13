@@ -209,7 +209,27 @@ input, textarea, select, button {
   background-color: #f5f5f5 !important;
 }
 
-/* 简单修复复选框对齐问题 */
+/* 修复复选框对齐问题 */
 .ant-checkbox-wrapper {
   align-items: center !important;
+}
+
+.ant-checkbox {
+  position: relative !important;
+  top: -5px !important;
+}
+
+.ant-checkbox-inner::after {
+  position: relative !important;
+  top: 3px !important;
+}
+
+/* 修复Radio按钮对齐问题并减少下方空白 */
+.ant-radio {
+  position: relative !important;
+  top: -18px !important;
+}
+
+.ant-radio-wrapper {
+  margin-bottom: -18px !important;
 }
