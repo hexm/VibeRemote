@@ -33,6 +33,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .authorizeRequests()
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/agent/**").permitAll()  // Agent API不需要JWT认证
+                .antMatchers("/api/web/files/*/download-for-agent").permitAll()  // Agent文件下载不需要认证
                 .antMatchers("/", "/static/**", "/index.html", "/css/**", "/js/**").permitAll()
                 .anyRequest().authenticated()
                 .and()

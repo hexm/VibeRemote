@@ -3,12 +3,14 @@ package com.example.lightscript.server.service;
 import com.example.lightscript.server.entity.Task;
 import com.example.lightscript.server.entity.TaskExecution;
 import com.example.lightscript.server.entity.TaskLog;
+import com.example.lightscript.server.entity.Agent;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.model.TaskModels;
 import com.example.lightscript.server.model.FileModels;
 import com.example.lightscript.server.repository.TaskRepository;
 import com.example.lightscript.server.repository.TaskExecutionRepository;
 import com.example.lightscript.server.repository.TaskLogRepository;
+import com.example.lightscript.server.repository.AgentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,9 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final TaskLogRepository taskLogRepository;
     private final TaskExecutionRepository taskExecutionRepository;
+    
+    @Autowired
+    private AgentRepository agentRepository;
     
     @Autowired
     private TaskExecutionService taskExecutionService;
@@ -728,6 +733,16 @@ public class TaskService {
      */
     @Transactional
     public List<TaskSpec> pullTasks(String agentId, int maxTasks) {
+        // 检查Agent是否正在升级
+        Optional<Agent> agentOpt = agentRepository.findByAgentId(agentId);
+        if (agentOpt.isPresent()) {
+            Agent agent = agentOpt.get();
+            if ("UPGRADING".equals(agent.getStatus())) {
+                log.info("Agent {} is upgrading, no tasks will be assigned", agentId);
+                return Collections.emptyList(); // 升级中不分发任务
+            }
+        }
+        
         // 使用新的Repository方法，只查询可执行状态任务的待处理执行实例
         List<TaskExecution> pendingExecutions = taskExecutionRepository.findPendingExecutionsForActiveTasks(agentId);
         

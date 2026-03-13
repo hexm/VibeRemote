@@ -111,4 +111,44 @@ public class AgentModels {
 		private Map<String, String> labels;
 		private Instant lastHeartbeat;
 	}
+	
+	@Data
+	public static class HeartbeatResponse {
+		private VersionCheckResult versionCheck;
+	}
+	
+	@Data
+	public static class VersionCheckResult {
+		private boolean updateAvailable;
+		private String message;
+		private VersionInfo latestVersion;
+	}
+	
+	@Data
+	public static class VersionInfo {
+		private String version;
+		private String downloadUrl;
+		private Long fileSize;
+		private String fileHash;
+		private boolean forceUpgrade;
+		private String releaseNotes;
+	}
+	
+	@Data
+	public static class UpgradeStartRequest {
+		@NotBlank
+		private String fromVersion;
+		@NotBlank
+		private String toVersion;
+		private boolean forceUpgrade;
+	}
+	
+	@Data
+	public static class UpgradeStatusRequest {
+		@NotNull
+		private Long upgradeLogId;
+		@NotBlank
+		private String status;
+		private String errorMessage;
+	}
 } 

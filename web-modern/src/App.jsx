@@ -11,6 +11,7 @@ import Scripts from './pages/Scripts'
 import Files from './pages/Files'
 import Users from './pages/Users'
 import SystemSettings from './pages/SystemSettings'
+import AgentVersions from './pages/AgentVersions'
 import Login from './pages/Login'
 import { authService } from './services/auth'
 
@@ -167,6 +168,7 @@ function App() {
             <Route path="/files" element={<Files />} />
             <Route path="/users" element={<Users />} />
             <Route path="/system-settings" element={<SystemSettings />} />
+            <Route path="/agent-versions" element={<AgentVersions />} />
           </Routes>
         </Content>
       </Layout>

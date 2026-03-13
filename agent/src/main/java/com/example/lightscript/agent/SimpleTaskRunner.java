@@ -9,11 +9,13 @@ class SimpleTaskRunner {
     private volatile String agentId;
     private volatile String agentToken;
     private volatile boolean shutdown = false;
+    private final TaskStatusMonitor taskStatusMonitor;
 
-    SimpleTaskRunner(AgentApi api, String agentId, String agentToken) {
+    SimpleTaskRunner(AgentApi api, String agentId, String agentToken, TaskStatusMonitor taskStatusMonitor) {
         this.api = api;
         this.agentId = agentId;
         this.agentToken = agentToken;
+        this.taskStatusMonitor = taskStatusMonitor;
     }
 
     void shutdown() {
@@ -46,6 +48,9 @@ class SimpleTaskRunner {
                                    int timeoutSec, boolean overwriteExisting, boolean verifyChecksum) {
         int seq = 0;
         try {
+            // 任务开始时注册
+            taskStatusMonitor.onTaskStart(executionId);
+            
             // 确认任务开始执行
             api.ackTask(agentId, agentToken, executionId);
             api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer task started (fileId: " + fileId + ", target: " + targetPath + ")");
@@ -69,12 +74,18 @@ class SimpleTaskRunner {
             } catch (Exception ignored) {
                 System.err.println("Failed to report task failure: " + ignored.getMessage());
             }
+        } finally {
+            // 任务结束时注销（无论成功还是失败）
+            taskStatusMonitor.onTaskComplete(executionId);
         }
     }
 
     private void runScriptTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
         int seq = 0;
         try {
+            // 任务开始时注册
+            taskStatusMonitor.onTaskStart(executionId);
+            
             // 首先确认任务开始执行
             api.ackTask(agentId, agentToken, executionId);
             api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Task started (lang: " + scriptLang + ")");
@@ -169,6 +180,9 @@ class SimpleTaskRunner {
             } catch (Exception ignored) {
                 System.err.println("Failed to report task failure: " + ignored.getMessage());
             }
+        } finally {
+            // 任务结束时注销（无论成功还是失败）
+            taskStatusMonitor.onTaskComplete(executionId);
         }
     }
 

@@ -75,7 +75,7 @@ public interface FileRepository extends JpaRepository<File, Long> {
     /**
      * 获取下一个文件ID编号
      */
-    @Query("SELECT COALESCE(MAX(CAST(SUBSTRING(f.fileId, 2) AS int)), 0) + 1 FROM File f WHERE f.fileId LIKE 'F%'")
+    @Query(value = "SELECT COALESCE(MAX(CAST(SUBSTRING(file_id, 2) AS SIGNED)), 0) + 1 FROM files WHERE file_id LIKE 'F%'", nativeQuery = true)
     Integer getNextFileIdNumber();
     
     /**

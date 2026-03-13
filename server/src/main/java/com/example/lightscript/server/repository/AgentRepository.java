@@ -15,6 +15,8 @@ public interface AgentRepository extends JpaRepository<Agent, String> {
     
     Optional<Agent> findByAgentIdAndAgentToken(String agentId, String agentToken);
     
+    Optional<Agent> findByAgentId(String agentId);
+    
     Optional<Agent> findByHostnameAndOsType(String hostname, String osType);
     
     List<Agent> findByStatus(String status);

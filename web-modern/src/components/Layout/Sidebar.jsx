@@ -10,7 +10,8 @@ import {
   RocketOutlined,
   UserOutlined,
   TeamOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CloudDownloadOutlined
 } from '@ant-design/icons'
 
 const { Sider } = Layout
@@ -33,6 +34,10 @@ const menuItems = [
       {
         key: '/agent-groups',
         label: '客户端分组',
+      },
+      {
+        key: '/agent-versions',
+        label: '版本管理',
       },
     ],
   },
@@ -73,7 +78,7 @@ const Sidebar = ({ collapsed }) => {
 
   // 根据当前路径确定应该打开的子菜单
   const getOpenKeys = () => {
-    if (location.pathname === '/agents' || location.pathname === '/agent-groups') {
+    if (location.pathname === '/agents' || location.pathname === '/agent-groups' || location.pathname === '/agent-versions') {
       return ['agents-menu']
     }
     return []

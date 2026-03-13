@@ -40,6 +40,9 @@ public class Agent {
     @Column(name = "last_heartbeat")
     private LocalDateTime lastHeartbeat;
     
+    @Column(name = "agent_version", length = 50)
+    private String agentVersion; // Agent版本号
+    
     @Column(name = "status", length = 20)
     private String status = "ONLINE"; // ONLINE | OFFLINE
     
@@ -76,9 +79,6 @@ public class Agent {
     
     @Column(name = "java_version", length = 100)
     private String javaVersion; // Java版本
-    
-    @Column(name = "agent_version", length = 50)
-    private String agentVersion; // Agent版本
     
     // 最后一次深度检查任务信息
     @Column(name = "last_diagnostic_task_id", length = 64)

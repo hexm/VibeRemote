@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Progress, Typography, Space, Button, Table, Tag, Avatar } from 'antd'
+import { Card, Row, Col, Statistic, Progress, Typography, Space, Button, Table, Tag, Avatar, message } from 'antd'
 import {
   DesktopOutlined,
   FileTextOutlined,
@@ -9,62 +9,101 @@ import {
   ReloadOutlined,
   TrophyOutlined,
   RocketOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import api from '../services/auth'
 
 const { Title, Text } = Typography
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState({
-    totalAgents: 12,
-    onlineAgents: 8,
-    totalTasks: 156,
-    runningTasks: 3,
-    completedTasks: 142,
-    failedTasks: 11,
+    totalAgents: 0,
+    onlineAgents: 0,
+    offlineAgents: 0,
+    totalTasks: 0,
+    runningTasks: 0,
+    completedTasks: 0,
+    failedTasks: 0,
+    pendingTasks: 0,
+  })
+  const [recentTasks, setRecentTasks] = useState([])
+  const [systemHealth, setSystemHealth] = useState({
+    avgCpu: 0,
+    avgMemory: 0,
+    avgDisk: 0,
+    networkLoad: 0,
   })
 
-  // 模拟图表数据
-  const chartData = [
-    { name: '00:00', tasks: 4, success: 3 },
-    { name: '04:00', tasks: 8, success: 7 },
-    { name: '08:00', tasks: 15, success: 13 },
-    { name: '12:00', tasks: 23, success: 21 },
-    { name: '16:00', tasks: 18, success: 16 },
-    { name: '20:00', tasks: 12, success: 11 },
-  ]
+  // 加载仪表盘数据
+  const loadDashboardData = async () => {
+    setLoading(true)
+    try {
+      // 并行加载所有数据
+      const [statsResponse, tasksResponse, agentsResponse] = await Promise.all([
+        api.get('/web/dashboard/stats'),
+        api.get('/web/tasks?page=0&size=5&sort=createdAt,desc'),
+        api.get('/web/agents')
+      ])
 
-  // 最近任务数据
-  const recentTasks = [
-    {
-      key: '1',
-      id: 'T001',
-      name: '系统更新脚本',
-      agent: 'Server-01',
-      status: 'success',
-      duration: '2m 30s',
-      time: '2分钟前',
-    },
-    {
-      key: '2',
-      id: 'T002',
-      name: '日志清理任务',
-      agent: 'Server-02',
-      status: 'running',
-      duration: '1m 15s',
-      time: '5分钟前',
-    },
-    {
-      key: '3',
-      id: 'T003',
-      name: '数据备份脚本',
-      agent: 'Server-03',
-      status: 'failed',
-      duration: '45s',
-      time: '10分钟前',
-    },
-  ]
+      // 设置统计数据
+      setStats(statsResponse)
+
+      // 处理最近任务数据
+      const taskList = tasksResponse.content.map(task => ({
+        key: task.taskId,
+        id: task.taskId.substring(0, 8),
+        name: task.taskName,
+        status: task.taskStatus.toLowerCase(),
+        createdAt: new Date(task.createdAt).toLocaleString('zh-CN'),
+        createdBy: task.createdBy,
+        targetAgentCount: task.targetAgentCount || 1,
+      }))
+      setRecentTasks(taskList)
+
+      // 计算系统健康度
+      const agents = agentsResponse.content
+      if (agents.length > 0) {
+        const onlineAgents = agents.filter(agent => agent.status === 'ONLINE')
+        if (onlineAgents.length > 0) {
+          const avgCpu = onlineAgents.reduce((sum, agent) => sum + (agent.cpuLoad ? agent.cpuLoad * 100 : 0), 0) / onlineAgents.length
+          const avgMemory = onlineAgents.reduce((sum, agent) => {
+            if (agent.totalMemMb && agent.freeMemMb) {
+              return sum + ((agent.totalMemMb - agent.freeMemMb) / agent.totalMemMb * 100)
+            }
+            return sum
+          }, 0) / onlineAgents.length
+          const avgDisk = onlineAgents.reduce((sum, agent) => {
+            if (agent.diskSpaceGb && agent.freeSpaceGb) {
+              return sum + ((agent.diskSpaceGb - agent.freeSpaceGb) / agent.diskSpaceGb * 100)
+            }
+            return sum
+          }, 0) / onlineAgents.length
+
+          setSystemHealth({
+            avgCpu: Math.round(avgCpu),
+            avgMemory: Math.round(avgMemory),
+            avgDisk: Math.round(avgDisk),
+            networkLoad: Math.round(Math.random() * 30 + 10), // 模拟网络负载
+          })
+        }
+      }
+
+    } catch (error) {
+      console.error('加载仪表盘数据失败:', error)
+      message.error('加载数据失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDashboardData()
+    // 每30秒自动刷新数据
+    const interval = setInterval(loadDashboardData, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const taskColumns = [
     {
@@ -80,12 +119,12 @@ const Dashboard = () => {
       render: (text) => <Text strong>{text}</Text>,
     },
     {
-      title: '执行节点',
-      dataIndex: 'agent',
-      key: 'agent',
+      title: '创建者',
+      dataIndex: 'createdBy',
+      key: 'createdBy',
       render: (text) => (
         <Space>
-          <Avatar size="small" icon={<DesktopOutlined />} />
+          <Avatar size="small" icon={<UserOutlined />} />
           {text}
         </Space>
       ),
@@ -96,11 +135,13 @@ const Dashboard = () => {
       key: 'status',
       render: (status) => {
         const statusConfig = {
-          success: { color: 'success', text: '成功', icon: <CheckCircleOutlined /> },
+          completed: { color: 'success', text: '已完成', icon: <CheckCircleOutlined /> },
           running: { color: 'processing', text: '运行中', icon: <ClockCircleOutlined /> },
           failed: { color: 'error', text: '失败', icon: <ExclamationCircleOutlined /> },
+          pending: { color: 'default', text: '待执行', icon: <ClockCircleOutlined /> },
+          draft: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
         }
-        const config = statusConfig[status]
+        const config = statusConfig[status] || statusConfig.draft
         return (
           <Tag color={config.color} icon={config.icon}>
             {config.text}
@@ -109,25 +150,18 @@ const Dashboard = () => {
       },
     },
     {
-      title: '执行时间',
-      dataIndex: 'duration',
-      key: 'duration',
+      title: '目标节点',
+      dataIndex: 'targetAgentCount',
+      key: 'targetAgentCount',
+      render: (count) => <Text>{count} 个节点</Text>,
     },
     {
-      title: '时间',
-      dataIndex: 'time',
-      key: 'time',
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
       render: (text) => <Text type="secondary">{text}</Text>,
     },
   ]
-
-  const refreshData = () => {
-    setLoading(true)
-    // 模拟API调用
-    setTimeout(() => {
-      setLoading(false)
-    }, 1000)
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -146,7 +180,7 @@ const Dashboard = () => {
           type="primary"
           icon={<ReloadOutlined />}
           loading={loading}
-          onClick={refreshData}
+          onClick={loadDashboardData}
           className="shadow-lg"
         >
           刷新数据
@@ -169,7 +203,7 @@ const Dashboard = () => {
               valueStyle={{ color: '#3b82f6', fontSize: '2rem', fontWeight: 'bold' }}
             />
             <Progress
-              percent={(stats.onlineAgents / stats.totalAgents) * 100}
+              percent={stats.totalAgents > 0 ? (stats.onlineAgents / stats.totalAgents) * 100 : 0}
               showInfo={false}
               strokeColor="#3b82f6"
               className="mt-2"
@@ -190,7 +224,7 @@ const Dashboard = () => {
               valueStyle={{ color: '#10b981', fontSize: '2rem', fontWeight: 'bold' }}
             />
             <Text type="secondary" className="text-sm">
-              成功率 {((stats.completedTasks / stats.totalTasks) * 100).toFixed(1)}%
+              成功率 {stats.totalTasks > 0 ? ((stats.completedTasks / stats.totalTasks) * 100).toFixed(1) : 0}%
             </Text>
           </Card>
         </Col>
@@ -226,65 +260,63 @@ const Dashboard = () => {
               valueStyle={{ color: '#ef4444', fontSize: '2rem', fontWeight: 'bold' }}
             />
             <Text type="secondary" className="text-sm">
-              失败率 {((stats.failedTasks / stats.totalTasks) * 100).toFixed(1)}%
+              失败率 {stats.totalTasks > 0 ? ((stats.failedTasks / stats.totalTasks) * 100).toFixed(1) : 0}%
             </Text>
           </Card>
         </Col>
       </Row>
 
-      {/* 图表区域 */}
+      {/* 图表和系统健康度 */}
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
           <Card 
             title={
               <Space>
                 <RocketOutlined className="text-blue-500" />
-                <span>任务执行趋势</span>
+                <span>任务统计概览</span>
               </Space>
             }
             className="shadow-lg"
           >
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorTasks" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
-                  </linearGradient>
-                  <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" stroke="#666" />
-                <YAxis stroke="#666" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                  }} 
+            <Row gutter={[16, 16]}>
+              <Col span={6}>
+                <Statistic
+                  title="总任务数"
+                  value={stats.totalTasks}
+                  valueStyle={{ color: '#1890ff' }}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="tasks"
-                  stroke="#3b82f6"
-                  fillOpacity={1}
-                  fill="url(#colorTasks)"
-                  strokeWidth={2}
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="待执行"
+                  value={stats.pendingTasks}
+                  valueStyle={{ color: '#faad14' }}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="success"
-                  stroke="#10b981"
-                  fillOpacity={1}
-                  fill="url(#colorSuccess)"
-                  strokeWidth={2}
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="已完成"
+                  value={stats.completedTasks}
+                  valueStyle={{ color: '#52c41a' }}
                 />
-              </AreaChart>
-            </ResponsiveContainer>
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="失败"
+                  value={stats.failedTasks}
+                  valueStyle={{ color: '#ff4d4f' }}
+                />
+              </Col>
+            </Row>
+            <div className="mt-6">
+              <Progress
+                percent={stats.totalTasks > 0 ? (stats.completedTasks / stats.totalTasks) * 100 : 0}
+                success={{ percent: stats.totalTasks > 0 ? (stats.completedTasks / stats.totalTasks) * 100 : 0 }}
+                strokeColor="#52c41a"
+                className="mb-2"
+              />
+              <Text type="secondary">任务完成进度</Text>
+            </div>
           </Card>
         </Col>
         
@@ -296,34 +328,46 @@ const Dashboard = () => {
             <div className="space-y-6">
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <Text>CPU 使用率</Text>
-                  <Text strong>45%</Text>
+                  <Text>平均 CPU 使用率</Text>
+                  <Text strong>{systemHealth.avgCpu}%</Text>
                 </div>
-                <Progress percent={45} strokeColor="#3b82f6" />
+                <Progress 
+                  percent={systemHealth.avgCpu} 
+                  strokeColor={systemHealth.avgCpu > 80 ? '#ff4d4f' : systemHealth.avgCpu > 60 ? '#faad14' : '#52c41a'} 
+                />
               </div>
               
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <Text>内存使用率</Text>
-                  <Text strong>68%</Text>
+                  <Text>平均内存使用率</Text>
+                  <Text strong>{systemHealth.avgMemory}%</Text>
                 </div>
-                <Progress percent={68} strokeColor="#10b981" />
+                <Progress 
+                  percent={systemHealth.avgMemory} 
+                  strokeColor={systemHealth.avgMemory > 80 ? '#ff4d4f' : systemHealth.avgMemory > 60 ? '#faad14' : '#52c41a'} 
+                />
               </div>
               
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <Text>磁盘使用率</Text>
-                  <Text strong>32%</Text>
+                  <Text>平均磁盘使用率</Text>
+                  <Text strong>{systemHealth.avgDisk}%</Text>
                 </div>
-                <Progress percent={32} strokeColor="#f59e0b" />
+                <Progress 
+                  percent={systemHealth.avgDisk} 
+                  strokeColor={systemHealth.avgDisk > 80 ? '#ff4d4f' : systemHealth.avgDisk > 60 ? '#faad14' : '#52c41a'} 
+                />
               </div>
               
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <Text>网络负载</Text>
-                  <Text strong>23%</Text>
+                  <Text strong>{systemHealth.networkLoad}%</Text>
                 </div>
-                <Progress percent={23} strokeColor="#8b5cf6" />
+                <Progress 
+                  percent={systemHealth.networkLoad} 
+                  strokeColor="#8b5cf6" 
+                />
               </div>
             </div>
           </Card>
@@ -346,6 +390,7 @@ const Dashboard = () => {
           pagination={false}
           size="middle"
           className="rounded-lg overflow-hidden"
+          loading={loading}
         />
       </Card>
     </div>

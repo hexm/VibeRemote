@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 public class AgentMain {
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -34,12 +35,21 @@ public class AgentMain {
             System.exit(1);
         }
         
-        String server = args.length > 0 ? args[0] : "http://localhost:8080";
-        String registerToken = args.length > 1 ? args[1] : "dev-register-token";
+        // 加载配置
+        AgentConfig config = AgentConfig.getInstance();
+        
+        // 命令行参数可以覆盖配置文件
+        String server = args.length > 0 ? args[0] : config.getServerUrl();
+        String registerToken = args.length > 1 ? args[1] : config.getRegisterToken();
 
         System.out.println("Starting LightScript Agent...");
         System.out.println("Server: " + server);
-        System.out.println("Register Token: " + registerToken);
+        System.out.println("Register Token: " + (registerToken.length() > 10 ? registerToken.substring(0, 10) + "..." : registerToken));
+        
+        // 打印配置信息（调试模式）
+        if ("DEBUG".equalsIgnoreCase(config.getLogLevel())) {
+            config.printConfig();
+        }
 
         // 获取主机信息
         String hostname = java.net.InetAddress.getLocalHost().getHostName();
@@ -103,9 +113,15 @@ public class AgentMain {
         final String finalAgentId = agentId;
         final String finalAgentToken = agentToken;
 
-        // 创建任务执行器
-        SimpleTaskRunner taskRunner = new SimpleTaskRunner(api, finalAgentId, finalAgentToken);
+        // 创建任务执行器和升级相关组件
+        TaskStatusMonitor taskStatusMonitor = new TaskStatusMonitor();
+        SimpleTaskRunner taskRunner = new SimpleTaskRunner(api, finalAgentId, finalAgentToken, taskStatusMonitor);
         ExecutorService taskExecutor = Executors.newFixedThreadPool(2);
+        
+        // 创建升级相关组件
+        ScheduledExecutorService upgradeScheduler = Executors.newScheduledThreadPool(1);
+        UpgradeStatusReporter upgradeReporter = new UpgradeStatusReporter(server, client, MAPPER, finalAgentId, finalAgentToken);
+        UpgradeExecutor upgradeExecutor = new UpgradeExecutor(upgradeReporter, taskStatusMonitor, upgradeScheduler, server, finalAgentId, finalAgentToken);
         
         // 连接状态追踪
         final boolean[] needReRegister = {false};
@@ -117,6 +133,7 @@ public class AgentMain {
             System.out.println("Agent shutting down...");
             taskRunner.shutdown();
             taskExecutor.shutdown();
+            upgradeScheduler.shutdown();
             try {
                 client.close();
             } catch (IOException e) {
@@ -131,7 +148,7 @@ public class AgentMain {
         long lastHeartbeat = 0L;
         final long[] lastSystemInfoHeartbeat = {0L}; // 上次发送系统信息心跳的时间
         int heartbeatFailures = 0;
-        final int MAX_HEARTBEAT_FAILURES = 3; // 连续失败3次触发重连
+        final int MAX_HEARTBEAT_FAILURES = config.getMaxHeartbeatFailures(); // 从配置读取
         boolean reRegistered = false; // 是否刚刚重新注册
         
         while (!Thread.currentThread().isInterrupted()) {
@@ -157,6 +174,10 @@ public class AgentMain {
                             
                             // 更新任务执行器的凭证
                             taskRunner.updateCredentials(currentAgentId[0], currentAgentToken[0]);
+                            
+                            // 更新升级报告器的凭证
+                            upgradeReporter = new UpgradeStatusReporter(server, client, MAPPER, currentAgentId[0], currentAgentToken[0]);
+                            upgradeExecutor = new UpgradeExecutor(upgradeReporter, taskStatusMonitor, upgradeScheduler, server, currentAgentId[0], currentAgentToken[0]);
                             
                             System.out.println("Agent re-registered successfully!");
                             System.out.println("New Agent ID: " + currentAgentId[0]);
@@ -188,20 +209,26 @@ public class AgentMain {
                     }
                 }
                 
-                // 心跳检测 - 每30秒一次
-                if (now - lastHeartbeat > 30_000) {
+                // 心跳检测 - 使用配置的间隔时间
+                if (now - lastHeartbeat > config.getHeartbeatInterval()) {
                     try {
                         System.out.println("Sending heartbeat...");
-                        // 每10分钟发送一次包含系统信息的心跳，或者首次心跳后发送
-                        boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > 600_000) || reRegistered;
+                        // 使用配置的系统信息间隔时间
+                        boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > config.getSystemInfoInterval()) || reRegistered;
+                        
+                        Map<String, Object> heartbeatResponse;
                         if (includeSystemInfo) {
-                            api.heartbeat(currentAgentId[0], currentAgentToken[0], true);
+                            heartbeatResponse = api.heartbeat(currentAgentId[0], currentAgentToken[0], true);
                             lastSystemInfoHeartbeat[0] = now;
                             System.out.println("Heartbeat with system info sent at " + new java.util.Date());
                         } else {
-                            api.heartbeat(currentAgentId[0], currentAgentToken[0], false);
+                            heartbeatResponse = api.heartbeat(currentAgentId[0], currentAgentToken[0], false);
                             System.out.println("Heartbeat sent at " + new java.util.Date());
                         }
+                        
+                        // 处理心跳响应中的版本检查信息
+                        handleHeartbeatResponse(heartbeatResponse, upgradeExecutor, api, currentAgentId[0], currentAgentToken[0], taskStatusMonitor);
+                        
                         lastHeartbeat = now;
                         heartbeatFailures = 0; // 重置失败计数
                         reRegistered = false; // 重置重新注册标志
@@ -220,7 +247,7 @@ public class AgentMain {
                     }
                 }
                 
-                // 拉取任务
+                // 拉取任务 - 使用配置的最大任务数
                 Map<String, Object> response = api.pullTasks(currentAgentId[0], currentAgentToken[0]);
                 
                 @SuppressWarnings("unchecked")
@@ -278,8 +305,8 @@ public class AgentMain {
                     }
                 }
 
-                // 短暂休眠避免过度轮询
-                Thread.sleep(5000);
+                // 短暂休眠避免过度轮询 - 使用配置的间隔时间
+                Thread.sleep(config.getTaskPullInterval());
 
             } catch (InterruptedException e) {
                 System.out.println("Agent interrupted, shutting down...");
@@ -317,6 +344,89 @@ public class AgentMain {
         }
         
         System.out.println("Agent main loop ended");
+    }
+    
+    /**
+     * 处理心跳响应中的版本检查信息
+     */
+    private static void handleHeartbeatResponse(Map<String, Object> response, UpgradeExecutor upgradeExecutor, 
+                                               AgentApi agentApi, String agentId, String agentToken, TaskStatusMonitor taskStatusMonitor) {
+        if (response == null || response.isEmpty()) {
+            return;
+        }
+        
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> versionCheck = (Map<String, Object>) response.get("versionCheck");
+            
+            if (versionCheck == null) {
+                return; // 无版本检查信息
+            }
+            
+            Boolean updateAvailable = (Boolean) versionCheck.get("updateAvailable");
+            if (updateAvailable == null || !updateAvailable) {
+                return; // 无更新可用
+            }
+            
+            String message = (String) versionCheck.get("message");
+            System.out.println("[VersionCheck] Update available: " + message);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> latestVersionMap = (Map<String, Object>) versionCheck.get("latestVersion");
+            if (latestVersionMap == null) {
+                System.err.println("[VersionCheck] No version info in response");
+                return;
+            }
+            
+            // 构建版本信息对象
+            UpgradeExecutor.VersionInfo versionInfo = new UpgradeExecutor.VersionInfo();
+            versionInfo.setVersion((String) latestVersionMap.get("version"));
+            versionInfo.setDownloadUrl((String) latestVersionMap.get("downloadUrl"));
+            versionInfo.setFileSize(latestVersionMap.get("fileSize") != null ? 
+                ((Number) latestVersionMap.get("fileSize")).longValue() : null);
+            versionInfo.setFileHash((String) latestVersionMap.get("fileHash"));
+            versionInfo.setForceUpgrade(Boolean.TRUE.equals(latestVersionMap.get("forceUpgrade")));
+            versionInfo.setReleaseNotes((String) latestVersionMap.get("releaseNotes"));
+            
+            // 根据强制升级标志决定升级策略
+            if (versionInfo.isForceUpgrade()) {
+                System.out.println("[VersionCheck] Force upgrade detected, setting status to UPGRADING...");
+                // 主动设置Agent状态为UPGRADING
+                try {
+                    agentApi.setUpgrading(agentId, agentToken);
+                    System.out.println("[VersionCheck] Status set to UPGRADING, stopping all tasks and starting upgrade immediately...");
+                } catch (Exception e) {
+                    System.err.println("[VersionCheck] Failed to set upgrading status: " + e.getMessage());
+                    return;
+                }
+                
+                // 强制升级：立即停止所有任务并开始升级
+                taskStatusMonitor.stopAllTasks();
+                upgradeExecutor.executeUpgrade(versionInfo);
+            } else {
+                System.out.println("[VersionCheck] Normal upgrade detected, setting status to UPGRADING...");
+                // 主动设置Agent状态为UPGRADING
+                try {
+                    agentApi.setUpgrading(agentId, agentToken);
+                    System.out.println("[VersionCheck] Status set to UPGRADING, entering upgrade waiting state...");
+                } catch (Exception e) {
+                    System.err.println("[VersionCheck] Failed to set upgrading status: " + e.getMessage());
+                    return;
+                }
+                
+                // 普通升级：进入升级状态，等待任务完成后升级
+                if (upgradeExecutor.canUpgrade()) {
+                    System.out.println("[VersionCheck] No running tasks, starting upgrade immediately...");
+                    upgradeExecutor.executeUpgrade(versionInfo);
+                } else {
+                    System.out.println("[VersionCheck] Tasks are running, waiting for completion before upgrade...");
+                    upgradeExecutor.scheduleUpgradeRetry(versionInfo);
+                }
+            }
+            
+        } catch (Exception e) {
+            System.err.println("[VersionCheck] Failed to process version check response: " + e.getMessage());
+        }
     }
     
     /**

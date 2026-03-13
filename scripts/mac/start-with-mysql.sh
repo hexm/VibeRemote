@@ -13,7 +13,6 @@ grep "url:" server/src/main/resources/application.yml | head -1
 
 echo ""
 echo "启动Spring Boot应用..."
-echo "Flyway将自动执行数据库迁移..."
 echo ""
 
 mvn spring-boot:run -pl server

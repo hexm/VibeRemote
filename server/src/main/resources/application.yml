@@ -8,14 +8,9 @@ server:
 spring:
   application:
     name: lightscript-server
-  servlet:
-    multipart:
-      max-file-size: 100MB      # 单个文件最大100MB
-      max-request-size: 100MB   # 整个请求最大100MB
-      file-size-threshold: 2KB  # 文件大小阈值，超过此值写入临时文件
   datasource:
     # MySQL数据库配置
-    url: jdbc:mysql://8.138.114.34:3306/lightscript?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://8.138.114.34:3306/lightscript?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8
     username: lightscript
     password: lightscript123
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -27,8 +22,6 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: false
-  flyway:
-    enabled: false
   security:
     user:
       name: admin

@@ -7,7 +7,11 @@ import com.example.lightscript.server.model.FileModels;
 import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.FileService;
+import com.example.lightscript.server.service.AgentVersionService;
+import com.example.lightscript.server.service.UpgradeStatusService;
 import com.example.lightscript.server.entity.TaskLog;
+import com.example.lightscript.server.entity.AgentVersion;
+import com.example.lightscript.server.entity.AgentUpgradeLog;
 import javax.validation.Valid;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -28,11 +32,16 @@ public class AgentController {
 	private final AgentService agentService;
 	private final TaskService taskService;
 	private final FileService fileService;
+	private final AgentVersionService agentVersionService;
+	private final UpgradeStatusService upgradeStatusService;
 
-	public AgentController(AgentService agentService, TaskService taskService, FileService fileService) {
+	public AgentController(AgentService agentService, TaskService taskService, FileService fileService, 
+						  AgentVersionService agentVersionService, UpgradeStatusService upgradeStatusService) {
 		this.agentService = agentService;
 		this.taskService = taskService;
 		this.fileService = fileService;
+		this.agentVersionService = agentVersionService;
+		this.upgradeStatusService = upgradeStatusService;
 	}
 
 	@PostMapping("/register")
@@ -42,12 +51,43 @@ public class AgentController {
 	}
 
 	@PostMapping("/heartbeat")
-	public ResponseEntity<Void> heartbeat(@Valid @RequestBody HeartbeatRequest req) {
+	public ResponseEntity<HeartbeatResponse> heartbeat(@Valid @RequestBody HeartbeatRequest req) {
 		boolean success = agentService.updateHeartbeat(req.getAgentId(), req.getAgentToken(), req);
 		if (!success) {
 			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
-		return ResponseEntity.ok().build();
+		
+		// 构建响应，包含版本检查信息
+		HeartbeatResponse response = new HeartbeatResponse();
+		
+		// 检查版本更新（如果Agent在心跳中报告了版本信息）
+		if (req.getAgentVersion() != null) {
+			AgentVersionService.VersionCheckResult versionCheck = agentVersionService.checkForUpdate(
+				req.getAgentVersion(), 
+				"ALL" // 暂时使用ALL平台，后续可以根据osType判断
+			);
+			
+			if (versionCheck.isUpdateAvailable()) {
+				AgentVersion latestVersion = versionCheck.getLatestVersion();
+				
+				VersionCheckResult result = new VersionCheckResult();
+				result.setUpdateAvailable(true);
+				result.setMessage(versionCheck.getMessage());
+				
+				VersionInfo versionInfo = new VersionInfo();
+				versionInfo.setVersion(latestVersion.getVersion());
+				versionInfo.setDownloadUrl(latestVersion.getDownloadUrl());
+				versionInfo.setFileSize(latestVersion.getFileSize());
+				versionInfo.setFileHash(latestVersion.getFileHash());
+				versionInfo.setForceUpgrade(Boolean.TRUE.equals(latestVersion.getForceUpgrade()));
+				versionInfo.setReleaseNotes(latestVersion.getReleaseNotes());
+				
+				result.setLatestVersion(versionInfo);
+				response.setVersionCheck(result);
+			}
+		}
+		
+		return ResponseEntity.ok(response);
 	}
 
 	@PostMapping("/offline")
@@ -157,5 +197,77 @@ public class AgentController {
 				.map(log -> String.format("[%d][%s] %s", log.getSeqNum(), log.getStream(), log.getContent()))
 				.collect(Collectors.toList());
 		return ResponseEntity.ok(logs);
+	}
+	
+	/**
+	 * Agent主动设置自己的状态为升级中
+	 */
+	@PostMapping("/status/upgrading")
+	public ResponseEntity<Void> setUpgrading(
+			@RequestParam String agentId,
+			@RequestParam String agentToken) {
+		
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		
+		agentService.setAgentUpgrading(agentId);
+		return ResponseEntity.ok().build();
+	}
+	
+	/**
+	 * Agent报告升级开始
+	 */
+	@PostMapping("/upgrade/start")
+	public ResponseEntity<Map<String, Object>> reportUpgradeStart(
+			@RequestParam String agentId,
+			@RequestParam String agentToken,
+			@RequestBody UpgradeStartRequest request) {
+		
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		
+		Long upgradeLogId = upgradeStatusService.startUpgrade(
+			agentId, 
+			request.getFromVersion(), 
+			request.getToVersion(), 
+			request.isForceUpgrade()
+		);
+		
+		Map<String, Object> response = new HashMap<>();
+		response.put("upgradeLogId", upgradeLogId);
+		return ResponseEntity.ok(response);
+	}
+	
+	/**
+	 * Agent报告升级状态更新
+	 */
+	@PostMapping("/upgrade/status")
+	public ResponseEntity<Void> reportUpgradeStatus(
+			@RequestParam String agentId,
+			@RequestParam String agentToken,
+			@RequestBody UpgradeStatusRequest request) {
+		
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		
+		upgradeStatusService.updateUpgradeStatus(
+			request.getUpgradeLogId(),
+			request.getStatus(),
+			request.getErrorMessage()
+		);
+		
+		return ResponseEntity.ok().build();
+	}
+	
+	/**
+	 * 获取Agent升级历史
+	 */
+	@GetMapping("/{agentId}/upgrade-history")
+	public ResponseEntity<List<AgentUpgradeLog>> getUpgradeHistory(@PathVariable String agentId) {
+		List<AgentUpgradeLog> history = upgradeStatusService.getUpgradeHistory(agentId);
+		return ResponseEntity.ok(history);
 	}
 }

@@ -135,7 +135,18 @@ public class AgentService {
         if (agentOpt.isPresent()) {
             Agent agent = agentOpt.get();
             agent.setLastHeartbeat(LocalDateTime.now());
-            agent.setStatus("ONLINE");
+            
+            // 只有当Agent不在升级状态时，才设置为ONLINE
+            // 升级过程中心跳停止，升级完成后心跳恢复时自动设为ONLINE
+            if (!"UPGRADING".equals(agent.getStatus())) {
+                agent.setStatus("ONLINE");
+            }
+            
+            // 更新Agent版本信息
+            if (request.getAgentVersion() != null) {
+                agent.setAgentVersion(request.getAgentVersion());
+            }
+            
             log.debug("[Agent] Heartbeat received from {} ({})", agent.getHostname(), agentId);
             
             // 更新资源信息
@@ -205,6 +216,26 @@ public class AgentService {
                     agent.getHostname(), agentId);
             LogUtil.logAgent("STATUS_CHANGE", agent.getAgentId(), agent.getHostname(), 
                     "ONLINE -> OFFLINE (agent shutdown)");
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * 设置Agent为升级状态
+     */
+    @Transactional
+    public boolean setAgentUpgrading(String agentId) {
+        Optional<Agent> agentOpt = agentRepository.findByAgentId(agentId);
+        if (agentOpt.isPresent()) {
+            Agent agent = agentOpt.get();
+            String oldStatus = agent.getStatus();
+            agent.setStatus("UPGRADING");
+            agentRepository.save(agent);
+            log.info("[Agent] {} ({}) status changed: {} -> UPGRADING - Upgrade detected", 
+                    agent.getHostname(), agentId, oldStatus);
+            LogUtil.logAgent("STATUS_CHANGE", agent.getAgentId(), agent.getHostname(), 
+                    oldStatus + " -> UPGRADING (upgrade detected)");
             return true;
         }
         return false;

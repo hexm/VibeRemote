@@ -48,10 +48,11 @@ class AgentApi {
 	}
 
 	void heartbeat(String agentId, String agentToken) throws Exception {
-		heartbeat(agentId, agentToken, false);
+		Map<String, Object> response = heartbeat(agentId, agentToken, false);
+		// 兼容性方法，忽略响应
 	}
 	
-	void heartbeat(String agentId, String agentToken, boolean includeSystemInfo) throws Exception {
+	Map<String, Object> heartbeat(String agentId, String agentToken, boolean includeSystemInfo) throws Exception {
 		Double cpuLoad = getCpuLoad();
 		Long freeMemMb = getFreeMemoryMb();
 		Long totalMemMb = getTotalMemoryMb();
@@ -80,6 +81,9 @@ class AgentApi {
 			}
 		}
 		
+		// 总是包含Agent版本信息，用于版本检查
+		payload.put("agentVersion", getAgentVersion());
+		
 		// 打印资源使用情况
 		System.out.println(String.format("Resource Usage - CPU: %.2f%%, Memory: %d/%d MB (%.2f%% used)", 
 			cpuLoad != null ? cpuLoad * 100 : 0.0,
@@ -103,6 +107,17 @@ class AgentApi {
 				String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
 				throw new RuntimeException("Heartbeat failed: " + responseBody);
 			}
+			
+			// 解析响应，检查版本更新信息
+			String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+			if (responseBody != null && !responseBody.trim().isEmpty()) {
+				try {
+					return mapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+				} catch (Exception e) {
+					System.err.println("Failed to parse heartbeat response: " + e.getMessage());
+				}
+			}
+			return new HashMap<>();
 		}
 	}
 	
@@ -174,7 +189,11 @@ class AgentApi {
 	}
 
 	Map<String, Object> pullTasks(String agentId, String agentToken) throws Exception {
-		String url = baseUrl + "/api/agent/tasks/pull?agentId=" + agentId + "&agentToken=" + agentToken;
+		return pullTasks(agentId, agentToken, AgentConfig.getInstance().getTaskPullMax());
+	}
+	
+	Map<String, Object> pullTasks(String agentId, String agentToken, int max) throws Exception {
+		String url = baseUrl + "/api/agent/tasks/pull?agentId=" + agentId + "&agentToken=" + agentToken + "&max=" + max;
 		HttpGet get = new HttpGet(url);
 		
 		try (CloseableHttpResponse response = httpClient.execute(get)) {
@@ -240,6 +259,21 @@ class AgentApi {
 		
 		try (CloseableHttpResponse response = httpClient.execute(post)) {
 			// 完成通知不需要检查响应
+		}
+	}
+	
+	/**
+	 * 设置Agent状态为升级中
+	 */
+	void setUpgrading(String agentId, String agentToken) throws Exception {
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/status/upgrading?agentId=" + agentId + "&agentToken=" + agentToken);
+		post.setHeader("Content-Type", "application/json");
+		
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			if (statusCode != 200) {
+				throw new Exception("Failed to set upgrading status: " + statusCode);
+			}
 		}
 	}
 	
@@ -405,7 +439,6 @@ class AgentApi {
 	
 	// 获取Agent版本
 	private String getAgentVersion() {
-		// 可以从配置文件或者manifest中读取，这里先返回固定版本
-		return "1.0.0";
+		return VersionUtil.getCurrentVersion();
 	}
 }

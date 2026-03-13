@@ -31,6 +31,12 @@
     </dependency>
   </dependencies>
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -48,6 +54,13 @@
             <manifest>
               <mainClass>com.example.lightscript.agent.AgentMain</mainClass>
             </manifest>
+            <manifestEntries>
+              <Implementation-Version>${project.version}</Implementation-Version>
+              <Specification-Version>${project.version}</Specification-Version>
+              <Implementation-Title>${project.name}</Implementation-Title>
+              <Implementation-Vendor>LightScript</Implementation-Vendor>
+              <Build-Time>${maven.build.timestamp}</Build-Time>
+            </manifestEntries>
           </archive>
         </configuration>
         <executions>

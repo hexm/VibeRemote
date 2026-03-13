@@ -3,6 +3,7 @@ package com.example.lightscript.server.controller;
 import com.example.lightscript.server.model.FileModels.*;
 import com.example.lightscript.server.security.RequirePermission;
 import com.example.lightscript.server.service.FileService;
+import com.example.lightscript.server.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
@@ -18,7 +19,9 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.validation.Valid;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -71,7 +74,7 @@ public class FileController {
      */
     @PostMapping("/upload")
     @RequirePermission("file:upload")
-    public FileDTO uploadFile(@RequestParam("file") MultipartFile file,
+    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file,
                              @RequestParam("name") String name,
                              @RequestParam("category") String category,
                              @RequestParam(value = "description", required = false) String description,
@@ -79,15 +82,38 @@ public class FileController {
                              @RequestParam(value = "version", required = false, defaultValue = "1.0") String version,
                              Authentication authentication) {
         
-        UploadFileRequest request = new UploadFileRequest();
-        request.setName(name);
-        request.setCategory(category);
-        request.setDescription(description);
-        request.setTags(tags);
-        request.setVersion(version);
-        
-        String username = authentication.getName();
-        return fileService.uploadFile(request, file, username);
+        try {
+            log.info("Uploading file: name={}, originalName={}, size={}, category={}", 
+                    name, file.getOriginalFilename(), file.getSize(), category);
+            
+            UploadFileRequest request = new UploadFileRequest();
+            request.setName(name);
+            request.setCategory(category);
+            request.setDescription(description);
+            request.setTags(tags);
+            request.setVersion(version);
+            
+            String username = authentication.getName();
+            FileDTO result = fileService.uploadFile(request, file, username);
+            
+            log.info("File uploaded successfully: fileId={}", result.getFileId());
+            return ResponseEntity.ok(result);
+            
+        } catch (BusinessException e) {
+            log.warn("File upload failed with business error: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getErrorCode().name());
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("status", 400);
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            log.error("File upload failed with unexpected error", e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "INTERNAL_SERVER_ERROR");
+            errorResponse.put("message", "服务器内部错误: " + e.getMessage());
+            errorResponse.put("status", 500);
+            return ResponseEntity.status(500).body(errorResponse);
+        }
     }
     
     /**

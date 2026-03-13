@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic } from 'antd'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider } from 'antd'
 import {
   DesktopOutlined,
   SearchOutlined,
@@ -397,6 +397,17 @@ env | sort
       ),
     },
     {
+      title: '版本',
+      dataIndex: 'agentVersion',
+      key: 'agentVersion',
+      width: 80,
+      render: (version) => (
+        <Tag color="purple">
+          {version || 'Unknown'}
+        </Tag>
+      ),
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
@@ -756,6 +767,11 @@ env | sort
               </Row>
             </Card>
 
+            {/* 升级历史 */}
+            <Card title="升级历史" size="small">
+              <UpgradeHistory agentId={selectedAgent.agentId || selectedAgent.id} />
+            </Card>
+
             {/* 所属分组 */}
             <Card title="所属分组" size="small">
               <Space size="small" wrap>
@@ -774,6 +790,88 @@ env | sort
         )}
       </Modal>
     </div>
+  )
+}
+
+// 升级历史组件
+const UpgradeHistory = ({ agentId }) => {
+  const [upgradeHistory, setUpgradeHistory] = useState([])
+  const [loading, setLoading] = useState(false)
+  
+  useEffect(() => {
+    if (agentId) {
+      loadUpgradeHistory()
+    }
+  }, [agentId])
+  
+  const loadUpgradeHistory = async () => {
+    setLoading(true)
+    try {
+      const response = await api.get(`/web/upgrade/agents/${agentId}/history`)
+      setUpgradeHistory(response || [])
+    } catch (error) {
+      console.error('加载升级历史失败:', error)
+      message.error('加载升级历史失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  const columns = [
+    {
+      title: '升级时间',
+      dataIndex: 'startTime',
+      render: (text) => text ? new Date(text).toLocaleString('zh-CN') : '-',
+    },
+    {
+      title: '版本变更',
+      render: (_, record) => (
+        <span>{record.fromVersion || 'Unknown'} → {record.toVersion || 'Unknown'}</span>
+      ),
+    },
+    {
+      title: '升级状态',
+      dataIndex: 'upgradeStatus',
+      render: (status) => {
+        const statusConfig = {
+          SUCCESS: { color: 'success', text: '成功' },
+          FAILED: { color: 'error', text: '失败' },
+          ROLLBACK: { color: 'warning', text: '回滚' },
+          STARTED: { color: 'processing', text: '开始' },
+          DOWNLOADING: { color: 'processing', text: '下载中' },
+          INSTALLING: { color: 'processing', text: '安装中' },
+        }
+        const config = statusConfig[status] || { color: 'default', text: status }
+        return <Tag color={config.color}>{config.text}</Tag>
+      },
+    },
+    {
+      title: '耗时',
+      render: (_, record) => {
+        if (record.endTime && record.startTime) {
+          const duration = Math.floor((new Date(record.endTime) - new Date(record.startTime)) / 1000)
+          return `${duration}秒`
+        }
+        return '-'
+      },
+    },
+    {
+      title: '强制升级',
+      dataIndex: 'forceUpgrade',
+      render: (force) => force ? <Tag color="red">是</Tag> : <Tag>否</Tag>,
+    },
+  ]
+  
+  return (
+    <Table
+      columns={columns}
+      dataSource={upgradeHistory}
+      rowKey="id"
+      loading={loading}
+      size="small"
+      pagination={{ pageSize: 5 }}
+      locale={{ emptyText: '暂无升级记录' }}
+    />
   )
 }
 

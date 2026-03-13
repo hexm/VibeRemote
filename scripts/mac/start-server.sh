@@ -34,16 +34,16 @@ else
 fi
 
 echo "[INFO] 使用 JAR: $JAR_PATH"
-echo "[INFO] 启动 URL: http://localhost:8080 (H2 内存数据库)"
+echo "[INFO] 启动 URL: http://localhost:8080 (H2 持久化数据库)"
 echo "[INFO] 默认登录: admin / admin123"
 echo
 
-# 3) 使用 H2 覆盖配置启动，避免本地 MySQL 依赖
-echo "[INFO] 正在启动服务器（优化设置）..."
+# 3) 使用 H2 持久化数据库启动
+echo "[INFO] 正在启动服务器（使用持久化数据库）..."
 java -Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8 -Xmx512m -Xms256m \
      -jar "$JAR_PATH" \
      --server.port=8080 \
-     --spring.datasource.url=jdbc:h2:mem:lightscript \
+     --spring.datasource.url=jdbc:h2:./data/lightscript \
      --spring.datasource.driver-class-name=org.h2.Driver \
      --spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect \
      --spring.jpa.hibernate.ddl-auto=update \
