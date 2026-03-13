@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightScript - 轻量级脚本执行平台</title>
+    <meta name="description" content="LightScript是一个现代化的分布式脚本执行平台，支持多节点管理、任务调度和实时监控">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="assets/logo.svg" alt="LightScript" class="logo">
+                <span class="brand-name">LightScript</span>
+            </div>
+            <div class="nav-menu">
+                <a href="#features" class="nav-link">功能特性</a>
+                <a href="#docs" class="nav-link">文档</a>
+                <a href="#download" class="nav-link">下载</a>
+                <a href="#contact" class="nav-link">联系我们</a>
+                <a href="/web-modern" class="nav-link btn-primary">立即体验</a>
+            </div>
+            <div class="nav-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 英雄区域 -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    现代化的<span class="highlight">分布式脚本</span><br>
+                    执行平台
+                </h1>
+                <p class="hero-subtitle">
+                    LightScript 提供强大的多节点管理、智能任务调度和实时监控功能，
+                    让您的脚本执行更加高效、可靠和可视化。
+                </p>
+                <div class="hero-actions">
+                    <a href="/web-modern" class="btn btn-primary btn-large">
+                        立即开始
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                    <a href="#demo" class="btn btn-secondary btn-large">
+                        观看演示
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <polygon points="5,3 19,12 5,21"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-buttons">
+                            <span class="btn-close"></span>
+                            <span class="btn-minimize"></span>
+                            <span class="btn-maximize"></span>
+                        </div>
+                        <div class="terminal-title">LightScript Dashboard</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="code-line">
+                            <span class="prompt">$</span>
+                            <span class="command">lightscript deploy --nodes 5 --script backup.sh</span>
+                        </div>
+                        <div class="code-line output">
+                            <span class="success">✓ 连接到 5 个节点</span>
+                        </div>
+                        <div class="code-line output">
+                            <span class="success">✓ 脚本部署完成</span>
+                        </div>
+                        <div class="code-line output">
+                            <span class="info">→ 执行进度: 100% (5/5)</span>
+                        </div>
+                        <div class="code-line">
+                            <span class="prompt">$</span>
+                            <span class="cursor">|</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 特性介绍 -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">为什么选择 LightScript？</h2>
+                <p class="section-subtitle">
+                    专为现代化运维和开发团队设计的脚本执行平台
+                </p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">分布式执行</h3>
+                    <p class="feature-description">
+                        支持多节点并行执行，自动负载均衡，提升执行效率
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="9" cy="9" r="2"/>
+                            <path d="M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">实时监控</h3>
+                    <p class="feature-description">
+                        可视化监控面板，实时查看执行状态、日志和性能指标
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">智能调度</h3>
+                    <p class="feature-description">
+                        基于资源使用情况和优先级的智能任务调度算法
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M9 12l2 2 4-4"/>
+                            <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"/>
+                            <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"/>
+                            <path d="M13 12h3"/>
+                            <path d="M8 12H5"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">多语言支持</h3>
+                    <p class="feature-description">
+                        支持 Shell、Python、PowerShell 等多种脚本语言
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <circle cx="12" cy="16" r="1"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">安全可靠</h3>
+                    <p class="feature-description">
+                        完善的权限管理、审计日志和安全执行环境
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.27,6.96 12,12.01 20.73,6.96"/>
+                            <line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">易于部署</h3>
+                    <p class="feature-description">
+                        简单的安装配置，支持 Docker 容器化部署
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 使用场景 -->
+    <section class="use-cases">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">适用场景</h2>
+                <p class="section-subtitle">
+                    LightScript 可以帮助您解决各种自动化需求
+                </p>
+            </div>
+            <div class="use-cases-grid">
+                <div class="use-case">
+                    <div class="use-case-icon">🚀</div>
+                    <h3>CI/CD 流水线</h3>
+                    <p>自动化构建、测试和部署流程</p>
+                </div>
+                <div class="use-case">
+                    <div class="use-case-icon">🔧</div>
+                    <h3>运维自动化</h3>
+                    <p>系统维护、监控和故障处理</p>
+                </div>
+                <div class="use-case">
+                    <div class="use-case-icon">📊</div>
+                    <h3>数据处理</h3>
+                    <p>批量数据清洗、转换和分析</p>
+                </div>
+                <div class="use-case">
+                    <div class="use-case-icon">🔄</div>
+                    <h3>定时任务</h3>
+                    <p>周期性备份、同步和清理任务</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 快速开始 -->
+    <section id="download" class="quick-start">
+        <div class="container">
+            <div class="quick-start-content">
+                <div class="quick-start-text">
+                    <h2 class="section-title">快速开始</h2>
+                    <p class="section-subtitle">
+                        几分钟内即可部署并运行 LightScript
+                    </p>
+                    <div class="steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h4>下载安装包</h4>
+                                <p>选择适合您系统的安装包</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h4>配置节点</h4>
+                                <p>添加执行节点并配置连接</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h4>开始使用</h4>
+                                <p>创建并执行您的第一个脚本任务</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="quick-start-code">
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-title">安装 LightScript</span>
+                            <button class="copy-btn" onclick="copyCode()">复制</button>
+                        </div>
+                        <div class="code-content">
+                            <pre><code># 下载并安装 LightScript
+wget https://github.com/lightscript/releases/latest/lightscript.tar.gz
+tar -xzf lightscript.tar.gz
+cd lightscript
+
+# 启动服务
+./start-server.sh
+
+# 启动 Agent
+./start-agent.sh</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-brand">
+                        <img src="assets/logo.svg" alt="LightScript" class="footer-logo">
+                        <span class="footer-brand-name">LightScript</span>
+                    </div>
+                    <p class="footer-description">
+                        现代化的分布式脚本执行平台，让自动化更简单。
+                    </p>
+                </div>
+                <div class="footer-section">
+                    <h4 class="footer-title">产品</h4>
+                    <ul class="footer-links">
+                        <li><a href="#features">功能特性</a></li>
+                        <li><a href="#download">下载</a></li>
+                        <li><a href="/web-modern">在线体验</a></li>
+                        <li><a href="#docs">文档</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4 class="footer-title">资源</h4>
+                    <ul class="footer-links">
+                        <li><a href="#docs">使用文档</a></li>
+                        <li><a href="#api">API 参考</a></li>
+                        <li><a href="#examples">示例代码</a></li>
+                        <li><a href="#community">社区</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4 class="footer-title">支持</h4>
+                    <ul class="footer-links">
+                        <li><a href="#contact">联系我们</a></li>
+                        <li><a href="#issues">问题反馈</a></li>
+                        <li><a href="#faq">常见问题</a></li>
+                        <li><a href="#changelog">更新日志</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 LightScript. 保留所有权利。</p>
+                <div class="footer-social">
+                    <a href="#" class="social-link">GitHub</a>
+                    <a href="#" class="social-link">文档</a>
+                    <a href="#" class="social-link">社区</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
