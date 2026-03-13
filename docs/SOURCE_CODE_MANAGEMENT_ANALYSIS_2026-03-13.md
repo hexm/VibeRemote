@@ -56,6 +56,7 @@
 agent/start-agent.sh
 agent/start-agent.bat  
 agent/stop-agent.sh
+agent/stop-agent.bat
 ```
 
 #### 升级器相关

@@ -65,12 +65,12 @@ public class AgentUpgrader {
         File logsDir = new File(agentHome, "logs");
         logsDir.mkdirs();
         
-        String logFileName = "upgrade-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".log";
-        File logFile = new File(logsDir, logFileName);
+        // 使用统一的agent.log文件，而不是创建新的升级日志文件
+        File logFile = new File(logsDir, "agent.log");
         
+        // 追加模式写入统一日志文件
         logWriter = new PrintWriter(new FileWriter(logFile, true));
         log("=== Agent Upgrade Started ===");
-        log("Upgrade log file: " + logFile.getAbsolutePath());
         log("Agent home: " + agentHome);
         log("Main JAR: " + MAIN_JAR_NAME);
     }
@@ -80,12 +80,12 @@ public class AgentUpgrader {
      */
     private void log(String message) {
         String timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT);
-        String logLine = "[" + timestamp + "] " + message;
+        String logEntry = String.format("%s [main] INFO [UPGRADER] - %s", timestamp, message);
         
         // 同时输出到控制台和日志文件
-        System.out.println(logLine);
+        System.out.println(logEntry);
         if (logWriter != null) {
-            logWriter.println(logLine);
+            logWriter.println(logEntry);
             logWriter.flush();
         }
     }
@@ -94,13 +94,19 @@ public class AgentUpgrader {
      * 记录错误日志
      */
     private void logError(String message, Exception e) {
-        log("ERROR: " + message);
-        if (e != null) {
-            log("Exception: " + e.getMessage());
-            if (logWriter != null) {
+        String timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT);
+        String logEntry = String.format("%s [main] ERROR [UPGRADER] - %s", timestamp, message);
+        
+        // 输出错误日志
+        System.err.println(logEntry);
+        if (logWriter != null) {
+            logWriter.println(logEntry);
+            if (e != null) {
+                String exceptionEntry = String.format("%s [main] ERROR [UPGRADER] - Exception: %s", timestamp, e.getMessage());
+                logWriter.println(exceptionEntry);
                 e.printStackTrace(logWriter);
-                logWriter.flush();
             }
+            logWriter.flush();
         }
     }
     
@@ -292,7 +298,7 @@ public class AgentUpgrader {
         pb.redirectError(new File(logsDir, "agent-startup-error.log"));
         
         Process process = pb.start();
-        log("New agent process started using script: " + startScript + " (PID: " + process.pid() + ")");
+        log("New agent process started using script: " + startScript);
     }
     
     /**
