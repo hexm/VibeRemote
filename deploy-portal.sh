@@ -105,7 +105,7 @@ cd "$INSTALL_DIR"
 
 # 下载安装包
 echo "📥 下载安装包..."
-DOWNLOAD_URL="http://8.138.114.34/agent/release/lightscript-agent-0.5.0-linux-x64.tar.gz"
+DOWNLOAD_URL="http://8.138.114.34/agent/release/lightscript-agent-0.4.0-linux-x64.tar.gz"
 
 if command -v curl >/dev/null 2>&1; then
     curl -L -o lightscript-agent.tar.gz "$DOWNLOAD_URL"
@@ -213,7 +213,7 @@ cd "$INSTALL_DIR"
 
 # 下载安装包
 echo "📥 下载安装包..."
-DOWNLOAD_URL="http://8.138.114.34/agent/release/lightscript-agent-0.5.0-macos-$ARCH.tar.gz"
+DOWNLOAD_URL="http://8.138.114.34/agent/release/lightscript-agent-0.4.0-macos-$ARCH.tar.gz"
 
 if command -v curl >/dev/null 2>&1; then
     curl -L -o lightscript-agent.tar.gz "$DOWNLOAD_URL"
@@ -304,7 +304,7 @@ Set-Location $InstallDir
 
 # 下载安装包
 Write-Host "📥 下载安装包..." -ForegroundColor Yellow
-$DownloadUrl = "http://8.138.114.34/agent/release/lightscript-agent-0.5.0-windows-x64.zip"
+$DownloadUrl = "http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip"
 $ZipFile = "$InstallDir\lightscript-agent.zip"
 
 try {

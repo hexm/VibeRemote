@@ -277,8 +277,8 @@ echo.
 echo 启动LightScript Agent...
 echo Agent JAR: %SCRIPT_DIR%agent.jar
 
-REM 启动Agent
-"%JAVA_CMD%" -Xms64m -Xmx256m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
+REM 启动Agent (控制内存使用)
+"%JAVA_CMD%" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
 EOF
 
         # Windows 停止脚本
@@ -298,9 +298,27 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JRE_HOME="$SCRIPT_DIR/jre"
 JAVA_EXE="$JRE_HOME/bin/java"
+PID_FILE="$SCRIPT_DIR/agent.pid"
+LOG_FILE="$SCRIPT_DIR/logs/agent.log"
+
+# 创建日志目录
+mkdir -p "$SCRIPT_DIR/logs"
 
 echo "LightScript Agent 启动中..."
 echo "工作目录: $SCRIPT_DIR"
+
+# 检查是否已经在运行
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if ps -p $PID > /dev/null 2>&1; then
+        echo "Agent 已经在运行 (PID: $PID)"
+        echo "如需重启，请先运行: ./stop-agent.sh"
+        exit 1
+    else
+        echo "清理过期的PID文件..."
+        rm -f "$PID_FILE"
+    fi
+fi
 
 # 优先使用内置JRE
 if [ -f "$JAVA_EXE" ] && [ -x "$JAVA_EXE" ]; then
@@ -344,25 +362,133 @@ echo "Java版本信息:"
 "$JAVA_CMD" -version
 
 echo ""
-echo "启动LightScript Agent..."
+echo "启动LightScript Agent (后台模式)..."
 echo "Agent JAR: $SCRIPT_DIR/agent.jar"
+echo "日志文件: $LOG_FILE"
 
-# 启动Agent
-"$JAVA_CMD" \
-    -Xms64m \
-    -Xmx256m \
+# 后台启动Agent，控制内存使用
+nohup "$JAVA_CMD" \
+    -Xms32m \
+    -Xmx128m \
+    -XX:MaxMetaspaceSize=64m \
     -Dfile.encoding=UTF-8 \
     -Djava.awt.headless=true \
-    -jar "$SCRIPT_DIR/agent.jar"
+    -jar "$SCRIPT_DIR/agent.jar" \
+    >> "$LOG_FILE" 2>&1 &
+
+# 保存PID
+AGENT_PID=$!
+echo $AGENT_PID > "$PID_FILE"
+
+# 等待一下确保启动成功
+sleep 2
+
+# 检查进程是否还在运行
+if ps -p $AGENT_PID > /dev/null 2>&1; then
+    echo "✅ Agent 启动成功 (PID: $AGENT_PID)"
+    echo ""
+    echo "使用以下命令:"
+    echo "  查看日志: tail -f $LOG_FILE"
+    echo "  停止服务: ./stop-agent.sh"
+    echo "  查看状态: ps -p $AGENT_PID"
+else
+    echo "❌ Agent 启动失败"
+    echo "请查看日志文件: $LOG_FILE"
+    rm -f "$PID_FILE"
+    exit 1
+fi
 EOF
 
         # Unix 停止脚本
         cat > "$target_dir/stop-agent.sh" << 'EOF'
 #!/bin/bash
 
-echo "Stopping LightScript Agent..."
-pkill -f "java.*agent.jar" || echo "No agent process found."
-echo "Agent stopped."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PID_FILE="$SCRIPT_DIR/agent.pid"
+
+echo "停止 LightScript Agent..."
+
+# 检查PID文件是否存在
+if [ ! -f "$PID_FILE" ]; then
+    echo "未找到PID文件，尝试通过进程名查找..."
+    
+    # 通过进程名查找
+    PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
+    
+    if [ -z "$PIDS" ]; then
+        echo "未找到运行中的Agent进程"
+        exit 0
+    fi
+    
+    echo "找到Agent进程: $PIDS"
+    for PID in $PIDS; do
+        echo "停止进程 $PID..."
+        kill $PID
+        
+        # 等待进程结束
+        for i in {1..10}; do
+            if ! ps -p $PID > /dev/null 2>&1; then
+                echo "进程 $PID 已停止"
+                break
+            fi
+            sleep 1
+        done
+        
+        # 如果进程仍在运行，强制杀死
+        if ps -p $PID > /dev/null 2>&1; then
+            echo "强制停止进程 $PID..."
+            kill -9 $PID
+        fi
+    done
+    
+    echo "Agent 已停止"
+    exit 0
+fi
+
+# 读取PID
+PID=$(cat "$PID_FILE")
+
+# 检查进程是否存在
+if ! ps -p $PID > /dev/null 2>&1; then
+    echo "进程 $PID 不存在，清理PID文件..."
+    rm -f "$PID_FILE"
+    echo "Agent 未运行"
+    exit 0
+fi
+
+echo "停止Agent进程 (PID: $PID)..."
+
+# 发送TERM信号
+kill $PID
+
+# 等待进程优雅退出
+echo "等待进程退出..."
+for i in {1..15}; do
+    if ! ps -p $PID > /dev/null 2>&1; then
+        echo "✅ Agent 已停止"
+        rm -f "$PID_FILE"
+        exit 0
+    fi
+    sleep 1
+done
+
+# 如果进程仍在运行，强制杀死
+if ps -p $PID > /dev/null 2>&1; then
+    echo "进程未响应，强制停止..."
+    kill -9 $PID
+    sleep 1
+    
+    if ps -p $PID > /dev/null 2>&1; then
+        echo "❌ 无法停止进程 $PID"
+        exit 1
+    else
+        echo "✅ Agent 已强制停止"
+        rm -f "$PID_FILE"
+    fi
+else
+    echo "✅ Agent 已停止"
+    rm -f "$PID_FILE"
+fi
 EOF
 
         # 设置执行权限

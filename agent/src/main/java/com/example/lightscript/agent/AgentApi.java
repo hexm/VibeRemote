@@ -2,16 +2,21 @@ package com.example.lightscript.agent;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 class AgentApi {
@@ -273,6 +278,20 @@ class AgentApi {
 			int statusCode = response.getStatusLine().getStatusCode();
 			if (statusCode != 200) {
 				throw new Exception("Failed to set upgrading status: " + statusCode);
+			}
+		}
+	}
+	
+	public void offline(String agentId, String agentToken) throws Exception {
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/offline");
+		List<NameValuePair> params = new ArrayList<>();
+		params.add(new BasicNameValuePair("agentId", agentId));
+		params.add(new BasicNameValuePair("agentToken", agentToken));
+		post.setEntity(new UrlEncodedFormEntity(params));
+
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			if (response.getStatusLine().getStatusCode() != 200) {
+				throw new RuntimeException("Failed to mark agent offline: " + response.getStatusLine());
 			}
 		}
 	}

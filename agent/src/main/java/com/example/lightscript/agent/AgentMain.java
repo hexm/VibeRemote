@@ -137,6 +137,18 @@ public class AgentMain {
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Agent shutting down...");
+            
+            // 主动向服务器报告离线状态
+            try {
+                if (currentAgentId[0] != null && currentAgentToken[0] != null) {
+                    logger.info("Notifying server of agent shutdown...");
+                    api.offline(currentAgentId[0], currentAgentToken[0]);
+                    logger.info("Server notified successfully");
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to notify server of shutdown: {}", e.getMessage());
+            }
+            
             taskRunner.shutdown();
             taskExecutor.shutdown();
             upgradeScheduler.shutdown();
