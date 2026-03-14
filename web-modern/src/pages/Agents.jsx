@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider } from 'antd'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider, Dropdown } from 'antd'
 import {
   DesktopOutlined,
   SearchOutlined,
@@ -13,6 +13,9 @@ import {
   HddOutlined,
   UserOutlined,
   FolderOutlined,
+  DownloadOutlined,
+  CodeOutlined,
+  PlusOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/auth'
@@ -530,13 +533,32 @@ env | sort
             管理和监控所有连接的客户端节点
           </Text>
         </div>
-        <Button
-          icon={<ReloadOutlined />}
-          loading={loading}
-          onClick={handleRefresh}
-        >
-          刷新
-        </Button>
+        <Space>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'client-install',
+                  icon: <DownloadOutlined />,
+                  label: '安装客户端',
+                  onClick: () => window.open('http://8.138.114.34/client-install.html', '_blank')
+                }
+              ]
+            }}
+            placement="bottomRight"
+          >
+            <Button type="primary" icon={<PlusOutlined />}>
+              安装客户端
+            </Button>
+          </Dropdown>
+          <Button
+            icon={<ReloadOutlined />}
+            loading={loading}
+            onClick={handleRefresh}
+          >
+            刷新
+          </Button>
+        </Space>
       </div>
 
       {/* 工具栏 */}

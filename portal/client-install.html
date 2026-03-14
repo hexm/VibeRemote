@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>安装客户端 - LightScript</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .install-method-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 3rem;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .install-tab {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-md);
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .install-tab:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .install-tab.active {
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+        }
+        
+        .method-icon {
+            font-size: 2.25rem;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+        
+        .install-tab h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.375rem;
+            color: var(--text-primary);
+        }
+        
+        .install-tab p {
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+        }
+        
+        .install-content {
+            display: none;
+            background: white;
+            border-radius: 0 0 12px 12px;
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .install-content.active {
+            display: block;
+        }
+        
+        .download-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+        }
+        
+        .download-card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .os-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            font-size: 2rem;
+        }
+        
+        .windows-icon { background: linear-gradient(135deg, #0078d4, #106ebe); color: white; }
+        .linux-icon { background: linear-gradient(135deg, #fcc624, #f57c00); color: white; }
+        .macos-icon { background: linear-gradient(135deg, #007aff, #5856d6); color: white; }
+        
+        .download-btn {
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .download-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        
+        .download-btn:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            position: relative;
+            margin: 1rem 0;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .copy-btn.copied {
+            background: var(--success-color);
+            border-color: var(--success-color);
+        }
+        
+        .os-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+        
+        .os-tab {
+            padding: 1rem 2rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .os-tab:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .os-tab.active {
+            border-bottom-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-list li::before {
+            content: "✓";
+            color: var(--success-color);
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        
+        .warning-box {
+            background: #fef3cd;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .warning-box .warning-title {
+            color: #92400e;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .warning-box .warning-text {
+            color: #a16207;
+        }
+        
+        /* 修复 hero 区域样式 */
+        .hero-section {
+            padding: 6rem 0 3rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 0;
+        }
+        
+        /* 安装步骤样式 */
+        .space-y-4 > * + * {
+            margin-top: 1rem;
+        }
+        
+        .flex {
+            display: flex;
+        }
+        
+        .items-start {
+            align-items: flex-start;
+        }
+        
+        .gap-3 {
+            gap: 0.75rem;
+        }
+        
+        .flex-shrink-0 {
+            flex-shrink: 0;
+        }
+        
+        .mt-0\.5 {
+            margin-top: 0.125rem;
+        }
+        
+        .w-6 {
+            width: 1.5rem;
+        }
+        
+        .h-6 {
+            height: 1.5rem;
+        }
+        
+        .bg-blue-500 {
+            background-color: #3b82f6;
+        }
+        
+        .text-white {
+            color: white;
+        }
+        
+        .rounded-full {
+            border-radius: 9999px;
+        }
+        
+        .text-sm {
+            font-size: 0.875rem;
+        }
+        
+        .font-bold {
+            font-weight: 700;
+        }
+        
+        .font-medium {
+            font-weight: 500;
+        }
+        
+        .text-gray-600 {
+            color: #4b5563;
+        }
+        
+        /* 确保安装步骤容器有足够间距 */
+        .download-card .space-y-4 {
+            margin-top: 1rem;
+        }
+        
+        .download-card .space-y-4 .flex {
+            margin-bottom: 1rem;
+        }
+        
+        .download-card .space-y-4 .flex:last-child {
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="nav-brand">
+                <img src="assets/logo.svg" alt="LightScript" class="logo">
+                LightScript
+            </a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="client-install.html" class="nav-link active">安装客户端</a>
+                <a href="server-deploy.html" class="nav-link">服务端部署</a>
+                <a href="docs.html" class="nav-link">文档</a>
+                <a href="/admin" class="nav-link">管理后台</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <section class="hero-section">
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-title">安装 LightScript 客户端</h1>
+                </div>
+            </div>
+        </section>
+
+        <!-- 安装方式选择 -->
+        <section class="section">
+            <div class="container">
+                <div class="install-method-tabs">
+                    <div class="install-tab active" onclick="switchInstallMethod('script')">
+                        <div class="method-icon">🚀</div>
+                        <h3>一键脚本安装</h3>
+                        <p>推荐方式，自动化安装</p>
+                    </div>
+                    <div class="install-tab" onclick="switchInstallMethod('download')">
+                        <div class="method-icon">📦</div>
+                        <h3>下载安装包</h3>
+                        <p>手动下载，离线安装</p>
+                    </div>
+                </div>
+
+                <!-- 脚本安装内容 -->
+                <div id="script-content" class="install-content active">
+                    <div class="text-center mb-8">
+                        <h2 class="text-2xl font-bold mb-4">一键脚本安装</h2>
+                    </div>
+
+                    <!-- 操作系统选择 -->
+                    <div class="os-tabs">
+                        <div class="os-tab active" onclick="switchScriptTab('linux')">
+                            🐧 Linux
+                        </div>
+                        <div class="os-tab" onclick="switchScriptTab('macos')">
+                            🍎 macOS
+                        </div>
+                        <div class="os-tab" onclick="switchScriptTab('windows')">
+                            🪟 Windows
+                        </div>
+                    </div>
+
+                    <!-- Linux 脚本安装 -->
+                    <div id="linux-script" class="tab-content active">
+                        <div class="download-card">
+                            <h3 class="text-xl font-semibold mb-4">Linux 一键安装</h3>
+                            <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 LightScript 客户端：</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('linux-install-cmd')">复制</button>
+                                <pre id="linux-install-cmd">curl -fsSL http://8.138.114.34/scripts/install-linux.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                            </div>
+                            
+                            <h4 class="font-semibold mb-2 mt-4">手动安装步骤</h4>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('linux-manual')">复制</button>
+                                <pre id="linux-manual"># 下载客户端
+wget http://8.138.114.34/releases/lightscript-agent-linux.tar.gz
+tar -xzf lightscript-agent-linux.tar.gz
+cd lightscript-agent
+
+# 配置服务器地址
+echo "server.url=http://8.138.114.34:8080" > agent.properties
+
+# 安装并启动服务
+sudo ./install-service.sh
+sudo systemctl start lightscript-agent
+sudo systemctl enable lightscript-agent</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- macOS 脚本安装 -->
+                    <div id="macos-script" class="tab-content">
+                        <div class="download-card">
+                            <h3 class="text-xl font-semibold mb-4">macOS 一键安装</h3>
+                            <p class="text-gray-600 mb-4">复制并运行以下命令：</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('macos-install-cmd')">复制</button>
+                                <pre id="macos-install-cmd">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                            </div>
+                            
+                            <h4 class="font-semibold mb-2 mt-4">Homebrew 安装</h4>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('macos-brew')">复制</button>
+                                <pre id="macos-brew"># 添加 tap
+brew tap lightscript/tap
+
+# 安装客户端
+brew install lightscript-agent
+
+# 启动服务
+brew services start lightscript-agent</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Windows 脚本安装 -->
+                    <div id="windows-script" class="tab-content">
+                        <div class="download-card">
+                            <h3 class="text-xl font-semibold mb-4">Windows PowerShell 安装</h3>
+                            <p class="text-gray-600 mb-4">以管理员身份运行 PowerShell，执行以下命令：</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('windows-install-cmd')">复制</button>
+                                <pre id="windows-install-cmd">Set-ExecutionPolicy Bypass -Scope Process -Force
+iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))</pre>
+                            </div>
+                            
+                            <h4 class="font-semibold mb-2 mt-4">手动安装步骤</h4>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
+                                <pre id="windows-manual"># 下载并解压
+Invoke-WebRequest -Uri "http://8.138.114.34/releases/lightscript-agent-windows.zip" -OutFile "lightscript-agent.zip"
+Expand-Archive -Path "lightscript-agent.zip" -DestinationPath "C:\Program Files\LightScript"
+
+# 安装服务
+cd "C:\Program Files\LightScript"
+.\install-service.bat
+net start LightScriptAgent</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 下载安装包内容 -->
+                <div id="download-content" class="install-content">
+                    <div class="text-center mb-8">
+                        <h2 class="text-2xl font-bold mb-4">下载安装包</h2>
+                    </div>
+
+                    <!-- 推荐下载 -->
+                    <div class="max-w-2xl mx-auto mb-8">
+                        <div class="download-card" id="recommended-download">
+                            <div class="text-center">
+                                <div class="os-icon" id="recommended-icon" style="background: linear-gradient(135deg, #10b981, #059669); color: white; margin: 0 auto 1.5rem;">
+                                    <span id="recommended-emoji">💻</span>
+                                </div>
+                                <h3 class="text-xl font-semibold mb-2">
+                                    <span id="recommended-title">推荐下载</span>
+                                </h3>
+                                <p class="text-gray-600 mb-4" id="recommended-desc">
+                                    为您的系统自动选择最适合的版本
+                                </p>
+                                
+                                <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <strong>版本:</strong> v0.4.0
+                                        </div>
+                                        <div>
+                                            <strong>大小:</strong> ~45MB
+                                        </div>
+                                        <div>
+                                            <strong>包含:</strong> 完整 JRE 8
+                                        </div>
+                                        <div>
+                                            <strong>发布:</strong> 2026-03-14
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <ul class="feature-list text-sm text-gray-600 mb-6">
+                                    <li>包含完整的 Java 运行环境</li>
+                                    <li>无需额外安装 JDK/JRE</li>
+                                    <li>开箱即用，一键启动</li>
+                                    <li>支持自动升级功能</li>
+                                </ul>
+                                
+                                <button class="download-btn" id="recommended-btn" onclick="downloadRecommended()">
+                                    <span id="recommended-btn-text">下载推荐版本</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 其他平台下载 -->
+                    <div class="text-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-700">其他平台</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Windows -->
+                        <div class="download-card">
+                            <div class="text-center">
+                                <div class="os-icon windows-icon">
+                                    <span>🪟</span>
+                                </div>
+                                <h4 class="font-semibold mb-2">Windows x64</h4>
+                                <button class="download-btn" onclick="downloadPackage('windows-x64')">
+                                    下载
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Linux -->
+                        <div class="download-card">
+                            <div class="text-center">
+                                <div class="os-icon linux-icon">
+                                    <span>🐧</span>
+                                </div>
+                                <h4 class="font-semibold mb-2">Linux x64</h4>
+                                <button class="download-btn" onclick="downloadPackage('linux-x64')">
+                                    下载
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- macOS Intel -->
+                        <div class="download-card">
+                            <div class="text-center">
+                                <div class="os-icon macos-icon">
+                                    <span>🍎</span>
+                                </div>
+                                <h4 class="font-semibold mb-2">macOS Intel</h4>
+                                <button class="download-btn" onclick="downloadPackage('macos-x64')">
+                                    下载
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- macOS Apple Silicon -->
+                        <div class="download-card">
+                            <div class="text-center">
+                                <div class="os-icon macos-icon">
+                                    <span>🍎</span>
+                                </div>
+                                <h4 class="font-semibold mb-2">macOS ARM64</h4>
+                                <button class="download-btn" onclick="downloadPackage('macos-arm64')">
+                                    下载
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 安装说明 -->
+                    <div class="max-w-4xl mx-auto mt-8">
+                        <div class="download-card">
+                            <h4 class="font-semibold mb-4">安装步骤</h4>
+                            <div class="space-y-4">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">1</div>
+                                    <div>
+                                        <p class="font-medium">解压安装包</p>
+                                        <p class="text-sm text-gray-600">将下载的安装包解压到目标目录</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">2</div>
+                                    <div>
+                                        <p class="font-medium">配置连接</p>
+                                        <p class="text-sm text-gray-600">编辑 agent.properties 文件，设置服务器地址</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">3</div>
+                                    <div>
+                                        <p class="font-medium">启动客户端</p>
+                                        <p class="text-sm text-gray-600">运行启动脚本（Windows: start-agent.bat，Linux/macOS: ./start-agent.sh）</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 验证安装 -->
+        <section class="section bg-gray-50">
+            <div class="container">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-4">验证安装</h2>
+                    <p class="text-gray-600">安装完成后，请验证客户端是否正常运行</p>
+                </div>
+
+                <div class="download-card max-w-4xl mx-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2">命令行检查</h4>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('check-status')">复制</button>
+                                <pre id="check-status"># Linux/macOS
+sudo systemctl status lightscript-agent
+
+# Windows
+sc query LightScriptAgent</pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2">管理后台检查</h4>
+                            <p class="text-gray-600 mb-4">
+                                1. 访问 <a href="/admin" class="text-blue-600 hover:underline">管理后台</a><br>
+                                2. 进入"客户端管理"页面<br>
+                                3. 查看新注册的客户端节点
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <img src="assets/logo.svg" alt="LightScript" class="logo">
+                    <span>LightScript</span>
+                </div>
+                <p class="footer-text">
+                    强大的分布式脚本执行平台
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function switchInstallMethod(method) {
+            // 移除所有活动状态
+            document.querySelectorAll('.install-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.install-content').forEach(content => content.classList.remove('active'));
+            
+            // 激活选中的方法
+            event.target.classList.add('active');
+            document.getElementById(method + '-content').classList.add('active');
+        }
+
+        function switchScriptTab(os) {
+            // 移除所有活动状态
+            document.querySelectorAll('.os-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            // 激活选中的标签
+            event.target.classList.add('active');
+            document.getElementById(os + '-script').classList.add('active');
+        }
+
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = element.parentElement.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动选择文本复制');
+            });
+        }
+
+        function downloadAgent(type) {
+            if (type === 'universal') {
+                // 这里将来实现实际的下载逻辑
+                alert('通用 Java 安装包正在准备中，敬请期待！');
+            } else {
+                alert(`${type} 版本的安装包正在准备中，敬请期待！`);
+            }
+        }
+        
+        // 检测操作系统
+        function detectOS() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            const platform = navigator.platform.toLowerCase();
+            
+            if (userAgent.includes('win') || platform.includes('win')) {
+                return 'windows-x64';
+            } else if (userAgent.includes('mac') || platform.includes('mac')) {
+                // 检测是否为 Apple Silicon
+                // 方法1: 检查navigator.platform
+                if (platform.includes('arm') || platform === 'macarm64') {
+                    return 'macos-arm64';
+                }
+                
+                // 方法2: 检查userAgent中的ARM标识
+                if (userAgent.includes('arm64') || userAgent.includes('aarch64')) {
+                    return 'macos-arm64';
+                }
+                
+                // 方法3: 使用WebGL检测（Apple Silicon的特征）
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        const renderer = gl.getParameter(gl.RENDERER);
+                        if (renderer && renderer.toLowerCase().includes('apple')) {
+                            // Apple GPU通常表示Apple Silicon
+                            return 'macos-arm64';
+                        }
+                    }
+                } catch (e) {
+                    // WebGL检测失败，继续其他方法
+                }
+                
+                // 方法4: 检查CPU核心数（Apple Silicon通常有8+核心）
+                if (navigator.hardwareConcurrency >= 8) {
+                    return 'macos-arm64';
+                }
+                
+                // 默认为Intel Mac
+                return 'macos-x64';
+            } else if (userAgent.includes('linux') || platform.includes('linux')) {
+                return 'linux-x64';
+            } else {
+                return 'windows-x64'; // 默认
+            }
+        }
+        
+        // 获取操作系统信息
+        function getOSInfo(osType) {
+            const osMap = {
+                'windows-x64': {
+                    name: 'Windows x64',
+                    emoji: '🪟',
+                    filename: 'lightscript-agent-0.4.0-windows-x64.zip',
+                    color: 'linear-gradient(135deg, #0078d4, #106ebe)'
+                },
+                'linux-x64': {
+                    name: 'Linux x64', 
+                    emoji: '🐧',
+                    filename: 'lightscript-agent-0.4.0-linux-x64.tar.gz',
+                    color: 'linear-gradient(135deg, #fcc624, #f57c00)'
+                },
+                'macos-x64': {
+                    name: 'macOS Intel',
+                    emoji: '🍎', 
+                    filename: 'lightscript-agent-0.4.0-macos-x64.tar.gz',
+                    color: 'linear-gradient(135deg, #007aff, #5856d6)'
+                },
+                'macos-arm64': {
+                    name: 'macOS Apple Silicon',
+                    emoji: '🍎',
+                    filename: 'lightscript-agent-0.4.0-macos-arm64.tar.gz', 
+                    color: 'linear-gradient(135deg, #007aff, #5856d6)'
+                }
+            };
+            return osMap[osType] || osMap['windows-x64'];
+        }
+        
+        // 下载推荐版本
+        function downloadRecommended() {
+            const osType = detectOS();
+            downloadPackage(osType);
+        }
+        
+        // 下载指定平台的安装包
+        function downloadPackage(osType) {
+            const osInfo = getOSInfo(osType);
+            const downloadUrl = `/agent/release/${osInfo.filename}`;
+            
+            // 创建下载链接
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = osInfo.filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // 显示下载提示
+            alert(`正在下载 ${osInfo.name} 版本的安装包...`);
+        }
+        
+        // 页面加载时设置推荐下载
+        document.addEventListener('DOMContentLoaded', function() {
+            const osType = detectOS();
+            const osInfo = getOSInfo(osType);
+            
+            // 调试信息（可以在控制台查看）
+            console.log('OS Detection Debug Info:');
+            console.log('User Agent:', navigator.userAgent);
+            console.log('Platform:', navigator.platform);
+            console.log('Hardware Concurrency:', navigator.hardwareConcurrency);
+            console.log('Detected OS Type:', osType);
+            console.log('OS Info:', osInfo);
+            
+            // 更新推荐下载区域
+            document.getElementById('recommended-emoji').textContent = osInfo.emoji;
+            document.getElementById('recommended-title').textContent = `推荐：${osInfo.name}`;
+            document.getElementById('recommended-desc').textContent = `为您的 ${osInfo.name} 系统优化`;
+            document.getElementById('recommended-btn-text').textContent = `下载 ${osInfo.name} 版本`;
+            document.getElementById('recommended-icon').style.background = osInfo.color;
+        });
+    </script>
+</body>
+</html>

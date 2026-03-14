@@ -94,6 +94,11 @@ body {
     color: var(--primary-color);
 }
 
+.nav-link.active {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
 .nav-toggle {
     display: none;
     flex-direction: column;

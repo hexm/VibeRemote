@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>下载客户端 - LightScript</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .download-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+        
+        .download-card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .os-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            font-size: 2rem;
+        }
+        
+        .windows-icon { background: linear-gradient(135deg, #0078d4, #106ebe); color: white; }
+        .linux-icon { background: linear-gradient(135deg, #fcc624, #f57c00); color: white; }
+        .macos-icon { background: linear-gradient(135deg, #007aff, #5856d6); color: white; }
+        
+        .download-btn {
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .download-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        
+        .download-btn:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .version-info {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-list li::before {
+            content: "✓";
+            color: var(--success-color);
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="nav-brand">
+                <img src="assets/logo.svg" alt="LightScript" class="logo">
+                LightScript
+            </a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="client-install.html" class="nav-link">安装客户端</a>
+                <a href="server-deploy.html" class="nav-link">服务端部署</a>
+                <a href="docs.html" class="nav-link">文档</a>
+                <a href="/admin" class="nav-link">管理后台</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <section class="hero-section">
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-title">下载 LightScript 客户端</h1>
+                    <p class="hero-subtitle">
+                        选择适合您操作系统的客户端版本，开始使用分布式脚本执行功能
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 版本信息 -->
+        <section class="section">
+            <div class="container">
+                <div class="version-info">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">当前版本</h3>
+                            <p class="text-gray-600">版本 v0.5.0 | 发布日期: 2026年3月14日</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">文件大小: ~15MB</p>
+                            <p class="text-sm text-gray-500">支持: Java 8+</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 下载选项 -->
+        <section class="section">
+            <div class="container">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <!-- Windows -->
+                    <div class="download-card">
+                        <div class="text-center">
+                            <div class="os-icon windows-icon">
+                                <span>🪟</span>
+                            </div>
+                            <h3 class="text-xl font-semibold mb-2">Windows</h3>
+                            <p class="text-gray-600 mb-4">适用于 Windows 10/11 (x64)</p>
+                            <ul class="feature-list text-sm text-gray-600 mb-6">
+                                <li>自动安装服务</li>
+                                <li>系统托盘集成</li>
+                                <li>开机自启动</li>
+                            </ul>
+                            <button class="download-btn" onclick="downloadAgent('windows')" disabled>
+                                下载 Windows 版本
+                            </button>
+                            <p class="text-xs text-gray-500 mt-2">即将发布</p>
+                        </div>
+                    </div>
+
+                    <!-- Linux -->
+                    <div class="download-card">
+                        <div class="text-center">
+                            <div class="os-icon linux-icon">
+                                <span>🐧</span>
+                            </div>
+                            <h3 class="text-xl font-semibold mb-2">Linux</h3>
+                            <p class="text-gray-600 mb-4">适用于 Ubuntu/CentOS/RHEL</p>
+                            <ul class="feature-list text-sm text-gray-600 mb-6">
+                                <li>Systemd 服务</li>
+                                <li>命令行管理</li>
+                                <li>Docker 支持</li>
+                            </ul>
+                            <button class="download-btn" onclick="downloadAgent('linux')" disabled>
+                                下载 Linux 版本
+                            </button>
+                            <p class="text-xs text-gray-500 mt-2">即将发布</p>
+                        </div>
+                    </div>
+
+                    <!-- macOS -->
+                    <div class="download-card">
+                        <div class="text-center">
+                            <div class="os-icon macos-icon">
+                                <span>🍎</span>
+                            </div>
+                            <h3 class="text-xl font-semibold mb-2">macOS</h3>
+                            <p class="text-gray-600 mb-4">适用于 macOS 10.15+</p>
+                            <ul class="feature-list text-sm text-gray-600 mb-6">
+                                <li>LaunchAgent 服务</li>
+                                <li>菜单栏集成</li>
+                                <li>Homebrew 支持</li>
+                            </ul>
+                            <button class="download-btn" onclick="downloadAgent('macos')" disabled>
+                                下载 macOS 版本
+                            </button>
+                            <p class="text-xs text-gray-500 mt-2">即将发布</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 安装说明 -->
+        <section class="section bg-gray-50">
+            <div class="container">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold mb-4">安装说明</h2>
+                    <p class="text-gray-600 max-w-2xl mx-auto">
+                        下载完成后，请按照以下步骤完成客户端安装
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span class="text-blue-600 font-bold">1</span>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-2">下载安装包</h3>
+                        <p class="text-gray-600">选择对应操作系统的安装包并下载到本地</p>
+                    </div>
+
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span class="text-blue-600 font-bold">2</span>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-2">运行安装程序</h3>
+                        <p class="text-gray-600">双击安装包，按照向导完成安装过程</p>
+                    </div>
+
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span class="text-blue-600 font-bold">3</span>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-2">配置连接</h3>
+                        <p class="text-gray-600">启动客户端，配置服务器地址完成注册</p>
+                    </div>
+                </div>
+
+                <div class="text-center mt-12">
+                    <p class="text-gray-600 mb-4">需要帮助？</p>
+                    <div class="space-x-4">
+                        <a href="install.html" class="btn btn-outline">查看脚本安装</a>
+                        <a href="/admin" class="btn btn-primary">进入管理后台</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <img src="assets/logo.svg" alt="LightScript" class="logo">
+                    <span>LightScript</span>
+                </div>
+                <p class="footer-text">
+                    强大的分布式脚本执行平台
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function downloadAgent(os) {
+            // 这里将来实现实际的下载逻辑
+            alert(`${os} 版本的安装包正在准备中，敬请期待！`);
+        }
+
+        // 添加导航高亮
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.nav-link');
+            
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === currentPath.split('/').pop()) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

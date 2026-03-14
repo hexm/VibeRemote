@@ -69,10 +69,11 @@ const Header = ({ collapsed, onToggle, userInfo, onLogout }) => {
             icon={<HomeOutlined />}
             onClick={() => window.open('http://8.138.114.34', '_blank')}
             className="text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-            size="large"
+            size="middle"
             title="回到门户网站"
+            style={{ fontSize: '14px', height: '32px' }}
           >
-            <span className="hidden sm:inline ml-1">门户</span>
+            <span className="hidden sm:inline ml-1" style={{ fontSize: '14px' }}>门户</span>
           </Button>
           
           <Dropdown

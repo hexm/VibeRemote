@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>脚本安装 - LightScript</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .install-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            position: relative;
+            margin: 1rem 0;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .copy-btn.copied {
+            background: var(--success-color);
+            border-color: var(--success-color);
+        }
+        
+        .os-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+        
+        .os-tab {
+            padding: 1rem 2rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .os-tab:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .os-tab.active {
+            border-bottom-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2rem;
+            height: 2rem;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 1rem;
+        }
+        
+        .warning-box {
+            background: #fef3cd;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .warning-box .warning-title {
+            color: #92400e;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .warning-box .warning-text {
+            color: #a16207;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="nav-brand">
+                <img src="assets/logo.svg" alt="LightScript" class="logo">
+                LightScript
+            </a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="client-install.html" class="nav-link">安装客户端</a>
+                <a href="server-deploy.html" class="nav-link">服务端部署</a>
+                <a href="docs.html" class="nav-link">文档</a>
+                <a href="/admin" class="nav-link">管理后台</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <section class="hero-section">
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-title">脚本安装 LightScript 客户端</h1>
+                    <p class="hero-subtitle">
+                        使用一键安装脚本，快速部署 LightScript 客户端到您的服务器
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 安装脚本 -->
+        <section class="section">
+            <div class="container">
+                <!-- 操作系统选择 -->
+                <div class="os-tabs">
+                    <div class="os-tab active" onclick="switchTab('linux')">
+                        🐧 Linux
+                    </div>
+                    <div class="os-tab" onclick="switchTab('macos')">
+                        🍎 macOS
+                    </div>
+                    <div class="os-tab" onclick="switchTab('windows')">
+                        🪟 Windows
+                    </div>
+                </div>
+
+                <!-- Linux 安装 -->
+                <div id="linux-content" class="tab-content active">
+                    <div class="install-card">
+                        <h3 class="text-xl font-semibold mb-4">
+                            <span class="step-number">1</span>
+                            一键安装脚本
+                        </h3>
+                        <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 LightScript 客户端：</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('linux-install')">复制</button>
+                            <pre id="linux-install">curl -fsSL http://8.138.114.34/scripts/install-linux.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                        </div>
+                    </div>
+
+                    <div class="install-card">
+                        <h3 class="text-xl font-semibold mb-4">
+                            <span class="step-number">2</span>
+                            手动安装步骤
+                        </h3>
+                        <p class="text-gray-600 mb-4">如果一键安装失败，可以按照以下步骤手动安装：</p>
+                        
+                        <h4 class="font-semibold mb-2">下载客户端</h4>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('linux-download')">复制</button>
+                            <pre id="linux-download">wget http://8.138.114.34/releases/lightscript-agent-linux.tar.gz
+tar -xzf lightscript-agent-linux.tar.gz
+cd lightscript-agent</pre>
+                        </div>
+
+                        <h4 class="font-semibold mb-2 mt-4">配置服务</h4>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('linux-config')">复制</button>
+                            <pre id="linux-config"># 编辑配置文件
+sudo nano agent.properties
+
+# 设置服务器地址
+server.url=http://8.138.114.34:8080
+register.token=your-register-token</pre>
+                        </div>
+
+                        <h4 class="font-semibold mb-2 mt-4">启动服务</h4>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('linux-start')">复制</button>
+                            <pre id="linux-start"># 安装为系统服务
+sudo ./install-service.sh
+
+# 启动服务
+sudo systemctl start lightscript-agent
+sudo systemctl enable lightscript-agent
+
+# 查看状态
+sudo systemctl status lightscript-agent</pre>
+                        </div>
+                    </div>
+
+                    <div class="warning-box">
+                        <div class="warning-title">⚠️ 注意事项</div>
+                        <div class="warning-text">
+                            • 需要 root 权限安装系统服务<br>
+                            • 确保服务器能访问 8.138.114.34:8080<br>
+                            • 建议在防火墙中开放必要端口
+                        </div>
+                    </div>
+                </div>
+
+                <!-- macOS 安装 -->
+                <div id="macos-content" class="tab-content">
+                    <div class="install-card">
+                        <h3 class="text-xl font-semibold mb-4">
+                            <span class="step-number">1</span>
+                            一键安装脚本
+                        </h3>
+                        <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 LightScript 客户端：</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('macos-install')">复制</button>
+                            <pre id="macos-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                        </div>
+                    </div>
+
+                    <div class="install-card">
+                        <h3 class="text-xl font-semibold mb-4">
+                            <span class="step-number">2</span>
+                            Homebrew 安装
+                        </h3>
+                        <p class="text-gray-600 mb-4">如果您使用 Homebrew，可以通过以下方式安装：</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('macos-brew')">复制</button>
+                            <pre id="macos-brew"># 添加 tap
+brew tap lightscript/tap
+
+# 安装客户端
+brew install lightscript-agent
+
+# 启动服务
+brew services start lightscript-agent</pre>
+                        </div>
+                    </div>
+
+                    <div class="warning-box">
+                        <div class="warning-title">⚠️ 注意事项</div>
+                        <div class="warning-text">
+                            • macOS 可能需要在"安全性与隐私"中允许运行<br>
+                            • 建议使用 Homebrew 进行安装和管理<br>
+                            • 首次运行可能需要管理员权限
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Windows 安装 -->
+                <div id="windows-content" class="tab-content">
+                    <div class="install-card">
+                        <h3 class="text-xl font-semibold mb-4">
+                            <span class="step-number">1</span>
+                            PowerShell 安装脚本
+                        </h3>
+                        <p class="text-gray-600 mb-4">以管理员身份运行 PowerShell，执行以下命令：</p>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('windows-install')">复制</button>
+                            <pre id="windows-install">Set-ExecutionPolicy Bypass -Scope Process -Force
+iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))</pre>
+                        </div>
+                    </div>
+
+                    <div class="install-card">
+                        <h3 class="text-xl font-semibold mb-4">
+                            <span class="step-number">2</span>
+                            手动安装步骤
+                        </h3>
+                        <p class="text-gray-600 mb-4">如果脚本安装失败，可以手动下载并安装：</p>
+                        
+                        <h4 class="font-semibold mb-2">下载并解压</h4>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('windows-download')">复制</button>
+                            <pre id="windows-download"># 下载安装包
+Invoke-WebRequest -Uri "http://8.138.114.34/releases/lightscript-agent-windows.zip" -OutFile "lightscript-agent.zip"
+
+# 解压到程序目录
+Expand-Archive -Path "lightscript-agent.zip" -DestinationPath "C:\Program Files\LightScript"</pre>
+                        </div>
+
+                        <h4 class="font-semibold mb-2 mt-4">安装为 Windows 服务</h4>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('windows-service')">复制</button>
+                            <pre id="windows-service"># 进入安装目录
+cd "C:\Program Files\LightScript"
+
+# 安装服务
+.\install-service.bat
+
+# 启动服务
+net start LightScriptAgent</pre>
+                        </div>
+                    </div>
+
+                    <div class="warning-box">
+                        <div class="warning-title">⚠️ 注意事项</div>
+                        <div class="warning-text">
+                            • 需要以管理员身份运行 PowerShell<br>
+                            • 可能需要修改执行策略允许脚本运行<br>
+                            • 确保 Windows Defender 不会阻止安装
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 验证安装 -->
+        <section class="section bg-gray-50">
+            <div class="container">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-4">验证安装</h2>
+                    <p class="text-gray-600">安装完成后，请验证客户端是否正常运行</p>
+                </div>
+
+                <div class="install-card max-w-4xl mx-auto">
+                    <h3 class="text-xl font-semibold mb-4">检查客户端状态</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2">命令行检查</h4>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('check-status')">复制</button>
+                                <pre id="check-status"># Linux/macOS
+sudo systemctl status lightscript-agent
+
+# Windows
+sc query LightScriptAgent</pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2">管理后台检查</h4>
+                            <p class="text-gray-600 mb-4">
+                                1. 访问 <a href="/admin" class="text-blue-600 hover:underline">管理后台</a><br>
+                                2. 进入"客户端管理"页面<br>
+                                3. 查看新注册的客户端节点
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-8">
+                    <div class="space-x-4">
+                        <a href="download.html" class="btn btn-outline">下载安装包</a>
+                        <a href="/admin" class="btn btn-primary">进入管理后台</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <img src="assets/logo.svg" alt="LightScript" class="logo">
+                    <span>LightScript</span>
+                </div>
+                <p class="footer-text">
+                    强大的分布式脚本执行平台
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function switchTab(os) {
+            // 移除所有活动状态
+            document.querySelectorAll('.os-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            // 激活选中的标签
+            event.target.classList.add('active');
+            document.getElementById(os + '-content').classList.add('active');
+        }
+
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = element.parentElement.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动选择文本复制');
+            });
+        }
+
+        // 添加导航高亮
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.nav-link');
+            
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === currentPath.split('/').pop()) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

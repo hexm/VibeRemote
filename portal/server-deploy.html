@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务端部署 - LightScript</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .deploy-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+        }
+        
+        .deploy-card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .deploy-method {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .method-card {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: var(--shadow-md);
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .method-card:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .method-card.selected {
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+        }
+        
+        .method-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            font-size: 2rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            position: relative;
+            margin: 1rem 0;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .copy-btn.copied {
+            background: var(--success-color);
+            border-color: var(--success-color);
+        }
+        
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2rem;
+            height: 2rem;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 1rem;
+        }
+        
+        .requirements-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .requirements-list li {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .requirements-list li::before {
+            content: "✓";
+            color: var(--success-color);
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        
+        .warning-box {
+            background: #fef3cd;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .warning-box .warning-title {
+            color: #92400e;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .warning-box .warning-text {
+            color: #a16207;
+        }
+        
+        /* 修复 hero 区域样式 */
+        .hero-section {
+            padding: 6rem 0 3rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 0;
+        }
+        
+        /* 部署方式选择样式优化 */
+        .deploy-method {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .method-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-md);
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .method-card:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .method-card.selected {
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+        }
+        
+        .method-icon {
+            font-size: 2.25rem;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+        
+        .method-card h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.375rem;
+            color: var(--text-primary);
+        }
+        
+        .method-card p {
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+        }
+        
+        .info-box {
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .info-box .info-title {
+            color: #1e40af;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .info-box .info-text {
+            color: #1d4ed8;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="nav-brand">
+                <img src="assets/logo.svg" alt="LightScript" class="logo">
+                LightScript
+            </a>
+            <div class="nav-menu">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="client-install.html" class="nav-link">安装客户端</a>
+                <a href="server-deploy.html" class="nav-link active">服务端部署</a>
+                <a href="docs.html" class="nav-link">文档</a>
+                <a href="/admin" class="nav-link">管理后台</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <section class="hero-section">
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-title">LightScript 服务端部署</h1>
+                </div>
+            </div>
+        </section>
+
+        <!-- 部署方式选择 -->
+        <section class="section">
+            <div class="container">
+                <div class="deploy-method">
+                    <div class="method-card" onclick="selectMethod('docker')">
+                        <div class="method-icon">
+                            <span>🐳</span>
+                        </div>
+                        <h3>Docker 部署</h3>
+                        <p>推荐方式，快速简单</p>
+                    </div>
+                    
+                    <div class="method-card" onclick="selectMethod('manual')">
+                        <div class="method-icon">
+                            <span>⚙️</span>
+                        </div>
+                        <h3>手动部署</h3>
+                        <p>传统方式，完全控制</p>
+                    </div>
+                    
+                    <div class="method-card" onclick="selectMethod('cloud')">
+                        <div class="method-icon">
+                            <span>☁️</span>
+                        </div>
+                        <h3>云服务部署</h3>
+                        <p>一键部署到云平台</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Docker 部署 -->
+        <section class="section" id="docker-deploy">
+            <div class="container">
+                <div class="deploy-card">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center">
+                        <span class="step-number">1</span>
+                        Docker 部署
+                    </h2>
+
+                    <h3 class="text-xl font-semibold mb-4">系统要求</h3>
+                    <ul class="requirements-list mb-6">
+                        <li>Docker 20.10+ 和 Docker Compose 2.0+</li>
+                        <li>2GB+ 可用内存</li>
+                        <li>10GB+ 可用磁盘空间</li>
+                        <li>开放端口：8080 (Web服务), 3000 (前端)</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold mb-4">快速启动</h3>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('docker-quick')">复制</button>
+                        <pre id="docker-quick"># 下载 docker-compose.yml
+curl -O https://raw.githubusercontent.com/lightscript/lightscript/main/docker-compose.yml
+
+# 启动服务
+docker-compose up -d
+
+# 查看状态
+docker-compose ps</pre>
+                    </div>
+
+                    <h3 class="text-xl font-semibold mb-4">完整部署步骤</h3>
+                    
+                    <h4 class="font-semibold mb-2">1. 创建部署目录</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('docker-setup')">复制</button>
+                        <pre id="docker-setup">mkdir lightscript-server
+cd lightscript-server</pre>
+                    </div>
+
+                    <h4 class="font-semibold mb-2">2. 创建 docker-compose.yml</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('docker-compose')">复制</button>
+                        <pre id="docker-compose">version: '3.8'
+
+services:
+  lightscript-server:
+    image: lightscript/server:latest
+    container_name: lightscript-server
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:h2:file:/data/lightscript
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      - lightscript-web
+
+  lightscript-web:
+    image: lightscript/web:latest
+    container_name: lightscript-web
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+    restart: unless-stopped
+
+volumes:
+  data:
+  logs:</pre>
+                    </div>
+
+                    <h4 class="font-semibold mb-2">3. 启动服务</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('docker-start')">复制</button>
+                        <pre id="docker-start"># 启动所有服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down</pre>
+                    </div>
+
+                    <div class="warning-box">
+                        <div class="warning-title">⚠️ 注意事项</div>
+                        <div class="warning-text">
+                            • 首次启动可能需要几分钟下载镜像<br>
+                            • 确保端口 8080 和 3000 未被占用<br>
+                            • 数据将保存在 ./data 目录中
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 手动部署 -->
+        <section class="section" id="manual-deploy">
+            <div class="container">
+                <div class="deploy-card">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center">
+                        <span class="step-number">2</span>
+                        手动部署
+                    </h2>
+
+                    <h3 class="text-xl font-semibold mb-4">系统要求</h3>
+                    <ul class="requirements-list mb-6">
+                        <li>Java 8+ (推荐 Java 11)</li>
+                        <li>Node.js 16+ 和 npm/yarn</li>
+                        <li>2GB+ 可用内存</li>
+                        <li>10GB+ 可用磁盘空间</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold mb-4">部署步骤</h3>
+                    
+                    <h4 class="font-semibold mb-2">1. 下载服务端</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('manual-download')">复制</button>
+                        <pre id="manual-download"># 下载服务端
+wget https://github.com/lightscript/lightscript/releases/latest/download/lightscript-server.jar
+
+# 下载前端
+wget https://github.com/lightscript/lightscript/releases/latest/download/lightscript-web.tar.gz
+tar -xzf lightscript-web.tar.gz</pre>
+                    </div>
+
+                    <h4 class="font-semibold mb-2">2. 配置服务端</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('manual-config')">复制</button>
+                        <pre id="manual-config"># 创建配置文件 application.yml
+cat > application.yml << EOF
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/lightscript
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+logging:
+  level:
+    com.example.lightscript: INFO
+  file:
+    name: logs/lightscript-server.log
+EOF</pre>
+                    </div>
+
+                    <h4 class="font-semibold mb-2">3. 启动服务端</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('manual-start-server')">复制</button>
+                        <pre id="manual-start-server"># 创建必要目录
+mkdir -p data logs
+
+# 启动服务端
+java -jar lightscript-server.jar --spring.config.location=application.yml
+
+# 后台运行
+nohup java -jar lightscript-server.jar --spring.config.location=application.yml > logs/server.log 2>&1 &</pre>
+                    </div>
+
+                    <h4 class="font-semibold mb-2">4. 部署前端</h4>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('manual-start-web')">复制</button>
+                        <pre id="manual-start-web"># 安装依赖
+cd lightscript-web
+npm install
+
+# 构建生产版本
+npm run build
+
+# 使用 nginx 或其他 web 服务器部署 build 目录
+# 或者使用 serve 快速启动
+npx serve -s build -l 3000</pre>
+                    </div>
+
+                    <div class="warning-box">
+                        <div class="warning-title">⚠️ 生产环境建议</div>
+                        <div class="warning-text">
+                            • 使用 systemd 或其他进程管理器管理服务<br>
+                            • 配置 nginx 反向代理<br>
+                            • 使用外部数据库（MySQL/PostgreSQL）<br>
+                            • 配置 SSL 证书
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 云服务部署 -->
+        <section class="section" id="cloud-deploy">
+            <div class="container">
+                <div class="deploy-card">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center">
+                        <span class="step-number">3</span>
+                        云服务部署
+                    </h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- 阿里云 -->
+                        <div class="deploy-card">
+                            <h3 class="text-xl font-semibold mb-4">🚀 阿里云 ECS</h3>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('aliyun-deploy')">复制</button>
+                                <pre id="aliyun-deploy"># 一键部署脚本
+curl -fsSL https://lightscript.com/scripts/deploy-aliyun.sh | bash</pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                自动配置安全组、安装 Docker 并启动服务
+                            </p>
+                        </div>
+
+                        <!-- 腾讯云 -->
+                        <div class="deploy-card">
+                            <h3 class="text-xl font-semibold mb-4">☁️ 腾讯云 CVM</h3>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('tencent-deploy')">复制</button>
+                                <pre id="tencent-deploy"># 一键部署脚本
+curl -fsSL https://lightscript.com/scripts/deploy-tencent.sh | bash</pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                自动配置防火墙、安装依赖并启动服务
+                            </p>
+                        </div>
+
+                        <!-- AWS -->
+                        <div class="deploy-card">
+                            <h3 class="text-xl font-semibold mb-4">🌐 AWS EC2</h3>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('aws-deploy')">复制</button>
+                                <pre id="aws-deploy"># 一键部署脚本
+curl -fsSL https://lightscript.com/scripts/deploy-aws.sh | bash</pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                自动配置安全组、安装 Docker 并启动服务
+                            </p>
+                        </div>
+
+                        <!-- Kubernetes -->
+                        <div class="deploy-card">
+                            <h3 class="text-xl font-semibold mb-4">⚓ Kubernetes</h3>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('k8s-deploy')">复制</button>
+                                <pre id="k8s-deploy"># 使用 Helm 部署
+helm repo add lightscript https://charts.lightscript.com
+helm install lightscript lightscript/lightscript</pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                支持高可用部署和自动扩缩容
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 验证部署 -->
+        <section class="section bg-gray-50">
+            <div class="container">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-4">验证部署</h2>
+                </div>
+
+                <div class="deploy-card max-w-4xl mx-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2">服务状态检查</h4>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('check-services')">复制</button>
+                                <pre id="check-services"># 检查服务端
+curl http://localhost:8080/health
+
+# 检查前端
+curl http://localhost:3000
+
+# Docker 方式检查
+docker-compose ps</pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2">访问管理后台</h4>
+                            <p class="text-gray-600 mb-4">
+                                1. 打开浏览器访问 <code>http://your-server:3000</code><br>
+                                2. 使用默认账号登录：<br>
+                                   用户名：<code>admin</code><br>
+                                   密码：<code>admin123</code><br>
+                                3. 首次登录请修改默认密码
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-8">
+                    <a href="/admin" class="btn btn-primary">进入管理后台</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <img src="assets/logo.svg" alt="LightScript" class="logo">
+                    <span>LightScript</span>
+                </div>
+                <p class="footer-text">
+                    强大的分布式脚本执行平台
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function selectMethod(method) {
+            // 移除所有选中状态
+            document.querySelectorAll('.method-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // 选中当前方法
+            event.target.closest('.method-card').classList.add('selected');
+            
+            // 滚动到对应部署方式
+            const targetSection = document.getElementById(method + '-deploy');
+            if (targetSection) {
+                targetSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = element.parentElement.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动选择文本复制');
+            });
+        }
+    </script>
+</body>
+</html>
