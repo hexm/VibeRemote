@@ -48,11 +48,16 @@ echo -e "${GREEN}✅ 后端构建完成${NC}"
 
 # 构建前端
 echo -e "${BLUE}📦 构建前端项目...${NC}"
-cd web-modern
+cd ../web-modern
 npm install
 npm run build
-cd ..
+cd ../server
 echo -e "${GREEN}✅ 前端构建完成${NC}"
+
+# 构建门户网站
+echo -e "${BLUE}📦 准备门户网站...${NC}"
+# 门户网站是静态文件，直接复制即可
+echo -e "${GREEN}✅ 门户网站准备完成${NC}"
 echo ""
 
 # 创建部署包
@@ -62,12 +67,16 @@ mkdir -p ${DEPLOY_DIR}
 
 # 复制后端文件
 mkdir -p ${DEPLOY_DIR}/backend
-cp server/target/server-*.jar ${DEPLOY_DIR}/backend/server.jar
-cp -r server/src/main/resources/application*.yml ${DEPLOY_DIR}/backend/ 2>/dev/null || true
+cp target/server-*.jar ${DEPLOY_DIR}/backend/server.jar
+cp -r src/main/resources/application*.yml ${DEPLOY_DIR}/backend/ 2>/dev/null || true
 
 # 复制前端构建文件
 mkdir -p ${DEPLOY_DIR}/frontend
-cp -r web-modern/dist/* ${DEPLOY_DIR}/frontend/
+cp -r ../web-modern/dist/* ${DEPLOY_DIR}/frontend/
+
+# 复制门户网站文件
+mkdir -p ${DEPLOY_DIR}/portal
+cp -r ../portal/* ${DEPLOY_DIR}/portal/
 
 # 复制启动脚本
 mkdir -p ${DEPLOY_DIR}/scripts
@@ -151,6 +160,9 @@ echo ""
 echo -e "${YELLOW}⚙️  配置服务器环境...${NC}"
 
 ssh ${SERVER_USER}@${SERVER_IP} << 'ENDSSH'
+# 创建必要的目录
+mkdir -p /opt/lightscript/logs
+
 # 检查Java
 if ! command -v java &> /dev/null; then
     echo "安装Java..."
@@ -165,6 +177,44 @@ fi
 
 # 配置Nginx
 cat > /etc/nginx/conf.d/lightscript.conf << 'NGINXCONF'
+# 门户网站 (主站)
+server {
+    listen 80 default_server;
+    server_name _;
+    
+    root /opt/lightscript/portal;
+    index index.html;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # 管理后台
+    location /admin/ {
+        alias /opt/lightscript/frontend/;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # 后端API代理
+    location /api/ {
+        proxy_pass http://localhost:8080/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    # 静态资源缓存
+    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    access_log /opt/lightscript/logs/nginx-access.log;
+    error_log /opt/lightscript/logs/nginx-error.log;
+}
+
+# 管理后台专用端口 (3000)
 server {
     listen 3000;
     server_name _;
@@ -190,26 +240,8 @@ server {
         add_header Cache-Control "public, immutable";
     }
     
-    access_log /opt/lightscript/logs/nginx-access.log;
-    error_log /opt/lightscript/logs/nginx-error.log;
-}
-
-server {
-    listen 80;
-    server_name _;
-    
-    location / {
-        root /opt/lightscript/frontend;
-        try_files $uri $uri/ /index.html;
-    }
-    
-    location /api/ {
-        proxy_pass http://localhost:8080/api/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    access_log /opt/lightscript/logs/nginx-admin-access.log;
+    error_log /opt/lightscript/logs/nginx-admin-error.log;
 }
 NGINXCONF
 
@@ -251,12 +283,13 @@ echo "✅ 部署完成！"
 echo -e "==========================================${NC}"
 echo ""
 echo -e "${BLUE}访问地址：${NC}"
+echo -e "  门户网站: ${GREEN}http://${SERVER_IP}${NC} (主站)"
+echo -e "  管理后台: ${GREEN}http://${SERVER_IP}/admin${NC} 或 ${GREEN}http://${SERVER_IP}:${FRONTEND_PORT}${NC}"
 echo -e "  后端API: ${GREEN}http://${SERVER_IP}:${BACKEND_PORT}${NC}"
-echo -e "  前端界面: ${GREEN}http://${SERVER_IP}:${FRONTEND_PORT}${NC}"
 echo ""
 echo -e "${BLUE}管理命令：${NC}"
 echo -e "  查看后端日志: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'tail -f ${REMOTE_DIR}/backend/backend.log'${NC}"
-echo -e "  查看前端日志: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'tail -f ${REMOTE_DIR}/frontend/frontend.log'${NC}"
+echo -e "  查看Nginx日志: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'tail -f ${REMOTE_DIR}/logs/nginx-access.log'${NC}"
 echo -e "  重启服务: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} '${REMOTE_DIR}/scripts/restart-all.sh'${NC}"
 echo -e "  停止服务: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} '${REMOTE_DIR}/scripts/stop-all.sh'${NC}"
 echo ""

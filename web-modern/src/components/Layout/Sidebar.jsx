@@ -97,9 +97,13 @@ const Sidebar = ({ collapsed }) => {
     >
       <div className="flex items-center justify-center h-16 bg-gray-900 border-b border-gray-700">
         <div className="flex items-center space-x-2">
-          <RocketOutlined className="text-2xl text-blue-400" />
+          <img 
+            src="/logo.svg" 
+            alt="LightScript" 
+            className="w-6 h-6"
+          />
           {!collapsed && (
-            <span className="text-xl font-bold text-white">LightScript</span>
+            <span className="text-lg font-semibold text-white">LightScript</span>
           )}
         </div>
       </div>

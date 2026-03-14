@@ -223,6 +223,13 @@ public class ScriptService {
     }
     
     /**
+     * 获取脚本总数
+     */
+    public long getTotalScriptCount() {
+        return scriptRepository.count();
+    }
+    
+    /**
      * 增加脚本使用次数
      */
     @Transactional

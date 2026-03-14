@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -1050,6 +1051,35 @@ public class TaskService {
         if (optExecution.isPresent()) {
             updateTaskStatus(optExecution.get().getTaskId());
         }
+    }
+    
+    /**
+     * 获取任务执行趋势数据（最近10天）
+     */
+    public List<Map<String, Object>> getTaskTrends() {
+        List<Map<String, Object>> trends = new ArrayList<>();
+        LocalDate today = LocalDate.now();
+        
+        for (int i = 9; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            LocalDateTime startOfDay = date.atStartOfDay();
+            LocalDateTime endOfDay = date.atTime(23, 59, 59);
+            
+            // 查询当天的任务统计
+            long totalTasks = taskRepository.countByCreatedAtBetween(startOfDay, endOfDay);
+            long successTasks = taskRepository.countByCreatedAtBetweenAndTaskStatus(startOfDay, endOfDay, "SUCCESS");
+            long failedTasks = taskRepository.countByCreatedAtBetweenAndTaskStatus(startOfDay, endOfDay, "FAILED");
+            
+            Map<String, Object> dayData = new HashMap<>();
+            dayData.put("date", date.toString());
+            dayData.put("total", totalTasks);
+            dayData.put("success", successTasks);
+            dayData.put("failed", failedTasks);
+            
+            trends.add(dayData);
+        }
+        
+        return trends;
     }
 
 }

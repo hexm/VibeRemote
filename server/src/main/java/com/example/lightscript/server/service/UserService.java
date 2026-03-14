@@ -238,6 +238,20 @@ public class UserService {
     }
     
     /**
+     * 获取用户总数
+     */
+    public long getTotalUserCount() {
+        return userRepository.count();
+    }
+    
+    /**
+     * 获取活跃用户数（状态为ACTIVE的用户）
+     */
+    public long getActiveUserCount() {
+        return userRepository.countByStatus("ACTIVE");
+    }
+    
+    /**
      * 验证密码强度
      */
     private void validatePassword(String password) {

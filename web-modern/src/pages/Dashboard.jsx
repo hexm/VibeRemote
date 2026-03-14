@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Progress, Typography, Space, Button, Table, Tag, Avatar, message } from 'antd'
+import { Card, Row, Col, Statistic, Typography, Space, Button, Table, Tag, Avatar, message } from 'antd'
 import {
   DesktopOutlined,
-  FileTextOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   ExclamationCircleOutlined,
   ReloadOutlined,
   TrophyOutlined,
-  RocketOutlined,
   UserOutlined,
+  TeamOutlined,
+  CodeOutlined,
+  LineChartOutlined,
+  MonitorOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import api from '../services/auth'
 
 const { Title, Text } = Typography
@@ -27,13 +30,34 @@ const Dashboard = () => {
     completedTasks: 0,
     failedTasks: 0,
     pendingTasks: 0,
+    totalUsers: 0,
+    activeUsers: 0,
+    totalScripts: 0,
   })
   const [recentTasks, setRecentTasks] = useState([])
-  const [systemHealth, setSystemHealth] = useState({
-    avgCpu: 0,
-    avgMemory: 0,
-    avgDisk: 0,
-    networkLoad: 0,
+  const [taskTrends, setTaskTrends] = useState([])
+  const [serverHealth, setServerHealth] = useState({
+    cpuUsage: 0,
+    cpuCores: 0,
+    jvmMemoryUsage: 0,
+    jvmUsedMemoryMB: 0,
+    jvmMaxMemoryMB: 0,
+    systemMemoryUsage: 0,
+    systemUsedMemoryGB: 0,
+    systemTotalMemoryGB: 0,
+    diskUsage: 0,
+    usedDiskGB: 0,
+    totalDiskGB: 0,
+    uptimeHours: 0,
+    uptimeMinutes: 0,
+    threadCount: 0,
+    peakThreadCount: 0,
+    loadedClasses: 0,
+    gcCount: 0,
+    gcTime: 0,
+    activeConnections: 0,
+    totalConnections: 0,
+    samplingTime: '',
   })
 
   // 加载仪表盘数据
@@ -41,10 +65,11 @@ const Dashboard = () => {
     setLoading(true)
     try {
       // 并行加载所有数据
-      const [statsResponse, tasksResponse, agentsResponse] = await Promise.all([
+      const [statsResponse, tasksResponse, trendsResponse, healthResponse] = await Promise.all([
         api.get('/web/dashboard/stats'),
         api.get('/web/tasks?page=0&size=5&sort=createdAt,desc'),
-        api.get('/web/agents')
+        api.get('/web/dashboard/task-trends'),
+        api.get('/web/dashboard/server-health')
       ])
 
       // 设置统计数据
@@ -55,40 +80,24 @@ const Dashboard = () => {
         key: task.taskId,
         id: task.taskId.substring(0, 8),
         name: task.taskName,
-        status: task.taskStatus.toLowerCase(),
+        status: task.taskStatus,
         createdAt: new Date(task.createdAt).toLocaleString('zh-CN'),
         createdBy: task.createdBy,
         targetAgentCount: task.targetAgentCount || 1,
       }))
       setRecentTasks(taskList)
 
-      // 计算系统健康度
-      const agents = agentsResponse.content
-      if (agents.length > 0) {
-        const onlineAgents = agents.filter(agent => agent.status === 'ONLINE')
-        if (onlineAgents.length > 0) {
-          const avgCpu = onlineAgents.reduce((sum, agent) => sum + (agent.cpuLoad ? agent.cpuLoad * 100 : 0), 0) / onlineAgents.length
-          const avgMemory = onlineAgents.reduce((sum, agent) => {
-            if (agent.totalMemMb && agent.freeMemMb) {
-              return sum + ((agent.totalMemMb - agent.freeMemMb) / agent.totalMemMb * 100)
-            }
-            return sum
-          }, 0) / onlineAgents.length
-          const avgDisk = onlineAgents.reduce((sum, agent) => {
-            if (agent.diskSpaceGb && agent.freeSpaceGb) {
-              return sum + ((agent.diskSpaceGb - agent.freeSpaceGb) / agent.diskSpaceGb * 100)
-            }
-            return sum
-          }, 0) / onlineAgents.length
+      // 设置任务趋势数据
+      const trendsData = trendsResponse.map(item => ({
+        date: new Date(item.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
+        total: item.total,
+        success: item.success,
+        failed: item.failed,
+      }))
+      setTaskTrends(trendsData)
 
-          setSystemHealth({
-            avgCpu: Math.round(avgCpu),
-            avgMemory: Math.round(avgMemory),
-            avgDisk: Math.round(avgDisk),
-            networkLoad: Math.round(Math.random() * 30 + 10), // 模拟网络负载
-          })
-        }
-      }
+      // 设置服务器健康度数据
+      setServerHealth(healthResponse)
 
     } catch (error) {
       console.error('加载仪表盘数据失败:', error)
@@ -135,13 +144,16 @@ const Dashboard = () => {
       key: 'status',
       render: (status) => {
         const statusConfig = {
-          completed: { color: 'success', text: '已完成', icon: <CheckCircleOutlined /> },
-          running: { color: 'processing', text: '运行中', icon: <ClockCircleOutlined /> },
-          failed: { color: 'error', text: '失败', icon: <ExclamationCircleOutlined /> },
-          pending: { color: 'default', text: '待执行', icon: <ClockCircleOutlined /> },
-          draft: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
+          SUCCESS: { color: 'success', text: '已完成', icon: <CheckCircleOutlined /> },
+          COMPLETED: { color: 'success', text: '已完成', icon: <CheckCircleOutlined /> },
+          RUNNING: { color: 'processing', text: '运行中', icon: <ClockCircleOutlined /> },
+          FAILED: { color: 'error', text: '失败', icon: <ExclamationCircleOutlined /> },
+          PENDING: { color: 'default', text: '待执行', icon: <ClockCircleOutlined /> },
+          DRAFT: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
+          CANCELLED: { color: 'default', text: '已取消', icon: <ExclamationCircleOutlined /> },
+          PARTIAL_SUCCESS: { color: 'warning', text: '部分成功', icon: <ExclamationCircleOutlined /> },
         }
-        const config = statusConfig[status] || statusConfig.draft
+        const config = statusConfig[status] || statusConfig.DRAFT
         return (
           <Tag color={config.color} icon={config.icon}>
             {config.text}
@@ -187,9 +199,9 @@ const Dashboard = () => {
         </Button>
       </div>
 
-      {/* 统计卡片 */}
+      {/* 统计卡片 - 精简为一排六个 */}
       <Row gutter={[24, 24]}>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} sm={12} lg={4}>
           <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500">
             <Statistic
               title={
@@ -200,18 +212,12 @@ const Dashboard = () => {
               }
               value={stats.onlineAgents}
               suffix={`/ ${stats.totalAgents}`}
-              valueStyle={{ color: '#3b82f6', fontSize: '2rem', fontWeight: 'bold' }}
-            />
-            <Progress
-              percent={stats.totalAgents > 0 ? (stats.onlineAgents / stats.totalAgents) * 100 : 0}
-              showInfo={false}
-              strokeColor="#3b82f6"
-              className="mt-2"
+              valueStyle={{ color: '#3b82f6', fontSize: '1.5rem', fontWeight: 'bold' }}
             />
           </Card>
         </Col>
         
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} sm={12} lg={4}>
           <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-green-500">
             <Statistic
               title={
@@ -221,33 +227,12 @@ const Dashboard = () => {
                 </Space>
               }
               value={stats.completedTasks}
-              valueStyle={{ color: '#10b981', fontSize: '2rem', fontWeight: 'bold' }}
+              valueStyle={{ color: '#10b981', fontSize: '1.5rem', fontWeight: 'bold' }}
             />
-            <Text type="secondary" className="text-sm">
-              成功率 {stats.totalTasks > 0 ? ((stats.completedTasks / stats.totalTasks) * 100).toFixed(1) : 0}%
-            </Text>
           </Card>
         </Col>
         
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-orange-500">
-            <Statistic
-              title={
-                <Space>
-                  <ClockCircleOutlined className="text-orange-500" />
-                  <span>运行中</span>
-                </Space>
-              }
-              value={stats.runningTasks}
-              valueStyle={{ color: '#f59e0b', fontSize: '2rem', fontWeight: 'bold' }}
-            />
-            <Text type="secondary" className="text-sm">
-              正在执行的任务
-            </Text>
-          </Card>
-        </Col>
-        
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} sm={12} lg={4}>
           <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-red-500">
             <Statistic
               title={
@@ -257,117 +242,180 @@ const Dashboard = () => {
                 </Space>
               }
               value={stats.failedTasks}
-              valueStyle={{ color: '#ef4444', fontSize: '2rem', fontWeight: 'bold' }}
+              valueStyle={{ color: '#ef4444', fontSize: '1.5rem', fontWeight: 'bold' }}
             />
-            <Text type="secondary" className="text-sm">
-              失败率 {stats.totalTasks > 0 ? ((stats.failedTasks / stats.totalTasks) * 100).toFixed(1) : 0}%
-            </Text>
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12} lg={4}>
+          <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-orange-500">
+            <Statistic
+              title={
+                <Space>
+                  <ClockCircleOutlined className="text-orange-500" />
+                  <span>运行中</span>
+                </Space>
+              }
+              value={stats.runningTasks}
+              valueStyle={{ color: '#f59e0b', fontSize: '1.5rem', fontWeight: 'bold' }}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12} lg={4}>
+          <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-purple-500">
+            <Statistic
+              title={
+                <Space>
+                  <TeamOutlined className="text-purple-500" />
+                  <span>用户数</span>
+                </Space>
+              }
+              value={stats.totalUsers}
+              valueStyle={{ color: '#8b5cf6', fontSize: '1.5rem', fontWeight: 'bold' }}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12} lg={4}>
+          <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-indigo-500">
+            <Statistic
+              title={
+                <Space>
+                  <CodeOutlined className="text-indigo-500" />
+                  <span>脚本数量</span>
+                </Space>
+              }
+              value={stats.totalScripts}
+              valueStyle={{ color: '#6366f1', fontSize: '1.5rem', fontWeight: 'bold' }}
+            />
           </Card>
         </Col>
       </Row>
 
-      {/* 图表和系统健康度 */}
+      {/* 图表区域 */}
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
           <Card 
             title={
               <Space>
-                <RocketOutlined className="text-blue-500" />
-                <span>任务统计概览</span>
+                <LineChartOutlined className="text-blue-500" />
+                <span>任务执行趋势</span>
               </Space>
             }
             className="shadow-lg"
           >
-            <Row gutter={[16, 16]}>
-              <Col span={6}>
-                <Statistic
-                  title="总任务数"
-                  value={stats.totalTasks}
-                  valueStyle={{ color: '#1890ff' }}
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={taskTrends}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="total" 
+                  stroke="#3b82f6" 
+                  strokeWidth={2}
+                  name="总任务数"
                 />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="待执行"
-                  value={stats.pendingTasks}
-                  valueStyle={{ color: '#faad14' }}
+                <Line 
+                  type="monotone" 
+                  dataKey="success" 
+                  stroke="#10b981" 
+                  strokeWidth={2}
+                  name="成功任务"
                 />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="已完成"
-                  value={stats.completedTasks}
-                  valueStyle={{ color: '#52c41a' }}
+                <Line 
+                  type="monotone" 
+                  dataKey="failed" 
+                  stroke="#ef4444" 
+                  strokeWidth={2}
+                  name="失败任务"
                 />
-              </Col>
-              <Col span={6}>
-                <Statistic
-                  title="失败"
-                  value={stats.failedTasks}
-                  valueStyle={{ color: '#ff4d4f' }}
-                />
-              </Col>
-            </Row>
-            <div className="mt-6">
-              <Progress
-                percent={stats.totalTasks > 0 ? (stats.completedTasks / stats.totalTasks) * 100 : 0}
-                success={{ percent: stats.totalTasks > 0 ? (stats.completedTasks / stats.totalTasks) * 100 : 0 }}
-                strokeColor="#52c41a"
-                className="mb-2"
-              />
-              <Text type="secondary">任务完成进度</Text>
-            </div>
+              </LineChart>
+            </ResponsiveContainer>
           </Card>
         </Col>
         
         <Col xs={24} lg={8}>
           <Card 
-            title="系统健康度"
-            className="shadow-lg h-full"
+            title={
+              <div className="flex justify-between items-center">
+                <Space>
+                  <MonitorOutlined className="text-green-500" />
+                  <span>服务器健康度</span>
+                </Space>
+                <Text type="secondary" className="text-xs">
+                  {serverHealth.samplingTime ? new Date(serverHealth.samplingTime).toLocaleTimeString('zh-CN') : ''}
+                </Text>
+              </div>
+            }
+            className="shadow-lg"
+            style={{ height: '100%' }}
           >
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <Text>平均 CPU 使用率</Text>
-                  <Text strong>{systemHealth.avgCpu}%</Text>
+            <div className="h-full flex flex-col justify-center">
+              <div className="space-y-3">
+                {/* 第一行：CPU、JVM内存、系统内存 */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-2 bg-blue-50 rounded">
+                    <div className="text-lg font-bold text-blue-600">{serverHealth.cpuUsage}%</div>
+                    <div className="text-xs text-gray-600">CPU使用率</div>
+                    <div className="text-xs text-gray-400">{serverHealth.cpuCores}核心</div>
+                  </div>
+                  <div className="text-center p-2 bg-green-50 rounded">
+                    <div className="text-lg font-bold text-green-600">{serverHealth.jvmMemoryUsage}%</div>
+                    <div className="text-xs text-gray-600">JVM内存</div>
+                    <div className="text-xs text-gray-400">{serverHealth.jvmUsedMemoryMB}MB/{serverHealth.jvmMaxMemoryMB}MB</div>
+                  </div>
+                  <div className="text-center p-2 bg-emerald-50 rounded">
+                    <div className="text-lg font-bold text-emerald-600">{serverHealth.systemMemoryUsage}%</div>
+                    <div className="text-xs text-gray-600">系统内存</div>
+                    <div className="text-xs text-gray-400">{serverHealth.systemUsedMemoryGB}GB/{serverHealth.systemTotalMemoryGB}GB</div>
+                  </div>
                 </div>
-                <Progress 
-                  percent={systemHealth.avgCpu} 
-                  strokeColor={systemHealth.avgCpu > 80 ? '#ff4d4f' : systemHealth.avgCpu > 60 ? '#faad14' : '#52c41a'} 
-                />
-              </div>
-              
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <Text>平均内存使用率</Text>
-                  <Text strong>{systemHealth.avgMemory}%</Text>
+                
+                {/* 第二行：磁盘、运行时间、线程 */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-2 bg-orange-50 rounded">
+                    <div className="text-lg font-bold text-orange-600">{serverHealth.diskUsage}%</div>
+                    <div className="text-xs text-gray-600">磁盘使用率</div>
+                    <div className="text-xs text-gray-400">{serverHealth.usedDiskGB}GB/{serverHealth.totalDiskGB}GB</div>
+                  </div>
+                  <div className="text-center p-2 bg-purple-50 rounded">
+                    <div className="text-lg font-bold text-purple-600">
+                      {serverHealth.uptimeHours}h{serverHealth.uptimeMinutes}m
+                    </div>
+                    <div className="text-xs text-gray-600">运行时间</div>
+                    <div className="text-xs text-gray-400">JVM启动</div>
+                  </div>
+                  <div className="text-center p-2 bg-indigo-50 rounded">
+                    <div className="text-lg font-bold text-indigo-600">{serverHealth.threadCount}</div>
+                    <div className="text-xs text-gray-600">活跃线程</div>
+                    <div className="text-xs text-gray-400">峰值{serverHealth.peakThreadCount}</div>
+                  </div>
                 </div>
-                <Progress 
-                  percent={systemHealth.avgMemory} 
-                  strokeColor={systemHealth.avgMemory > 80 ? '#ff4d4f' : systemHealth.avgMemory > 60 ? '#faad14' : '#52c41a'} 
-                />
-              </div>
-              
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <Text>平均磁盘使用率</Text>
-                  <Text strong>{systemHealth.avgDisk}%</Text>
+                
+                {/* 第三行：类加载、GC统计、数据库连接 */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-2 bg-cyan-50 rounded">
+                    <div className="text-lg font-bold text-cyan-600">{serverHealth.loadedClasses}</div>
+                    <div className="text-xs text-gray-600">已载类数</div>
+                    <div className="text-xs text-gray-400">JVM类</div>
+                  </div>
+                  <div className="text-center p-2 bg-yellow-50 rounded">
+                    <div className="text-lg font-bold text-yellow-600">{serverHealth.gcCount}</div>
+                    <div className="text-xs text-gray-600">GC次数</div>
+                    <div className="text-xs text-gray-400">{serverHealth.gcTime}ms耗时</div>
+                  </div>
+                  <div className="text-center p-2 bg-pink-50 rounded">
+                    <div className="text-lg font-bold text-pink-600">
+                      {serverHealth.activeConnections}/{serverHealth.totalConnections}
+                    </div>
+                    <div className="text-xs text-gray-600">数据库连接</div>
+                    <div className="text-xs text-gray-400">活跃/总数</div>
+                  </div>
                 </div>
-                <Progress 
-                  percent={systemHealth.avgDisk} 
-                  strokeColor={systemHealth.avgDisk > 80 ? '#ff4d4f' : systemHealth.avgDisk > 60 ? '#faad14' : '#52c41a'} 
-                />
-              </div>
-              
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <Text>网络负载</Text>
-                  <Text strong>{systemHealth.networkLoad}%</Text>
-                </div>
-                <Progress 
-                  percent={systemHealth.networkLoad} 
-                  strokeColor="#8b5cf6" 
-                />
               </div>
             </div>
           </Card>

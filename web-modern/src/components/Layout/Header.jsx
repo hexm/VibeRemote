@@ -6,6 +6,7 @@ import {
   UserOutlined,
   LogoutOutlined,
   SettingOutlined,
+  HomeOutlined,
 } from '@ant-design/icons'
 
 const { Header: AntHeader } = Layout
@@ -63,6 +64,17 @@ const Header = ({ collapsed, onToggle, userInfo, onLogout }) => {
         </div>
 
         <div className="flex items-center space-x-4">
+          <Button
+            type="text"
+            icon={<HomeOutlined />}
+            onClick={() => window.open('http://8.138.114.34', '_blank')}
+            className="text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+            size="large"
+            title="回到门户网站"
+          >
+            <span className="hidden sm:inline ml-1">门户</span>
+          </Button>
+          
           <Dropdown
             menu={{ items: userMenuItems, onClick: handleMenuClick }}
             placement="bottomRight"

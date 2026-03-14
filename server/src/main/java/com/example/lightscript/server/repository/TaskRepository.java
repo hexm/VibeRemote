@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -33,4 +34,10 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     
     // 统计特定状态的任务数量
     long countByTaskStatus(String taskStatus);
+    
+    // 按日期范围统计任务数量
+    long countByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
+    
+    // 按日期范围和状态统计任务数量
+    long countByCreatedAtBetweenAndTaskStatus(LocalDateTime startDate, LocalDateTime endDate, String taskStatus);
 }
