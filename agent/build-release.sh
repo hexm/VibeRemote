@@ -223,9 +223,30 @@ setlocal enabledelayedexpansion
 set SCRIPT_DIR=%~dp0
 set JRE_HOME=%SCRIPT_DIR%jre
 set JAVA_EXE=%JRE_HOME%\bin\java.exe
+set PID_FILE=%SCRIPT_DIR%agent.pid
+set LOG_DIR=%SCRIPT_DIR%logs
+set SERVICE_NAME=LightScriptAgent
+
+REM 创建日志目录
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
 echo LightScript Agent 启动中...
 echo 工作目录: %SCRIPT_DIR%
+
+REM 检查是否已经在运行
+if exist "%PID_FILE%" (
+    set /p EXISTING_PID=<"%PID_FILE%"
+    tasklist /fi "PID eq !EXISTING_PID!" 2>nul | find "!EXISTING_PID!" >nul
+    if !errorlevel! equ 0 (
+        echo Agent 已经在运行 (PID: !EXISTING_PID!)
+        echo 如需重启，请先运行: stop-agent.bat
+        if not "%1"=="--service" pause
+        exit /b 1
+    ) else (
+        echo 清理过期的PID文件...
+        del "%PID_FILE%" 2>nul
+    )
+)
 
 REM 优先使用内置JRE
 if exist "%JAVA_EXE%" (
@@ -266,7 +287,7 @@ echo.
 echo 请安装Java 8或更高版本:
 echo   下载地址: https://adoptium.net/temurin/releases/
 echo.
-pause
+if not "%1"=="--service" pause
 exit /b 1
 
 :start_agent
@@ -276,17 +297,334 @@ echo Java版本信息:
 echo.
 echo 启动LightScript Agent...
 echo Agent JAR: %SCRIPT_DIR%agent.jar
+echo 日志目录: %LOG_DIR%
 
-REM 启动Agent (控制内存使用)
-"%JAVA_CMD%" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
+REM 检测启动模式
+if "%1"=="--service" (
+    echo 检测到Windows服务模式，前台启动...
+    REM Windows服务模式，前台启动，不创建PID文件
+    "%JAVA_CMD%" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
+) else (
+    echo 手动启动模式，后台启动...
+    REM 手动启动模式，后台启动
+    start /b "" "%JAVA_CMD%" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
+    
+    REM 等待进程启动
+    timeout /t 3 /nobreak >nul
+    
+    REM 精确查找Agent进程PID（通过命令行参数匹配）
+    set AGENT_PID=
+    for /f "tokens=2" %%i in ('wmic process where "CommandLine like '%%agent.jar%%' and Name='java.exe'" get ProcessId /format:csv 2^>nul ^| find /v "Node" ^| find /v "ProcessId" ^| find /v "^$"') do (
+        set AGENT_PID=%%i
+        goto :found_pid
+    )
+    
+    :found_pid
+    if defined AGENT_PID (
+        echo !AGENT_PID! > "%PID_FILE%"
+        echo ✅ Agent 启动成功 (PID: !AGENT_PID!)
+        echo.
+        echo 使用以下命令:
+        echo   查看日志: type "%LOG_DIR%\agent.log"
+        echo   停止服务: stop-agent.bat
+        echo   查看状态: tasklist /fi "PID eq !AGENT_PID!"
+        echo   安装服务: install-service.bat
+    ) else (
+        echo ❌ Agent 启动失败或无法获取PID
+        echo 请查看日志文件: %LOG_DIR%\agent.log
+        pause
+        exit /b 1
+    )
+)
 EOF
 
         # Windows 停止脚本
         cat > "$target_dir/stop-agent.bat" << 'EOF'
 @echo off
-echo Stopping LightScript Agent...
-taskkill /f /im java.exe /fi "WINDOWTITLE eq LightScript Agent*" 2>nul
-echo Agent stopped.
+setlocal enabledelayedexpansion
+
+set SCRIPT_DIR=%~dp0
+set PID_FILE=%SCRIPT_DIR%agent.pid
+set SERVICE_NAME=LightScriptAgent
+
+echo 停止 LightScript Agent...
+
+REM 检查Windows服务是否存在并运行
+sc query "%SERVICE_NAME%" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo 检测到Windows服务，正在停止...
+    net stop "%SERVICE_NAME%" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo Windows服务已停止
+    ) else (
+        echo 警告: 停止Windows服务失败，可能服务未运行
+    )
+)
+
+REM 检查PID文件是否存在
+if exist "%PID_FILE%" (
+    set /p AGENT_PID=<"%PID_FILE%"
+    
+    REM 检查进程是否存在
+    tasklist /fi "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" >nul
+    if !errorlevel! equ 0 (
+        echo 找到Agent进程 (PID: !AGENT_PID!)，正在停止...
+        
+        REM 尝试优雅停止
+        taskkill /pid !AGENT_PID! >nul 2>&1
+        
+        REM 等待进程退出
+        echo 等待进程退出...
+        for /l %%i in (1,1,15) do (
+            tasklist /fi "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" >nul
+            if !errorlevel! neq 0 (
+                echo 进程 !AGENT_PID! 已停止
+                goto :cleanup_pid
+            )
+            timeout /t 1 /nobreak >nul
+        )
+        
+        REM 如果进程仍在运行，强制停止
+        tasklist /fi "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" >nul
+        if !errorlevel! equ 0 (
+            echo 强制停止进程 !AGENT_PID!...
+            taskkill /f /pid !AGENT_PID! >nul 2>&1
+        )
+    ) else (
+        echo PID文件中的进程 !AGENT_PID! 不存在，清理PID文件...
+    )
+    
+    :cleanup_pid
+    del "%PID_FILE%" 2>nul
+) else (
+    echo 未找到PID文件，尝试通过进程名查找...
+)
+
+REM 精确查找剩余的Agent进程（通过命令行参数匹配）
+echo 检查剩余的Agent进程...
+set FOUND_PROCESSES=0
+for /f "tokens=1,2" %%i in ('wmic process where "CommandLine like '%%agent.jar%%' and Name='java.exe'" get ProcessId^,CommandLine /format:csv 2^>nul ^| find /v "Node" ^| find /v "ProcessId" ^| find /v "^$"') do (
+    set REMAINING_PID=%%j
+    if defined REMAINING_PID (
+        set FOUND_PROCESSES=1
+        echo 发现剩余的Agent进程: !REMAINING_PID!
+        echo 停止进程 !REMAINING_PID!...
+        
+        REM 尝试优雅停止
+        taskkill /pid !REMAINING_PID! >nul 2>&1
+        
+        REM 等待进程退出
+        for /l %%k in (1,1,10) do (
+            tasklist /fi "PID eq !REMAINING_PID!" 2>nul | find "!REMAINING_PID!" >nul
+            if !errorlevel! neq 0 (
+                echo 进程 !REMAINING_PID! 已停止
+                goto :next_process
+            )
+            timeout /t 1 /nobreak >nul
+        )
+        
+        REM 强制停止
+        tasklist /fi "PID eq !REMAINING_PID!" 2>nul | find "!REMAINING_PID!" >nul
+        if !errorlevel! equ 0 (
+            echo 强制停止进程 !REMAINING_PID!...
+            taskkill /f /pid !REMAINING_PID! >nul 2>&1
+        )
+        
+        :next_process
+    )
+)
+
+if !FOUND_PROCESSES! equ 0 (
+    echo 未找到运行中的Agent进程
+)
+
+echo ✅ Agent 已停止
+pause
+EOF
+
+        # Windows 服务安装脚本
+        cat > "$target_dir/install-service.bat" << 'EOF'
+@echo off
+setlocal enabledelayedexpansion
+
+set SCRIPT_DIR=%~dp0
+set SERVICE_NAME=LightScriptAgent
+set SERVICE_DISPLAY_NAME=LightScript Agent
+set SERVICE_DESCRIPTION=LightScript 分布式脚本执行代理
+
+echo 安装 LightScript Agent Windows 服务...
+
+REM 检查管理员权限
+net session >nul 2>&1
+if !errorlevel! neq 0 (
+    echo ❌ 需要管理员权限安装服务
+    echo 请以管理员身份运行此脚本
+    pause
+    exit /b 1
+)
+
+REM 检查服务是否已存在
+sc query "%SERVICE_NAME%" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo 服务已存在，正在删除旧服务...
+    net stop "%SERVICE_NAME%" >nul 2>&1
+    sc delete "%SERVICE_NAME%" >nul 2>&1
+    timeout /t 2 /nobreak >nul
+)
+
+REM 创建服务
+echo 创建Windows服务...
+sc create "%SERVICE_NAME%" ^
+    binPath= "cmd.exe /c \"%SCRIPT_DIR%start-agent.bat\" --service" ^
+    DisplayName= "%SERVICE_DISPLAY_NAME%" ^
+    start= auto ^
+    depend= Tcpip
+
+if !errorlevel! equ 0 (
+    echo ✅ 服务创建成功
+    
+    REM 设置服务描述
+    sc description "%SERVICE_NAME%" "%SERVICE_DESCRIPTION%"
+    
+    REM 设置服务恢复选项（失败时自动重启）
+    sc failure "%SERVICE_NAME%" reset= 86400 actions= restart/30000/restart/60000/restart/120000
+    
+    REM 启动服务
+    echo 启动服务...
+    net start "%SERVICE_NAME%"
+    
+    if !errorlevel! equ 0 (
+        echo ✅ 服务启动成功
+        echo.
+        echo 使用以下命令管理服务:
+        echo   查看状态: sc query "%SERVICE_NAME%"
+        echo   启动服务: net start "%SERVICE_NAME%"
+        echo   停止服务: net stop "%SERVICE_NAME%"
+        echo   卸载服务: uninstall-service.bat
+    ) else (
+        echo ❌ 服务启动失败
+        echo 请检查日志文件: %SCRIPT_DIR%logs\agent.log
+    )
+) else (
+    echo ❌ 服务创建失败
+)
+
+pause
+EOF
+
+        # Windows 服务卸载脚本
+        cat > "$target_dir/uninstall-service.bat" << 'EOF'
+@echo off
+setlocal enabledelayedexpansion
+
+set SERVICE_NAME=LightScriptAgent
+
+echo 卸载 LightScript Agent Windows 服务...
+
+REM 检查管理员权限
+net session >nul 2>&1
+if !errorlevel! neq 0 (
+    echo ❌ 需要管理员权限卸载服务
+    echo 请以管理员身份运行此脚本
+    pause
+    exit /b 1
+)
+
+REM 检查服务是否存在
+sc query "%SERVICE_NAME%" >nul 2>&1
+if !errorlevel! neq 0 (
+    echo 服务不存在或已卸载
+    pause
+    exit /b 0
+)
+
+REM 停止服务
+echo 停止服务...
+net stop "%SERVICE_NAME%" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo 服务已停止
+) else (
+    echo 警告: 停止服务失败，可能服务未运行
+)
+
+REM 删除服务
+echo 删除服务...
+sc delete "%SERVICE_NAME%" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo ✅ 服务已删除
+) else (
+    echo ❌ 删除服务失败
+)
+
+REM 询问是否删除安装目录
+echo.
+set /p DELETE_DIR="是否删除安装目录 %~dp0? (y/N): "
+if /i "!DELETE_DIR!"=="y" (
+    echo 删除安装目录...
+    cd /d "%TEMP%"
+    rmdir /s /q "%~dp0" 2>nul
+    if !errorlevel! equ 0 (
+        echo ✅ LightScript Agent 已完全卸载
+    ) else (
+        echo ⚠️  部分文件可能仍在使用中，请手动删除: %~dp0
+    )
+) else (
+    echo ✅ LightScript Agent 服务已卸载，文件保留
+)
+
+pause
+EOF
+
+        # Windows 完整卸载脚本
+        cat > "$target_dir/uninstall-agent.bat" << 'EOF'
+@echo off
+setlocal enabledelayedexpansion
+
+set SCRIPT_DIR=%~dp0
+set SERVICE_NAME=LightScriptAgent
+
+echo 卸载 LightScript Agent...
+
+REM 停止服务（如果存在）
+sc query "%SERVICE_NAME%" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo 停止Windows服务...
+    net stop "%SERVICE_NAME%" >nul 2>&1
+    sc delete "%SERVICE_NAME%" >nul 2>&1
+    echo Windows服务已卸载
+)
+
+REM 停止所有Agent进程
+echo 停止Agent进程...
+for /f "tokens=1,2" %%i in ('wmic process where "CommandLine like '%%agent.jar%%' and Name='java.exe'" get ProcessId^,CommandLine /format:csv 2^>nul ^| find /v "Node" ^| find /v "ProcessId" ^| find /v "^$"') do (
+    set AGENT_PID=%%j
+    if defined AGENT_PID (
+        echo 停止进程: !AGENT_PID!
+        taskkill /f /pid !AGENT_PID! >nul 2>&1
+    )
+)
+
+REM 清理PID文件
+if exist "%SCRIPT_DIR%agent.pid" (
+    del "%SCRIPT_DIR%agent.pid" 2>nul
+)
+
+REM 询问是否删除安装目录
+echo.
+set /p DELETE_DIR="是否删除安装目录 %SCRIPT_DIR%? (y/N): "
+if /i "!DELETE_DIR!"=="y" (
+    echo 删除安装目录...
+    cd /d "%TEMP%"
+    rmdir /s /q "%SCRIPT_DIR%" 2>nul
+    if !errorlevel! equ 0 (
+        echo ✅ LightScript Agent 已完全卸载
+    ) else (
+        echo ⚠️  部分文件可能仍在使用中，请手动删除: %SCRIPT_DIR%
+    )
+) else (
+    echo ✅ LightScript Agent 已卸载，文件保留
+)
+
 pause
 EOF
 
@@ -362,40 +700,54 @@ echo "Java版本信息:"
 "$JAVA_CMD" -version
 
 echo ""
-echo "启动LightScript Agent (后台模式)..."
+echo "启动LightScript Agent..."
 echo "Agent JAR: $SCRIPT_DIR/agent.jar"
 echo "日志文件: $LOG_FILE"
 
-# 后台启动Agent，控制内存使用
-nohup "$JAVA_CMD" \
-    -Xms32m \
-    -Xmx128m \
-    -XX:MaxMetaspaceSize=64m \
-    -Dfile.encoding=UTF-8 \
-    -Djava.awt.headless=true \
-    -jar "$SCRIPT_DIR/agent.jar" \
-    >> "$LOG_FILE" 2>&1 &
-
-# 保存PID
-AGENT_PID=$!
-echo $AGENT_PID > "$PID_FILE"
-
-# 等待一下确保启动成功
-sleep 2
-
-# 检查进程是否还在运行
-if ps -p $AGENT_PID > /dev/null 2>&1; then
-    echo "✅ Agent 启动成功 (PID: $AGENT_PID)"
-    echo ""
-    echo "使用以下命令:"
-    echo "  查看日志: tail -f $LOG_FILE"
-    echo "  停止服务: ./stop-agent.sh"
-    echo "  查看状态: ps -p $AGENT_PID"
+# 检测是否在LaunchAgent环境下运行
+if [ -n "$LAUNCHED_BY_LAUNCHD" ] || [ "$1" = "--launchd" ]; then
+    echo "检测到LaunchAgent环境，前台启动..."
+    # LaunchAgent环境下，前台启动，不使用nohup
+    exec "$JAVA_CMD" \
+        -Xms32m \
+        -Xmx128m \
+        -XX:MaxMetaspaceSize=64m \
+        -Dfile.encoding=UTF-8 \
+        -Djava.awt.headless=true \
+        -jar "$SCRIPT_DIR/agent.jar"
 else
-    echo "❌ Agent 启动失败"
-    echo "请查看日志文件: $LOG_FILE"
-    rm -f "$PID_FILE"
-    exit 1
+    echo "手动启动模式，后台启动..."
+    # 手动启动时，后台启动
+    nohup "$JAVA_CMD" \
+        -Xms32m \
+        -Xmx128m \
+        -XX:MaxMetaspaceSize=64m \
+        -Dfile.encoding=UTF-8 \
+        -Djava.awt.headless=true \
+        -jar "$SCRIPT_DIR/agent.jar" \
+        > /dev/null 2>&1 &
+
+    # 保存PID
+    AGENT_PID=$!
+    echo $AGENT_PID > "$PID_FILE"
+
+    # 等待一下确保启动成功
+    sleep 2
+
+    # 检查进程是否还在运行
+    if ps -p $AGENT_PID > /dev/null 2>&1; then
+        echo "✅ Agent 启动成功 (PID: $AGENT_PID)"
+        echo ""
+        echo "使用以下命令:"
+        echo "  查看日志: tail -f $LOG_FILE"
+        echo "  停止服务: ./stop-agent.sh"
+        echo "  查看状态: ps -p $AGENT_PID"
+    else
+        echo "❌ Agent 启动失败"
+        echo "请查看日志文件: $LOG_FILE"
+        rm -f "$PID_FILE"
+        exit 1
+    fi
 fi
 EOF
 
@@ -408,22 +760,62 @@ PID_FILE="$SCRIPT_DIR/agent.pid"
 
 echo "停止 LightScript Agent..."
 
+# 检查是否有LaunchAgent服务运行
+LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.lightscript.agent.plist"
+LAUNCH_DAEMON_PLIST="/Library/LaunchDaemons/com.lightscript.agent.plist"
+
+if [ -f "$LAUNCH_AGENT_PLIST" ]; then
+    echo "检测到用户级LaunchAgent服务，正在停止..."
+    launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
+    echo "用户级LaunchAgent服务已停止"
+elif [ -f "$LAUNCH_DAEMON_PLIST" ]; then
+    echo "检测到系统级LaunchDaemon服务，正在停止..."
+    sudo launchctl unload "$LAUNCH_DAEMON_PLIST" 2>/dev/null || true
+    echo "系统级LaunchDaemon服务已停止"
+fi
+
 # 检查PID文件是否存在
-if [ ! -f "$PID_FILE" ]; then
-    echo "未找到PID文件，尝试通过进程名查找..."
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
     
-    # 通过进程名查找
-    PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
-    
-    if [ -z "$PIDS" ]; then
-        echo "未找到运行中的Agent进程"
-        exit 0
+    # 检查进程是否存在
+    if ps -p $PID > /dev/null 2>&1; then
+        echo "找到Agent进程 (PID: $PID)，正在停止..."
+        
+        # 发送TERM信号
+        kill $PID
+        
+        # 等待进程优雅退出
+        echo "等待进程退出..."
+        for i in {1..15}; do
+            if ! ps -p $PID > /dev/null 2>&1; then
+                echo "进程 $PID 已停止"
+                break
+            fi
+            sleep 1
+        done
+        
+        # 如果进程仍在运行，强制杀死
+        if ps -p $PID > /dev/null 2>&1; then
+            echo "强制停止进程 $PID..."
+            kill -9 $PID
+        fi
+    else
+        echo "PID文件中的进程 $PID 不存在，清理PID文件..."
     fi
     
-    echo "找到Agent进程: $PIDS"
+    # 清理PID文件
+    rm -f "$PID_FILE"
+fi
+
+# 通过进程名查找剩余的Agent进程
+PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
+
+if [ ! -z "$PIDS" ]; then
+    echo "发现剩余的Agent进程: $PIDS"
     for PID in $PIDS; do
         echo "停止进程 $PID..."
-        kill $PID
+        kill $PID 2>/dev/null || true
         
         # 等待进程结束
         for i in {1..10}; do
@@ -437,62 +829,66 @@ if [ ! -f "$PID_FILE" ]; then
         # 如果进程仍在运行，强制杀死
         if ps -p $PID > /dev/null 2>&1; then
             echo "强制停止进程 $PID..."
-            kill -9 $PID
+            kill -9 $PID 2>/dev/null || true
         fi
     done
-    
-    echo "Agent 已停止"
-    exit 0
 fi
 
-# 读取PID
-PID=$(cat "$PID_FILE")
-
-# 检查进程是否存在
-if ! ps -p $PID > /dev/null 2>&1; then
-    echo "进程 $PID 不存在，清理PID文件..."
-    rm -f "$PID_FILE"
-    echo "Agent 未运行"
-    exit 0
-fi
-
-echo "停止Agent进程 (PID: $PID)..."
-
-# 发送TERM信号
-kill $PID
-
-# 等待进程优雅退出
-echo "等待进程退出..."
-for i in {1..15}; do
-    if ! ps -p $PID > /dev/null 2>&1; then
-        echo "✅ Agent 已停止"
-        rm -f "$PID_FILE"
-        exit 0
-    fi
-    sleep 1
-done
-
-# 如果进程仍在运行，强制杀死
-if ps -p $PID > /dev/null 2>&1; then
-    echo "进程未响应，强制停止..."
-    kill -9 $PID
-    sleep 1
-    
-    if ps -p $PID > /dev/null 2>&1; then
-        echo "❌ 无法停止进程 $PID"
-        exit 1
-    else
-        echo "✅ Agent 已强制停止"
-        rm -f "$PID_FILE"
-    fi
-else
-    echo "✅ Agent 已停止"
-    rm -f "$PID_FILE"
-fi
+echo "✅ Agent 已停止"
 EOF
 
         # 设置执行权限
         chmod +x "$target_dir"/*.sh
+        
+        # 创建卸载脚本
+        cat > "$target_dir/uninstall-agent.sh" << 'EOF'
+#!/bin/bash
+
+echo "卸载 LightScript Agent..."
+
+# 停止Agent
+echo "正在停止Agent..."
+LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.lightscript.agent.plist"
+if [ -f "$LAUNCH_AGENT_PLIST" ]; then
+    echo "停止LaunchAgent服务..."
+    launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
+fi
+
+# 停止所有Agent进程
+PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
+if [ ! -z "$PIDS" ]; then
+    echo "停止Agent进程: $PIDS"
+    for PID in $PIDS; do
+        kill $PID 2>/dev/null || true
+    done
+    sleep 2
+    # 强制停止
+    for PID in $PIDS; do
+        kill -9 $PID 2>/dev/null || true
+    done
+fi
+
+# 卸载LaunchAgent服务
+if [ -f "$LAUNCH_AGENT_PLIST" ]; then
+    echo "删除LaunchAgent配置文件..."
+    rm -f "$LAUNCH_AGENT_PLIST"
+    echo "LaunchAgent服务已卸载"
+fi
+
+# 询问是否删除安装目录
+echo ""
+read -p "是否删除安装目录 $(pwd)? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    cd ..
+    rm -rf "$(basename "$OLDPWD")"
+    echo "✅ LightScript Agent 已完全卸载"
+else
+    echo "✅ LightScript Agent 服务已卸载，文件保留"
+fi
+EOF
+
+        chmod +x "$target_dir/uninstall-agent.sh"
     fi
 }
 

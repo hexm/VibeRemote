@@ -88,11 +88,15 @@ class UpgradeExecutor {
             }
             logger.info("New version downloaded: {}", newVersionPath);
 
-            // 5. 启动升级器（只传递必要参数）
+            // 5. 临时禁用LaunchAgent自动重启
+            logger.info("Temporarily disabling LaunchAgent auto-restart for upgrade");
+            disableLaunchAgentAutoRestart();
+
+            // 6. 启动升级器（只传递必要参数）
             logger.info("Starting upgrader process with new version: {}", newVersionPath);
             startUpgrader(newVersionPath);
 
-            // 6. 主程序退出
+            // 7. 主程序退出
             logger.info("Upgrade initiated, main process exiting...");
             System.exit(0);
 
@@ -313,6 +317,41 @@ class UpgradeExecutor {
             logger.info("Credentials saved for upgrader");
         } catch (Exception e) {
             logger.error("Failed to save credentials: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 临时禁用LaunchAgent自动重启，避免升级过程中的竞争条件
+     */
+    private void disableLaunchAgentAutoRestart() {
+        try {
+            // 检查用户级LaunchAgent
+            String userAgentPlist = System.getProperty("user.home") + "/Library/LaunchAgents/com.lightscript.agent.plist";
+            if (Files.exists(Paths.get(userAgentPlist))) {
+                logger.info("Unloading user-level LaunchAgent for upgrade");
+                ProcessBuilder pb = new ProcessBuilder("launchctl", "unload", userAgentPlist);
+                Process process = pb.start();
+                process.waitFor();
+                logger.info("User-level LaunchAgent unloaded");
+                return;
+            }
+            
+            // 检查系统级LaunchDaemon
+            String systemDaemonPlist = "/Library/LaunchDaemons/com.lightscript.agent.plist";
+            if (Files.exists(Paths.get(systemDaemonPlist))) {
+                logger.info("Unloading system-level LaunchDaemon for upgrade");
+                ProcessBuilder pb = new ProcessBuilder("sudo", "launchctl", "unload", systemDaemonPlist);
+                Process process = pb.start();
+                process.waitFor();
+                logger.info("System-level LaunchDaemon unloaded");
+                return;
+            }
+            
+            logger.info("No LaunchAgent/LaunchDaemon found, upgrade can proceed normally");
+            
+        } catch (Exception e) {
+            logger.warn("Failed to disable LaunchAgent auto-restart: {}", e.getMessage());
+            logger.warn("Upgrade may still work, but there might be race conditions");
         }
     }
     public static class VersionInfo {

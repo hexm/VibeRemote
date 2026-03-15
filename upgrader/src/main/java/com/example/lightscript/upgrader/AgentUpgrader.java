@@ -299,6 +299,9 @@ public class AgentUpgrader {
         
         Process process = pb.start();
         log("New agent process started using script: " + startScript);
+        
+        // 重新启用LaunchAgent（如果存在）
+        reEnableLaunchAgent();
     }
     
     /**
@@ -520,3 +523,45 @@ public class AgentUpgrader {
         log("Start scripts are ready");
     }
 }
+    /**
+     * 重新启用LaunchAgent（如果存在）
+     */
+    private void reEnableLaunchAgent() {
+        try {
+            // 检查用户级LaunchAgent
+            String userAgentPlist = System.getProperty("user.home") + "/Library/LaunchAgents/com.lightscript.agent.plist";
+            if (Files.exists(Paths.get(userAgentPlist))) {
+                log("Re-enabling user-level LaunchAgent after upgrade");
+                ProcessBuilder pb = new ProcessBuilder("launchctl", "load", userAgentPlist);
+                Process process = pb.start();
+                int exitCode = process.waitFor();
+                if (exitCode == 0) {
+                    log("User-level LaunchAgent re-enabled successfully");
+                } else {
+                    log("Failed to re-enable user-level LaunchAgent (exit code: " + exitCode + ")");
+                }
+                return;
+            }
+            
+            // 检查系统级LaunchDaemon
+            String systemDaemonPlist = "/Library/LaunchDaemons/com.lightscript.agent.plist";
+            if (Files.exists(Paths.get(systemDaemonPlist))) {
+                log("Re-enabling system-level LaunchDaemon after upgrade");
+                ProcessBuilder pb = new ProcessBuilder("sudo", "launchctl", "load", systemDaemonPlist);
+                Process process = pb.start();
+                int exitCode = process.waitFor();
+                if (exitCode == 0) {
+                    log("System-level LaunchDaemon re-enabled successfully");
+                } else {
+                    log("Failed to re-enable system-level LaunchDaemon (exit code: " + exitCode + ")");
+                }
+                return;
+            }
+            
+            log("No LaunchAgent/LaunchDaemon found to re-enable");
+            
+        } catch (Exception e) {
+            logError("Failed to re-enable LaunchAgent", e);
+            log("Agent will still run, but LaunchAgent auto-restart is not enabled");
+        }
+    }

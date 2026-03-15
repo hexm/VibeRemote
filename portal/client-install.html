@@ -443,19 +443,6 @@ sudo systemctl enable lightscript-agent</pre>
                                     ✓ 系统级LaunchDaemon
                                 </div>
                             </div>
-                            
-                            <h4 class="font-semibold mb-2 mt-4">Homebrew 安装</h4>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('macos-brew')">复制</button>
-                                <pre id="macos-brew"># 添加 tap
-brew tap lightscript/tap
-
-# 安装客户端
-brew install lightscript-agent
-
-# 启动服务
-brew services start lightscript-agent</pre>
-                            </div>
                         </div>
                     </div>
 
@@ -776,12 +763,7 @@ sc query LightScriptAgent</pre>
         }
 
         function downloadAgent(type) {
-            if (type === 'universal') {
-                // 这里将来实现实际的下载逻辑
-                alert('通用 Java 安装包正在准备中，敬请期待！');
-            } else {
-                alert(`${type} 版本的安装包正在准备中，敬请期待！`);
-            }
+            alert(`${type} 版本的安装包正在准备中，敬请期待！`);
         }
         
         // 检测操作系统
