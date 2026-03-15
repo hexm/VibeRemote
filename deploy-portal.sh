@@ -49,85 +49,6 @@ cp agent/release/*.tar.gz "$TEMP_DIR/agent/release/" 2>/dev/null || true
 echo "📝 创建安装脚本..."
 mkdir -p "$TEMP_DIR/scripts"
 
-# 通用安装脚本（自动检测操作系统）
-cat > "$TEMP_DIR/scripts/install.sh" << 'EOF'
-#!/bin/bash
-
-# LightScript Agent 通用安装脚本
-# 自动检测操作系统并执行相应的安装
-
-set -e
-
-SERVER_URL="http://8.138.114.34:8080"
-
-# 解析命令行参数
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --server=*)
-            SERVER_URL="${1#*=}"
-            shift
-            ;;
-        *)
-            echo "未知参数: $1"
-            exit 1
-            ;;
-    esac
-done
-
-echo "🚀 LightScript Agent 智能安装程序"
-echo "📡 服务器地址: $SERVER_URL"
-echo ""
-
-# 检测操作系统
-detect_os() {
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "linux"
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "macos"
-    elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
-        echo "windows"
-    else
-        # 尝试其他检测方法
-        case "$(uname -s)" in
-            Linux*)     echo "linux";;
-            Darwin*)    echo "macos";;
-            CYGWIN*)    echo "windows";;
-            MINGW*)     echo "windows";;
-            *)          echo "unknown";;
-        esac
-    fi
-}
-
-OS=$(detect_os)
-echo "🔍 检测到操作系统: $OS"
-
-case $OS in
-    "linux")
-        echo "📥 下载并执行 Linux 安装脚本..."
-        curl -fsSL http://8.138.114.34/scripts/install-linux.sh | bash -s -- --server="$SERVER_URL"
-        ;;
-    "macos")
-        echo "📥 下载并执行 macOS 安装脚本..."
-        curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server="$SERVER_URL"
-        ;;
-    "windows")
-        echo "❌ Windows 系统请使用 PowerShell 执行以下命令："
-        echo "Set-ExecutionPolicy Bypass -Scope Process -Force"
-        echo "iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))"
-        exit 1
-        ;;
-    *)
-        echo "❌ 不支持的操作系统: $OS"
-        echo ""
-        echo "请手动选择安装方式："
-        echo "Linux:   curl -fsSL http://8.138.114.34/scripts/install-linux.sh | bash -s -- --server=$SERVER_URL"
-        echo "macOS:   curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=$SERVER_URL"
-        echo "Windows: Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))"
-        exit 1
-        ;;
-esac
-EOF
-
 # Linux 安装脚本
 cat > "$TEMP_DIR/scripts/install-linux.sh" << 'EOF'
 #!/bin/bash
@@ -533,7 +454,6 @@ echo "  • 文档: http://$SERVER_IP/docs.html"
 echo "  • 管理后台: http://$SERVER_IP:8080/admin"
 echo ""
 echo "📥 一键安装命令:"
-echo "  通用:    curl -fsSL http://$SERVER_IP/scripts/install.sh | bash -s -- --server=http://$SERVER_IP:8080"
 echo "  Linux:   curl -fsSL http://$SERVER_IP/scripts/install-linux.sh | sudo bash -s -- --server=http://$SERVER_IP:8080"
 echo "  macOS:   curl -fsSL http://$SERVER_IP/scripts/install-macos.sh | bash -s -- --server=http://$SERVER_IP:8080 (用户安装)"
 echo "           curl -fsSL http://$SERVER_IP/scripts/install-macos.sh | sudo bash -s -- --system --server=http://$SERVER_IP:8080 (系统安装)"
