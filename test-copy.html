@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>复制功能测试</title>
+    <style>
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            position: relative;
+            margin: 1rem 0;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .copy-btn.copied {
+            background: #10b981;
+            border-color: #10b981;
+        }
+    </style>
+</head>
+<body>
+    <h1>复制功能测试</h1>
+    
+    <div class="code-block">
+        <button class="copy-btn" onclick="copyToClipboard('test-cmd')">复制</button>
+        <pre id="test-cmd">curl -fsSL http://8.138.114.34/scripts/install.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+    </div>
+    
+    <script>
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            if (!element) {
+                console.error('Element not found:', elementId);
+                return;
+            }
+            
+            const text = element.textContent || element.innerText;
+            console.log('Copying text:', text);
+            
+            // 尝试使用现代的 Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    console.log('Clipboard API success');
+                    showCopySuccess(element);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopyTextToClipboard(text, element);
+                });
+            } else {
+                console.log('Using fallback method');
+                // 回退到传统方法
+                fallbackCopyTextToClipboard(text, element);
+            }
+        }
+        
+        function showCopySuccess(element) {
+            const btn = element.parentElement.querySelector('.copy-btn');
+            if (btn) {
+                const originalText = btn.textContent;
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }
+        }
+        
+        function fallbackCopyTextToClipboard(text, element) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // 避免滚动到底部
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                console.log('execCommand result:', successful);
+                if (successful) {
+                    showCopySuccess(element);
+                } else {
+                    throw new Error('execCommand failed');
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                alert('复制失败，请手动选择文本复制');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+    </script>
+</body>
+</html>

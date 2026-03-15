@@ -694,11 +694,36 @@ sc query LightScriptAgent</pre>
         }
 
         function copyToClipboard(elementId) {
+            console.log('copyToClipboard called with:', elementId);
             const element = document.getElementById(elementId);
-            const text = element.textContent;
+            if (!element) {
+                console.error('Element not found:', elementId);
+                alert('错误：找不到要复制的元素');
+                return;
+            }
             
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = element.parentElement.querySelector('.copy-btn');
+            const text = element.textContent || element.innerText;
+            console.log('Text to copy:', text);
+            
+            // 检查是否支持 Clipboard API
+            if (navigator.clipboard) {
+                console.log('Using Clipboard API');
+                navigator.clipboard.writeText(text).then(() => {
+                    console.log('Clipboard API success');
+                    showCopySuccess(element);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopyTextToClipboard(text, element);
+                });
+            } else {
+                console.log('Clipboard API not available, using fallback');
+                fallbackCopyTextToClipboard(text, element);
+            }
+        }
+        
+        function showCopySuccess(element) {
+            const btn = element.parentElement.querySelector('.copy-btn');
+            if (btn) {
                 const originalText = btn.textContent;
                 btn.textContent = '已复制';
                 btn.classList.add('copied');
@@ -707,10 +732,40 @@ sc query LightScriptAgent</pre>
                     btn.textContent = originalText;
                     btn.classList.remove('copied');
                 }, 2000);
-            }).catch(err => {
-                console.error('复制失败:', err);
-                alert('复制失败，请手动选择文本复制');
-            });
+            }
+        }
+        
+        function fallbackCopyTextToClipboard(text, element) {
+            console.log('Using fallback copy method');
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // 避免滚动到底部
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            textArea.style.pointerEvents = "none";
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                console.log('execCommand result:', successful);
+                if (successful) {
+                    showCopySuccess(element);
+                } else {
+                    throw new Error('execCommand returned false');
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+                // 最后的备选方案：显示文本让用户手动复制
+                prompt('复制失败，请手动复制以下内容：', text);
+            }
+            
+            document.body.removeChild(textArea);
         }
 
         function downloadAgent(type) {
