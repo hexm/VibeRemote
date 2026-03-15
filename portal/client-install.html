@@ -331,7 +331,7 @@
                 <a href="client-install.html" class="nav-link active">安装客户端</a>
                 <a href="server-deploy.html" class="nav-link">服务端部署</a>
                 <a href="docs.html" class="nav-link">文档</a>
-                <a href="/admin" class="nav-link">管理后台</a>
+                <a href="http://8.138.114.34:3000/dashboard" class="nav-link">管理后台</a>
             </div>
         </div>
     </nav>
@@ -366,17 +366,34 @@
                 <div id="script-content" class="install-content active">
                     <div class="text-center mb-8">
                         <h2 class="text-2xl font-bold mb-4">一键脚本安装</h2>
+                        <p class="text-gray-600 mb-6">自动检测您的操作系统并执行相应的安装命令</p>
+                        
+                        <!-- 通用安装命令 -->
+                        <div class="download-card max-w-3xl mx-auto mb-6">
+                            <h3 class="text-xl font-semibold mb-4">🚀 智能安装（推荐）</h3>
+                            <p class="text-gray-600 mb-4">复制并运行以下命令，自动检测操作系统并安装：</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('universal-install-cmd')">复制</button>
+                                <pre id="universal-install-cmd"># 通用安装命令（自动检测操作系统）
+curl -fsSL http://8.138.114.34/scripts/install.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                            </div>
+                            <div class="text-sm text-gray-500 mt-2">
+                                ✓ 自动检测 Linux、macOS、Windows<br>
+                                ✓ 自动选择合适的安装包<br>
+                                ✓ 一条命令完成所有配置
+                            </div>
+                        </div>
                     </div>
 
                     <!-- 操作系统选择 -->
                     <div class="os-tabs">
-                        <div class="os-tab active" onclick="switchScriptTab('linux')">
+                        <div class="os-tab active" onclick="switchScriptTab('linux')" id="linux-tab">
                             🐧 Linux
                         </div>
-                        <div class="os-tab" onclick="switchScriptTab('macos')">
+                        <div class="os-tab" onclick="switchScriptTab('macos')" id="macos-tab">
                             🍎 macOS
                         </div>
-                        <div class="os-tab" onclick="switchScriptTab('windows')">
+                        <div class="os-tab" onclick="switchScriptTab('windows')" id="windows-tab">
                             🪟 Windows
                         </div>
                     </div>
@@ -629,7 +646,7 @@ sc query LightScriptAgent</pre>
                         <div>
                             <h4 class="font-semibold mb-2">管理后台检查</h4>
                             <p class="text-gray-600 mb-4">
-                                1. 访问 <a href="/admin" class="text-blue-600 hover:underline">管理后台</a><br>
+                                1. 访问 <a href="http://8.138.114.34:3000/dashboard" class="text-blue-600 hover:underline">管理后台</a><br>
                                 2. 进入"客户端管理"页面<br>
                                 3. 查看新注册的客户端节点
                             </p>
@@ -826,7 +843,36 @@ sc query LightScriptAgent</pre>
             document.getElementById('recommended-desc').textContent = `为您的 ${osInfo.name} 系统优化`;
             document.getElementById('recommended-btn-text').textContent = `下载 ${osInfo.name} 版本`;
             document.getElementById('recommended-icon').style.background = osInfo.color;
+            
+            // 自动选择对应的脚本安装标签
+            autoSelectScriptTab(osType);
         });
+        
+        // 自动选择脚本安装标签
+        function autoSelectScriptTab(osType) {
+            // 移除所有活动状态
+            document.querySelectorAll('.os-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            // 根据操作系统类型选择对应的标签
+            let targetOS = 'linux'; // 默认
+            if (osType.startsWith('windows')) {
+                targetOS = 'windows';
+            } else if (osType.startsWith('macos')) {
+                targetOS = 'macos';
+            } else if (osType.startsWith('linux')) {
+                targetOS = 'linux';
+            }
+            
+            // 激活对应的标签
+            const targetTab = document.getElementById(targetOS + '-tab');
+            const targetContent = document.getElementById(targetOS + '-script');
+            
+            if (targetTab && targetContent) {
+                targetTab.classList.add('active');
+                targetContent.classList.add('active');
+            }
+        }
     </script>
 </body>
 </html>
