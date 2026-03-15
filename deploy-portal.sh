@@ -244,8 +244,9 @@ cat > "$TEMP_DIR/scripts/install-macos.sh" << 'EOF'
 set -e
 
 SERVER_URL="http://8.138.114.34:8080"
-INSTALL_DIR="/usr/local/lightscript-agent"
+INSTALL_DIR="$HOME/.lightscript-agent"
 SERVICE_NAME="com.lightscript.agent"
+USE_SYSTEM_INSTALL=false
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -258,8 +259,15 @@ while [[ $# -gt 0 ]]; do
             INSTALL_DIR="${1#*=}"
             shift
             ;;
+        --system)
+            USE_SYSTEM_INSTALL=true
+            INSTALL_DIR="/usr/local/lightscript-agent"
+            shift
+            ;;
         *)
             echo "未知参数: $1"
+            echo "用法: $0 [--server=URL] [--install-dir=DIR] [--system]"
+            echo "  --system: 安装到系统目录（需要sudo权限）"
             exit 1
             ;;
     esac
@@ -270,10 +278,11 @@ echo "📡 服务器地址: $SERVER_URL"
 echo "📁 安装目录: $INSTALL_DIR"
 echo ""
 
-# 检查权限
-if [ "$EUID" -ne 0 ]; then
-    echo "❌ 请使用 sudo 权限运行此脚本"
-    echo "使用: sudo $0"
+# 检查权限（仅在系统安装时需要）
+if [ "$USE_SYSTEM_INSTALL" = true ] && [ "$EUID" -ne 0 ]; then
+    echo "❌ 系统安装需要 sudo 权限"
+    echo "请使用: curl -fsSL http://8.138.114.34/scripts/install-macos.sh | sudo bash -s -- --system --server=$SERVER_URL"
+    echo "或者使用用户安装（推荐）: curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=$SERVER_URL"
     exit 1
 fi
 
@@ -284,6 +293,11 @@ if [[ $(uname -m) == "arm64" ]]; then
 fi
 
 echo "🔍 检测到架构: $ARCH"
+if [ "$USE_SYSTEM_INSTALL" = true ]; then
+    echo "📦 安装模式: 系统安装（所有用户可用）"
+else
+    echo "📦 安装模式: 用户安装（仅当前用户）"
+fi
 
 # 创建安装目录
 echo "📁 创建安装目录..."
@@ -313,9 +327,11 @@ echo "server.url=$SERVER_URL" > agent.properties
 # 设置执行权限
 chmod +x *.sh
 
-# 创建 LaunchDaemon
+# 创建服务配置
 echo "🔧 创建系统服务..."
-cat > /Library/LaunchDaemons/$SERVICE_NAME.plist << EOL
+if [ "$USE_SYSTEM_INSTALL" = true ]; then
+    # 系统级服务
+    cat > /Library/LaunchDaemons/$SERVICE_NAME.plist << EOL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -339,19 +355,60 @@ cat > /Library/LaunchDaemons/$SERVICE_NAME.plist << EOL
 </dict>
 </plist>
 EOL
+    
+    # 启动系统服务
+    launchctl load /Library/LaunchDaemons/$SERVICE_NAME.plist
+    launchctl start $SERVICE_NAME
+    
+else
+    # 用户级服务
+    USER_AGENTS_DIR="$HOME/Library/LaunchAgents"
+    mkdir -p "$USER_AGENTS_DIR"
+    
+    cat > "$USER_AGENTS_DIR/$SERVICE_NAME.plist" << EOL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$SERVICE_NAME</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$INSTALL_DIR/start-agent.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$INSTALL_DIR</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$INSTALL_DIR/logs/agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>$INSTALL_DIR/logs/agent.log</string>
+</dict>
+</plist>
+EOL
+    
+    # 启动用户服务
+    launchctl load "$USER_AGENTS_DIR/$SERVICE_NAME.plist"
+    launchctl start $SERVICE_NAME
+fi
 
 # 创建日志目录
 mkdir -p logs
 
-# 启动服务
-echo "🚀 启动服务..."
-launchctl load /Library/LaunchDaemons/$SERVICE_NAME.plist
-launchctl start $SERVICE_NAME
-
 echo ""
 echo "✅ LightScript Agent 安装完成!"
-echo "📊 查看状态: launchctl list | grep lightscript"
-echo "📋 查看日志: tail -f $INSTALL_DIR/logs/agent.log"
+if [ "$USE_SYSTEM_INSTALL" = true ]; then
+    echo "📊 查看状态: sudo launchctl list | grep lightscript"
+    echo "📋 查看日志: tail -f $INSTALL_DIR/logs/agent.log"
+    echo "🛑 停止服务: sudo launchctl stop $SERVICE_NAME"
+else
+    echo "📊 查看状态: launchctl list | grep lightscript"
+    echo "📋 查看日志: tail -f $INSTALL_DIR/logs/agent.log"
+    echo "🛑 停止服务: launchctl stop $SERVICE_NAME"
+fi
 echo "🌐 管理后台: $SERVER_URL/admin"
 EOF
 
@@ -466,7 +523,8 @@ echo ""
 echo "📥 一键安装命令:"
 echo "  通用:    curl -fsSL http://$SERVER_IP/scripts/install.sh | bash -s -- --server=http://$SERVER_IP:8080"
 echo "  Linux:   curl -fsSL http://$SERVER_IP/scripts/install-linux.sh | sudo bash -s -- --server=http://$SERVER_IP:8080"
-echo "  macOS:   curl -fsSL http://$SERVER_IP/scripts/install-macos.sh | sudo bash -s -- --server=http://$SERVER_IP:8080"
+echo "  macOS:   curl -fsSL http://$SERVER_IP/scripts/install-macos.sh | bash -s -- --server=http://$SERVER_IP:8080 (用户安装)"
+echo "           curl -fsSL http://$SERVER_IP/scripts/install-macos.sh | sudo bash -s -- --system --server=http://$SERVER_IP:8080 (系统安装)"
 echo "  Windows: Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('http://$SERVER_IP/scripts/install-windows.ps1'))"
 
 # 清理临时目录

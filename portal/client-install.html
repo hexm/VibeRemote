@@ -431,10 +431,33 @@ sudo systemctl enable lightscript-agent</pre>
                     <div id="macos-script" class="tab-content">
                         <div class="download-card">
                             <h3 class="text-xl font-semibold mb-4">macOS 一键安装</h3>
-                            <p class="text-gray-600 mb-4">复制并运行以下命令：</p>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('macos-install-cmd')">复制</button>
-                                <pre id="macos-install-cmd">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                            
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                <h4 class="font-semibold text-blue-800 mb-2">🏠 用户安装（推荐）</h4>
+                                <p class="text-blue-700 text-sm mb-3">安装到用户目录，无需sudo权限，仅当前用户可用</p>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyToClipboard('macos-user-install')">复制</button>
+                                    <pre id="macos-user-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                                </div>
+                                <div class="text-xs text-blue-600 mt-2">
+                                    ✓ 安装到: ~/.lightscript-agent<br>
+                                    ✓ 无需sudo权限<br>
+                                    ✓ 用户级LaunchAgent
+                                </div>
+                            </div>
+                            
+                            <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                                <h4 class="font-semibold text-orange-800 mb-2">🖥️ 系统安装</h4>
+                                <p class="text-orange-700 text-sm mb-3">安装到系统目录，需要sudo权限，所有用户可用</p>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyToClipboard('macos-system-install')">复制</button>
+                                    <pre id="macos-system-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | sudo bash -s -- --system --server=http://8.138.114.34:8080</pre>
+                                </div>
+                                <div class="text-xs text-orange-600 mt-2">
+                                    ✓ 安装到: /usr/local/lightscript-agent<br>
+                                    ✓ 需要sudo权限<br>
+                                    ✓ 系统级LaunchDaemon
+                                </div>
                             </div>
                             
                             <h4 class="font-semibold mb-2 mt-4">Homebrew 安装</h4>
