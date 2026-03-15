@@ -374,7 +374,14 @@ else
     <string>$SERVICE_NAME</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$INSTALL_DIR/start-agent.sh</string>
+        <string>$INSTALL_DIR/jre/bin/java</string>
+        <string>-Xms32m</string>
+        <string>-Xmx128m</string>
+        <string>-XX:MaxMetaspaceSize=64m</string>
+        <string>-Dfile.encoding=UTF-8</string>
+        <string>-Djava.awt.headless=true</string>
+        <string>-jar</string>
+        <string>$INSTALL_DIR/agent.jar</string>
     </array>
     <key>WorkingDirectory</key>
     <string>$INSTALL_DIR</string>
@@ -386,6 +393,11 @@ else
     <string>$INSTALL_DIR/logs/agent.log</string>
     <key>StandardErrorPath</key>
     <string>$INSTALL_DIR/logs/agent.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
 </dict>
 </plist>
 EOL

@@ -24,10 +24,9 @@
         </encoder>
     </appender>
     
-    <!-- 任务执行日志 - 使用统一文件但不同的appender名称 -->
+    <!-- 任务执行日志 - 独立文件 -->
     <appender name="TASK_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_HOME}/agent.log</file>
-        <append>true</append>
+        <file>${LOG_HOME}/agent-task.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${LOG_HOME}/agent-task.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>50MB</maxFileSize>
@@ -39,10 +38,9 @@
         </encoder>
     </appender>
     
-    <!-- 升级日志 - 使用统一文件但不同的appender名称 -->
+    <!-- 升级日志 - 独立文件 -->
     <appender name="UPGRADE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_HOME}/agent.log</file>
-        <append>true</append>
+        <file>${LOG_HOME}/agent-upgrade.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${LOG_HOME}/agent-upgrade.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>50MB</maxFileSize>
