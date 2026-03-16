@@ -73,6 +73,6 @@ lightscript:
       enabled: false  # 暂时禁用压缩 (Week 2启用)
       types: [gzip]
   encryption:
-    enabled: true  # 第二阶段加密功能
+    enabled: false  # 第二阶段加密功能
     key-rotation-days: 30
     max-time-skew: 300000  # 5分钟时间窗口

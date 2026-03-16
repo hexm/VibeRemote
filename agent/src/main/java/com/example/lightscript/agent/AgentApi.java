@@ -23,11 +23,30 @@ class AgentApi {
 	private final String baseUrl;
 	private final CloseableHttpClient httpClient;
 	private final ObjectMapper mapper;
+	private AgentEncryptionContext encryptionContext;
 
 	AgentApi(String baseUrl, CloseableHttpClient httpClient, ObjectMapper mapper) {
 		this.baseUrl = baseUrl;
 		this.httpClient = httpClient;
 		this.mapper = mapper;
+	}
+	
+	// 设置加密上下文
+	public void setEncryptionContext(AgentEncryptionContext encryptionContext) {
+		this.encryptionContext = encryptionContext;
+	}
+
+	// 添加访问器方法供BatchLogCollector使用
+	public String getBaseUrl() {
+		return baseUrl;
+	}
+
+	public CloseableHttpClient getHttpClient() {
+		return httpClient;
+	}
+
+	public ObjectMapper getObjectMapper() {
+		return mapper;
 	}
 
 	Map<String, Object> register(String registerToken, String hostname, String osType) throws Exception {
@@ -198,6 +217,19 @@ class AgentApi {
 	}
 	
 	Map<String, Object> pullTasks(String agentId, String agentToken, int max) throws Exception {
+		// 检查是否启用加密
+		AgentConfig config = AgentConfig.getInstance();
+		if (config.isEncryptionEnabled()) {
+			return pullTasksEncrypted(agentId, agentToken, max);
+		} else {
+			return pullTasksPlaintext(agentId, agentToken, max);
+		}
+	}
+	
+	/**
+	 * 明文任务拉取（原有逻辑）
+	 */
+	private Map<String, Object> pullTasksPlaintext(String agentId, String agentToken, int max) throws Exception {
 		String url = baseUrl + "/api/agent/tasks/pull?agentId=" + agentId + "&agentToken=" + agentToken + "&max=" + max;
 		HttpGet get = new HttpGet(url);
 		
@@ -212,6 +244,82 @@ class AgentApi {
 				throw new RuntimeException("Pull tasks failed: " + responseBody);
 			}
 			return mapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+		}
+	}
+	
+	/**
+	 * 加密任务拉取
+	 */
+	private Map<String, Object> pullTasksEncrypted(String agentId, String agentToken, int max) throws Exception {
+		String url = baseUrl + "/api/agent/tasks/encrypted-pull?agentId=" + agentId + "&agentToken=" + agentToken + "&max=" + max;
+		HttpGet get = new HttpGet(url);
+		
+		try (CloseableHttpResponse response = httpClient.execute(get)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+			
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid or encryption not configured, need re-register");
+			}
+			if (statusCode != 200) {
+				throw new RuntimeException("Pull encrypted tasks failed: " + responseBody);
+			}
+			
+			// 解密响应数据
+			return decryptTasksResponse(responseBody, agentId);
+		}
+	}
+	
+	/**
+	 * 解密任务响应数据
+	 */
+	private Map<String, Object> decryptTasksResponse(String encryptedResponse, String agentId) throws Exception {
+		// 获取加密上下文
+		AgentEncryptionContext encryptionContext = getEncryptionContext(agentId);
+		if (encryptionContext == null || !encryptionContext.isEncryptionConfigured()) {
+			throw new RuntimeException("Agent加密未配置，无法解密任务数据");
+		}
+		
+		// 解析加密载荷
+		EncryptionService.EncryptedPayload payload = mapper.readValue(encryptedResponse, EncryptionService.EncryptedPayload.class);
+		
+		// 解密数据
+		EncryptionService encryptionService = new EncryptionService();
+		byte[] decryptedData = encryptionService.decrypt(
+			payload,
+			encryptionContext.getAgentPrivateKey(),
+			encryptionContext.getServerPublicKey()
+		);
+		
+		// 解压缩数据
+		byte[] decompressedData = gzipDecompress(decryptedData);
+		String jsonData = new String(decompressedData, "UTF-8");
+		
+		// 反序列化任务数据
+		return mapper.readValue(jsonData, new TypeReference<Map<String, Object>>() {});
+	}
+	
+	/**
+	 * 获取加密上下文
+	 */
+	private AgentEncryptionContext getEncryptionContext(String agentId) {
+		return encryptionContext;
+	}
+	
+	/**
+	 * GZIP解压缩数据
+	 */
+	private byte[] gzipDecompress(byte[] compressedData) throws java.io.IOException {
+		try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(compressedData);
+			 java.util.zip.GZIPInputStream gzipIn = new java.util.zip.GZIPInputStream(bais);
+			 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
+			
+			byte[] buffer = new byte[1024];
+			int len;
+			while ((len = gzipIn.read(buffer)) != -1) {
+				baos.write(buffer, 0, len);
+			}
+			return baos.toByteArray();
 		}
 	}
 
@@ -390,6 +498,76 @@ class AgentApi {
 				targetFile.delete();
 			}
 			return false;
+		}
+	}
+	/**
+	 * 获取服务器公钥 - 用于自动密钥分发
+	 */
+	public Map<String, Object> getServerPublicKey(String agentId, String agentToken) throws Exception {
+		String url = baseUrl + "/api/agent/encryption/server-public-key?agentId=" + agentId + "&agentToken=" + agentToken;
+		HttpGet get = new HttpGet(url);
+
+		try (CloseableHttpResponse response = httpClient.execute(get)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode == 400) {
+				throw new RuntimeException("服务器端加密未启用");
+			}
+			if (statusCode != 200) {
+				throw new RuntimeException("获取服务器公钥失败: " + responseBody);
+			}
+
+			// 解析JSON响应
+			ObjectMapper mapper = new ObjectMapper();
+			@SuppressWarnings("unchecked")
+			Map<String, Object> result = mapper.readValue(responseBody, Map.class);
+
+			System.out.println("[AgentApi] 成功获取服务器公钥，密钥年龄: " + result.get("keyAgeDays") + " 天");
+			return result;
+
+		} catch (Exception e) {
+			System.err.println("[AgentApi] 获取服务器公钥失败: " + e.getMessage());
+			throw e;
+		}
+	}
+	
+	/**
+	 * 注册Agent公钥到服务器
+	 */
+	public Map<String, Object> registerAgentPublicKey(String agentId, String agentToken, String publicKey) throws Exception {
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("publicKey", publicKey);
+		
+		String url = baseUrl + "/api/agent/encryption/register-public-key?agentId=" + agentId + "&agentToken=" + agentToken;
+		HttpPost post = new HttpPost(url);
+		post.setHeader("Content-Type", "application/json");
+		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				throw new RuntimeException("注册Agent公钥失败: " + responseBody);
+			}
+
+			// 解析JSON响应
+			@SuppressWarnings("unchecked")
+			Map<String, Object> result = mapper.readValue(responseBody, Map.class);
+
+			System.out.println("[AgentApi] Agent公钥注册成功");
+			return result;
+
+		} catch (Exception e) {
+			System.err.println("[AgentApi] 注册Agent公钥失败: " + e.getMessage());
+			throw e;
 		}
 	}
 	

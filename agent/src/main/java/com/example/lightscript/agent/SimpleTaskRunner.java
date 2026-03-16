@@ -1,7 +1,7 @@
 package com.example.lightscript.agent;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 class SimpleTaskRunner {
@@ -10,32 +10,87 @@ class SimpleTaskRunner {
     private volatile String agentToken;
     private volatile boolean shutdown = false;
     private final TaskStatusMonitor taskStatusMonitor;
+    private final RobustBatchLogCollector robustBatchLogCollector;
+    private final BackupLogUploader backupLogUploader;
+    private final boolean batchModeEnabled;
 
     SimpleTaskRunner(AgentApi api, String agentId, String agentToken, TaskStatusMonitor taskStatusMonitor) {
         this.api = api;
         this.agentId = agentId;
         this.agentToken = agentToken;
         this.taskStatusMonitor = taskStatusMonitor;
+
+        this.robustBatchLogCollector = new RobustBatchLogCollector(api.getBaseUrl(), api.getHttpClient(), api.getObjectMapper());
+        this.robustBatchLogCollector.updateCredentials(agentId, agentToken);
+
+        this.backupLogUploader = new BackupLogUploader(api.getBaseUrl(), api.getHttpClient(), api.getObjectMapper());
+        this.backupLogUploader.updateCredentials(agentId, agentToken);
+
+        this.batchModeEnabled = true;
+
+        System.out.println("[TaskRunner] 健壮批量日志模式已启用 (支持重试、本地备份和定期补传)");
     }
 
     void shutdown() {
         this.shutdown = true;
+        if (robustBatchLogCollector != null) {
+            robustBatchLogCollector.shutdown();
+        }
+        if (backupLogUploader != null) {
+            backupLogUploader.shutdown();
+        }
     }
-    
-    /**
-     * 更新agent凭证（在重新注册后调用）
-     */
+
     synchronized void updateCredentials(String newAgentId, String newAgentToken) {
         this.agentId = newAgentId;
         this.agentToken = newAgentToken;
+        if (robustBatchLogCollector != null) {
+            robustBatchLogCollector.updateCredentials(newAgentId, newAgentToken);
+        }
+        if (backupLogUploader != null) {
+            backupLogUploader.updateCredentials(newAgentId, newAgentToken);
+        }
         System.out.println("[TaskRunner] Credentials updated");
+    }
+
+    private LogBuffer createTaskLogBuffer(Long executionId) {
+        LogBuffer taskBuffer = new LogBuffer();
+        System.out.println("[TaskRunner] 为任务 " + executionId + " 创建独立日志缓冲区");
+        return taskBuffer;
+    }
+
+    private void sendLog(Long executionId, String stream, String data, LogBuffer taskBuffer) {
+        if (batchModeEnabled && robustBatchLogCollector != null && taskBuffer != null) {
+            long timestamp = System.currentTimeMillis();
+            LogEntry entry = new LogEntry(0, stream, data, timestamp);
+            taskBuffer.addLogEntry(entry);
+
+            if (taskBuffer.shouldFlush()) {
+                flushTaskBuffer(executionId, taskBuffer);
+            }
+        } else {
+            try {
+                api.sendLog(agentId, agentToken, executionId, 0, stream, data);
+            } catch (Exception e) {
+                System.err.println("Failed to send log: " + e.getMessage());
+            }
+        }
+    }
+
+    private void flushTaskBuffer(Long executionId, LogBuffer taskBuffer) {
+        if (taskBuffer != null && taskBuffer.hasLogs()) {
+            List<LogEntry> logs = taskBuffer.flush();
+            if (!logs.isEmpty()) {
+                robustBatchLogCollector.sendBatch(executionId, logs);
+            }
+        }
     }
 
     void runTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
         runTask(executionId, taskId, "SCRIPT", scriptLang, scriptContent, timeoutSec, null, null, false, true);
     }
-    
-    void runTask(Long executionId, String taskId, String taskType, String scriptLang, String scriptContent, 
+
+    void runTask(Long executionId, String taskId, String taskType, String scriptLang, String scriptContent,
                  int timeoutSec, String fileId, String targetPath, boolean overwriteExisting, boolean verifyChecksum) {
         if ("FILE_TRANSFER".equals(taskType)) {
             runFileTransferTask(executionId, taskId, fileId, targetPath, timeoutSec, overwriteExisting, verifyChecksum);
@@ -43,145 +98,106 @@ class SimpleTaskRunner {
             runScriptTask(executionId, taskId, scriptLang, scriptContent, timeoutSec);
         }
     }
-    
-    private void runFileTransferTask(Long executionId, String taskId, String fileId, String targetPath, 
+
+    private void runFileTransferTask(Long executionId, String taskId, String fileId, String targetPath,
                                    int timeoutSec, boolean overwriteExisting, boolean verifyChecksum) {
-        int seq = 0;
+        LogBuffer taskBuffer = createTaskLogBuffer(executionId);
+
         try {
-            // 任务开始时注册
             taskStatusMonitor.onTaskStart(executionId);
-            
-            // 确认任务开始执行
             api.ackTask(agentId, agentToken, executionId);
-            api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer task started (fileId: " + fileId + ", target: " + targetPath + ")");
-            
-            // 下载文件
-            api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Downloading file from server...");
+            sendLog(executionId, "system", "File transfer task started (fileId: " + fileId + ", target: " + targetPath + ")", taskBuffer);
+
+            sendLog(executionId, "system", "Downloading file from server...", taskBuffer);
             boolean success = api.downloadFile(agentId, agentToken, fileId, targetPath, overwriteExisting, verifyChecksum);
-            
+
             if (success) {
-                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer completed successfully");
+                sendLog(executionId, "system", "File transfer completed successfully", taskBuffer);
                 api.finish(agentId, agentToken, executionId, 0, "SUCCESS", "File transferred successfully");
             } else {
-                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "File transfer failed");
+                sendLog(executionId, "system", "File transfer failed", taskBuffer);
                 api.finish(agentId, agentToken, executionId, 1, "FAILED", "File transfer failed");
             }
-            
+
         } catch (Exception e) {
             try {
-                api.sendLog(agentId, agentToken, executionId, ++seq, "stderr", "Exception: " + e.getMessage());
+                sendLog(executionId, "stderr", "Exception: " + e.getMessage(), taskBuffer);
                 api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
             } catch (Exception ignored) {
                 System.err.println("Failed to report task failure: " + ignored.getMessage());
             }
         } finally {
-            // 任务结束时注销（无论成功还是失败）
+            flushTaskBuffer(executionId, taskBuffer);
+            if (robustBatchLogCollector != null) {
+                robustBatchLogCollector.onTaskComplete(executionId);
+            }
             taskStatusMonitor.onTaskComplete(executionId);
         }
     }
 
     private void runScriptTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
-        int seq = 0;
+        LogBuffer taskBuffer = createTaskLogBuffer(executionId);
+
         try {
-            // 任务开始时注册
             taskStatusMonitor.onTaskStart(executionId);
-            
-            // 首先确认任务开始执行
             api.ackTask(agentId, agentToken, executionId);
-            api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Task started (lang: " + scriptLang + ")");
-            
-            // 构建命令
+            sendLog(executionId, "system", "Task started (lang: " + scriptLang + ")", taskBuffer);
+
             ProcessBuilder pb;
             if (isWindows()) {
                 if ("powershell".equalsIgnoreCase(scriptLang)) {
                     pb = new ProcessBuilder("powershell", "-Command", scriptContent);
                 } else {
-                    // 默认使用cmd，支持cmd或bat
                     pb = new ProcessBuilder("cmd", "/c", scriptContent);
                 }
             } else {
-                // Linux下默认使用bash
                 pb = new ProcessBuilder("bash", "-c", scriptContent);
             }
-            
-            pb.redirectErrorStream(false);
+
+            pb.redirectErrorStream(true);
             Process p = pb.start();
-            
-            // 读取输出
-            final int finalSeq = seq;
-            // Windows下使用GBK编码，Linux使用UTF-8
+
             String charset = isWindows() ? "GBK" : "UTF-8";
-            
-            Thread stdoutThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream(), charset))) {
-                    String line;
-                    int localSeq = finalSeq;
-                    while ((line = reader.readLine()) != null && !shutdown) {
-                        // 过滤空行，避免服务端验证失败
-                        if (line.trim().isEmpty()) {
-                            continue;
-                        }
-                        try {
-                            api.sendLog(agentId, agentToken, executionId, ++localSeq, "stdout", line);
-                        } catch (Exception e) {
-                            System.err.println("Failed to send stdout log: " + e.getMessage());
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("Error reading stdout: " + e.getMessage());
+
+            Thread logReaderThread = new Thread(() -> {
+                try {
+                    SequentialLogReader.readMergedLogs(p, charset, (stream, data) -> {
+                        sendLog(executionId, stream, data, taskBuffer);
+                    });
+                } catch (IOException e) {
+                    System.err.println("Error reading logs: " + e.getMessage());
                 }
-            });
-            
-            Thread stderrThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream(), charset))) {
-                    String line;
-                    int localSeq = finalSeq + 1000; // 避免seq冲突
-                    while ((line = reader.readLine()) != null && !shutdown) {
-                        // 过滤空行，避免服务端验证失败
-                        if (line.trim().isEmpty()) {
-                            continue;
-                        }
-                        try {
-                            api.sendLog(agentId, agentToken, executionId, ++localSeq, "stderr", line);
-                        } catch (Exception e) {
-                            System.err.println("Failed to send stderr log: " + e.getMessage());
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("Error reading stderr: " + e.getMessage());
-                }
-            });
-            
-            stdoutThread.start();
-            stderrThread.start();
-            
-            // 等待进程完成
+            }, "LogReader-" + executionId);
+
+            logReaderThread.start();
+
             boolean finished = p.waitFor(timeoutSec, TimeUnit.SECONDS);
-            
+
             if (!finished) {
                 p.destroyForcibly();
-                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Process timeout after " + timeoutSec + " seconds");
+                sendLog(executionId, "system", "Process timeout after " + timeoutSec + " seconds", taskBuffer);
                 api.finish(agentId, agentToken, executionId, -1, "TIMEOUT", "Process timeout");
             } else {
                 int exitCode = p.exitValue();
                 String status = exitCode == 0 ? "SUCCESS" : "FAILED";
-                api.sendLog(agentId, agentToken, executionId, ++seq, "system", "Process finished with exit code: " + exitCode);
+                sendLog(executionId, "system", "Process finished with exit code: " + exitCode, taskBuffer);
                 api.finish(agentId, agentToken, executionId, exitCode, status, "exitCode=" + exitCode);
             }
-            
-            // 等待日志线程完成
-            stdoutThread.join(2000);
-            stderrThread.join(2000);
-            
+
+            logReaderThread.join(2000);
+
         } catch (Exception e) {
             try {
-                api.sendLog(agentId, agentToken, executionId, ++seq, "stderr", "Exception: " + e.getMessage());
+                sendLog(executionId, "stderr", "Exception: " + e.getMessage(), taskBuffer);
                 api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
             } catch (Exception ignored) {
                 System.err.println("Failed to report task failure: " + ignored.getMessage());
             }
         } finally {
-            // 任务结束时注销（无论成功还是失败）
+            flushTaskBuffer(executionId, taskBuffer);
+            if (robustBatchLogCollector != null) {
+                robustBatchLogCollector.onTaskComplete(executionId);
+            }
             taskStatusMonitor.onTaskComplete(executionId);
         }
     }

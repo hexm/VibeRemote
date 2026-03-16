@@ -89,6 +89,33 @@ public class AgentModels {
 	}
 
 	@Data
+	public static class BatchLogRequest {
+		@NotBlank
+		private String agentId;
+		@NotBlank
+		private String agentToken;
+		@NotNull
+		private Long executionId; // 执行实例ID（必需）
+		@NotNull
+		private List<LogEntry> logs; // 批量日志条目
+		private boolean compressed = false; // 是否压缩
+		private String compressionType; // 压缩类型 (gzip)
+		private int batchSize; // 批次大小
+		private long timestamp; // 请求时间戳
+	}
+
+	@Data
+	public static class LogEntry {
+		@NotNull
+		private Integer seq; // 序列号
+		@NotBlank
+		private String stream; // 流类型 (stdout/stderr/system)
+		@NotNull
+		private String data; // 日志内容
+		private long timestamp; // 时间戳
+	}
+
+	@Data
 	public static class FinishRequest {
 		@NotBlank
 		private String agentId;

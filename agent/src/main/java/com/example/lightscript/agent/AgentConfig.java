@@ -207,6 +207,23 @@ public class AgentConfig {
         return Boolean.parseBoolean(value);
     }
     
+    // 加密配置获取方法
+    public boolean isEncryptionEnabled() {
+        return getBooleanProperty("encryption.enabled", false);
+    }
+    
+    public boolean isEncryptionRequired() {
+        return getBooleanProperty("encryption.required", false);
+    }
+    
+    public int getKeyRotationDays() {
+        return getIntProperty("encryption.key.rotation.days", 30);
+    }
+    
+    public String getEncryptionAlgorithm() {
+        return getProperty("encryption.algorithm", "AES-256-GCM");
+    }
+    
     /**
      * 重新加载配置
      */

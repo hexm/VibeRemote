@@ -1,0 +1,11 @@
+{
+  "agentIds": ["68b939ab-07d5-4448-bc90-2e0b7d98175b"],
+  "taskSpec": {
+    "taskName": "高级批量日志测试-20260316-164842",
+    "scriptLang": "bash",
+    "scriptContent": "/Users/hexm/git/LightScript/test-batch-logs-advanced.sh",
+    "timeoutSec": 300,
+    "env": {}
+  },
+  "autoStart": true
+}

@@ -73,44 +73,69 @@ public class AgentMain {
         CloseableHttpClient client = HttpClients.createDefault();
         AgentApi api = new AgentApi(server, client, MAPPER);
 
-        // 注册Agent（带重试机制）
+        // 尝试加载已保存的Agent凭证
+        AgentIdStore idStore = new AgentIdStore();
+        AgentIdStore.AgentCredentials savedCredentials = idStore.load();
+        
         String agentId = null;
         String agentToken = null;
-        int retryCount = 0;
-        int retryDelay = 1000; // 初始延迟1秒
         
-        while (agentId == null) {
+        // 如果有已保存的凭证，先尝试验证
+        if (savedCredentials != null) {
+            logger.info("Found saved agent credentials, validating...");
             try {
-                logger.info("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
-                Map<String, Object> reg = api.register(registerToken, hostname, osType);
-                agentId = String.valueOf(reg.get("agentId"));
-                agentToken = String.valueOf(reg.get("agentToken"));
-                
-                logger.info("Agent registered successfully!");
-                logger.info("Agent ID: {}", agentId);
-                logger.info("Agent Token: {}", agentToken);
+                // 尝试发送心跳验证凭证是否有效
+                api.heartbeat(savedCredentials.getAgentId(), savedCredentials.getAgentToken(), false);
+                agentId = savedCredentials.getAgentId();
+                agentToken = savedCredentials.getAgentToken();
+                logger.info("Saved credentials are valid, reusing Agent ID: {}", agentId);
             } catch (Exception e) {
-                retryCount++;
-                logger.error("Failed to register agent: {}", e.getMessage());
-                logger.info("Retrying in {} seconds...", (retryDelay / 1000));
-                
+                logger.warn("Saved credentials are invalid: {}, will re-register", e.getMessage());
+                idStore.delete(); // 删除无效的凭证
+            }
+        }
+        
+        // 如果没有有效凭证，进行注册
+        if (agentId == null) {
+            int retryCount = 0;
+            int retryDelay = 1000; // 初始延迟1秒
+            
+            while (agentId == null) {
                 try {
-                    Thread.sleep(retryDelay);
-                } catch (InterruptedException ie) {
-                    logger.info("Registration cancelled by user");
-                    releaseLock();
-                    return;
-                }
-                
-                // 指数退避：1s -> 2s -> 5s -> 10s -> 30s (max)
-                if (retryDelay < 2000) {
-                    retryDelay = 2000;
-                } else if (retryDelay < 5000) {
-                    retryDelay = 5000;
-                } else if (retryDelay < 10000) {
-                    retryDelay = 10000;
-                } else {
-                    retryDelay = 30000; // 最大30秒
+                    logger.info("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
+                    Map<String, Object> reg = api.register(registerToken, hostname, osType);
+                    agentId = String.valueOf(reg.get("agentId"));
+                    agentToken = String.valueOf(reg.get("agentToken"));
+                    
+                    // 保存新的凭证
+                    idStore.save(agentId, agentToken);
+                    
+                    logger.info("Agent registered successfully!");
+                    logger.info("Agent ID: {}", agentId);
+                    logger.info("Agent Token: {}", agentToken);
+                } catch (Exception e) {
+                    retryCount++;
+                    logger.error("Failed to register agent: {}", e.getMessage());
+                    logger.info("Retrying in {} seconds...", (retryDelay / 1000));
+                    
+                    try {
+                        Thread.sleep(retryDelay);
+                    } catch (InterruptedException ie) {
+                        logger.info("Registration cancelled by user");
+                        releaseLock();
+                        return;
+                    }
+                    
+                    // 指数退避：1s -> 2s -> 5s -> 10s -> 30s (max)
+                    if (retryDelay < 2000) {
+                        retryDelay = 2000;
+                    } else if (retryDelay < 5000) {
+                        retryDelay = 5000;
+                    } else if (retryDelay < 10000) {
+                        retryDelay = 10000;
+                    } else {
+                        retryDelay = 30000; // 最大30秒
+                    }
                 }
             }
         }
@@ -118,6 +143,29 @@ public class AgentMain {
         // 使用final变量以便在lambda中使用
         final String finalAgentId = agentId;
         final String finalAgentToken = agentToken;
+
+        // 初始化加密上下文（如果启用加密）
+        AgentEncryptionContext encryptionContext = null;
+        if (config.isEncryptionEnabled()) {
+            try {
+                EncryptionService encryptionService = new EncryptionService();
+                encryptionContext = new AgentEncryptionContext(finalAgentId, encryptionService, api);
+                api.setEncryptionContext(encryptionContext);
+                
+                // 设置凭证并注册公钥
+                encryptionContext.updateCredentials(finalAgentId, finalAgentToken);
+                
+                logger.info("Encryption context initialized for agent: {}", finalAgentId);
+            } catch (Exception e) {
+                logger.error("Failed to initialize encryption context: {}", e.getMessage());
+                // 如果加密初始化失败，可以选择继续运行（降级为明文）或退出
+                if (config.isEncryptionRequired()) {
+                    logger.error("Encryption is required but initialization failed. Exiting...");
+                    releaseLock();
+                    System.exit(1);
+                }
+            }
+        }
 
         // 创建任务执行器和升级相关组件
         TaskStatusMonitor taskStatusMonitor = new TaskStatusMonitor();
@@ -133,6 +181,7 @@ public class AgentMain {
         final boolean[] needReRegister = {false};
         final String[] currentAgentId = {finalAgentId};
         final String[] currentAgentToken = {finalAgentToken};
+        final AgentEncryptionContext[] currentEncryptionContext = {encryptionContext};
 
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -182,8 +231,8 @@ public class AgentMain {
                     logger.info("Connection lost. Re-registering agent...");
                     logger.info("========================================");
                     
-                    retryCount = 0;
-                    retryDelay = 1000;
+                    int retryCount = 0;
+                    int retryDelay = 1000;
                     
                     while (!reRegistered && !Thread.currentThread().isInterrupted()) {
                         try {
@@ -193,8 +242,16 @@ public class AgentMain {
                             currentAgentId[0] = String.valueOf(reg.get("agentId"));
                             currentAgentToken[0] = String.valueOf(reg.get("agentToken"));
                             
+                            // 保存新的凭证
+                            idStore.save(currentAgentId[0], currentAgentToken[0]);
+                            
                             // 更新任务执行器的凭证
                             taskRunner.updateCredentials(currentAgentId[0], currentAgentToken[0]);
+                            
+                            // 更新加密上下文的凭证
+                            if (currentEncryptionContext[0] != null) {
+                                currentEncryptionContext[0].updateCredentials(currentAgentId[0], currentAgentToken[0]);
+                            }
                             
                             // 更新升级报告器的凭证
                             upgradeReporter = new UpgradeStatusReporter(server, client, MAPPER, currentAgentId[0], currentAgentToken[0]);

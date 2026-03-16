@@ -3,15 +3,19 @@ package com.example.lightscript.server.web;
 import com.example.lightscript.server.exception.BusinessException;
 import com.example.lightscript.server.exception.ErrorCode;
 import com.example.lightscript.server.model.AgentModels.*;
+import com.example.lightscript.server.model.EncryptedBatchLogRequest;
 import com.example.lightscript.server.model.FileModels;
 import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.FileService;
 import com.example.lightscript.server.service.AgentVersionService;
 import com.example.lightscript.server.service.UpgradeStatusService;
+import com.example.lightscript.server.service.EncryptionService;
+import com.example.lightscript.server.service.ServerEncryptionContext;
 import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.entity.AgentVersion;
 import com.example.lightscript.server.entity.AgentUpgradeLog;
+import lombok.extern.slf4j.Slf4j;
 import javax.validation.Valid;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -28,20 +32,26 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/agent")
+@Slf4j
 public class AgentController {
 	private final AgentService agentService;
 	private final TaskService taskService;
 	private final FileService fileService;
 	private final AgentVersionService agentVersionService;
 	private final UpgradeStatusService upgradeStatusService;
+	private final EncryptionService encryptionService;
+	private final ServerEncryptionContext serverEncryptionContext;
 
 	public AgentController(AgentService agentService, TaskService taskService, FileService fileService, 
-						  AgentVersionService agentVersionService, UpgradeStatusService upgradeStatusService) {
+						  AgentVersionService agentVersionService, UpgradeStatusService upgradeStatusService,
+						  EncryptionService encryptionService, ServerEncryptionContext serverEncryptionContext) {
 		this.agentService = agentService;
 		this.taskService = taskService;
 		this.fileService = fileService;
 		this.agentVersionService = agentVersionService;
 		this.upgradeStatusService = upgradeStatusService;
+		this.encryptionService = encryptionService;
+		this.serverEncryptionContext = serverEncryptionContext;
 	}
 
 	@PostMapping("/register")
@@ -109,6 +119,206 @@ public class AgentController {
 		return ResponseEntity.ok(rsp);
 	}
 
+	@GetMapping("/tasks/encrypted-pull")
+	public ResponseEntity<String> encryptedPull(@RequestParam String agentId, 
+											   @RequestParam String agentToken, 
+											   @RequestParam(defaultValue = "10") int max) {
+		
+		// 验证加密是否启用
+		if (!serverEncryptionContext.isEncryptionEnabled()) {
+			log.warn("收到加密任务拉取请求但服务器加密未启用: agentId={}", agentId);
+			return ResponseEntity.status(400).build();
+		}
+		
+		// 验证Agent凭证
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		
+		// 获取Agent公钥
+		String agentPublicKey = serverEncryptionContext.getAgentPublicKey(agentId);
+		if (agentPublicKey == null) {
+			log.warn("Agent公钥未注册，无法加密任务: agentId={}", agentId);
+			return ResponseEntity.status(403).build();
+		}
+		
+		try {
+			// 获取任务列表
+			PullTasksResponse response = new PullTasksResponse();
+			response.setTasks(taskService.pullTasks(agentId, Math.min(Math.max(max, 1), 50)));
+			
+			// 序列化任务数据
+			com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+			String jsonData = objectMapper.writeValueAsString(response);
+			
+			// GZIP压缩
+			byte[] compressedData = gzipCompress(jsonData.getBytes("UTF-8"));
+			
+			// 加密数据
+			EncryptionService.EncryptedPayload payload = encryptionService.encrypt(
+				compressedData,
+				agentPublicKey,
+				serverEncryptionContext.getServerPrivateKey()
+			);
+			
+			// 返回加密载荷的JSON
+			String encryptedResponse = objectMapper.writeValueAsString(payload);
+			
+			log.info("成功加密任务数据: agentId={}, taskCount={}, originalSize={}KB, encryptedSize={}KB", 
+				agentId, response.getTasks().size(), jsonData.length() / 1024, encryptedResponse.length() / 1024);
+			
+			return ResponseEntity.ok()
+				.header("Content-Type", "application/json")
+				.header("X-Encryption-Version", "1.0")
+				.body(encryptedResponse);
+			
+		} catch (Exception e) {
+			log.error("加密任务拉取失败: agentId={}", agentId, e);
+			return ResponseEntity.status(500).build();
+		}
+	}
+	/**
+	 * Agent获取服务器公钥 - 用于自动密钥分发
+	 */
+	@GetMapping("/encryption/server-public-key")
+	public ResponseEntity<Map<String, Object>> getServerPublicKey(
+			@RequestParam String agentId,
+			@RequestParam String agentToken) {
+
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+
+		if (!serverEncryptionContext.isEncryptionEnabled()) {
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "服务器端加密未启用");
+			return ResponseEntity.status(400).body(errorResponse);
+		}
+
+		try {
+			Map<String, Object> response = new HashMap<>();
+			response.put("serverPublicKey", serverEncryptionContext.getServerPublicKey());
+			response.put("keyGenerationTime", serverEncryptionContext.getKeyGenerationTime());
+			response.put("keyAgeDays", serverEncryptionContext.getKeyAgeDays());
+			response.put("encryptionVersion", "1.0");
+
+			log.info("Agent获取服务器公钥: agentId={}, keyAge={}天",
+				agentId, serverEncryptionContext.getKeyAgeDays());
+
+			return ResponseEntity.ok(response);
+
+		} catch (Exception e) {
+			log.error("获取服务器公钥失败: agentId={}", agentId, e);
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "获取服务器公钥失败: " + e.getMessage());
+			return ResponseEntity.status(500).body(errorResponse);
+		}
+	}
+	/**
+	 * Agent公钥注册API
+	 */
+	@PostMapping("/encryption/register-public-key")
+	public ResponseEntity<Map<String, Object>> registerAgentPublicKey(
+			@RequestParam String agentId,
+			@RequestParam String agentToken,
+			@RequestBody Map<String, String> request) {
+
+		// 验证Agent身份
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			return ResponseEntity.status(401).build();
+		}
+
+		// 检查加密是否启用
+		if (!serverEncryptionContext.isEncryptionEnabled()) {
+			Map<String, Object> response = new HashMap<>();
+			response.put("success", false);
+			response.put("message", "服务器端加密未启用");
+			return ResponseEntity.badRequest().body(response);
+		}
+
+		try {
+			String agentPublicKey = request.get("publicKey");
+			if (agentPublicKey == null || agentPublicKey.trim().isEmpty()) {
+				Map<String, Object> response = new HashMap<>();
+				response.put("success", false);
+				response.put("message", "公钥不能为空");
+				return ResponseEntity.badRequest().body(response);
+			}
+
+			// 注册Agent公钥
+			serverEncryptionContext.registerAgentPublicKey(agentId, agentPublicKey);
+
+			Map<String, Object> response = new HashMap<>();
+			response.put("success", true);
+			response.put("message", "Agent公钥注册成功");
+			response.put("agentId", agentId);
+
+			log.info("[Agent] 公钥注册成功: agentId={}", agentId);
+			return ResponseEntity.ok(response);
+
+		} catch (Exception e) {
+			log.error("[Agent] 公钥注册失败: agentId={}, error={}", agentId, e.getMessage());
+			Map<String, Object> response = new HashMap<>();
+			response.put("success", false);
+			response.put("message", "公钥注册失败: " + e.getMessage());
+			return ResponseEntity.status(500).body(response);
+		}
+	}
+
+	/**
+	 * Agent获取服务器公钥 - 优雅版本，支持新旧密钥
+	 */
+	@GetMapping("/encryption/server-public-key-graceful")
+	public ResponseEntity<Map<String, Object>> getServerPublicKeyGraceful(
+			@RequestParam String agentId,
+			@RequestParam String agentToken) {
+
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+
+		// 检查是否有优雅加密上下文
+		try {
+			// 这里需要注入GracefulServerEncryptionContext
+			// 暂时使用原有的serverEncryptionContext
+			if (!serverEncryptionContext.isEncryptionEnabled()) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "服务器端加密未启用");
+				return ResponseEntity.status(400).body(errorResponse);
+			}
+
+			Map<String, Object> response = new HashMap<>();
+			response.put("serverPublicKey", serverEncryptionContext.getServerPublicKey());
+			response.put("keyGenerationTime", serverEncryptionContext.getKeyGenerationTime());
+			response.put("keyAgeDays", serverEncryptionContext.getKeyAgeDays());
+			response.put("encryptionVersion", "1.1-graceful");
+			response.put("gracefulRotationSupported", true);
+
+			log.info("Agent获取服务器公钥(优雅版本): agentId={}, keyAge={}天",
+				agentId, serverEncryptionContext.getKeyAgeDays());
+
+			return ResponseEntity.ok(response);
+
+		} catch (Exception e) {
+			log.error("获取服务器公钥失败: agentId={}", agentId, e);
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "获取服务器公钥失败: " + e.getMessage());
+			return ResponseEntity.status(500).body(errorResponse);
+		}
+	}
+	
+	/**
+	 * GZIP压缩数据
+	 */
+	private byte[] gzipCompress(byte[] data) throws java.io.IOException {
+		try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+			 java.util.zip.GZIPOutputStream gzipOut = new java.util.zip.GZIPOutputStream(baos)) {
+			gzipOut.write(data);
+			gzipOut.finish();
+			return baos.toByteArray();
+		}
+	}
+
 	/**
 	 * 确认任务开始执行（使用executionId）
 	 */
@@ -128,6 +338,118 @@ public class AgentController {
 		}
 		taskService.appendLog(req);
 		return ResponseEntity.ok().build();
+	}
+
+	@PostMapping("/tasks/executions/{executionId}/batch-log")
+	public ResponseEntity<Void> batchLog(@PathVariable Long executionId, @Valid @RequestBody BatchLogRequest req) {
+		if (!agentService.validateAgent(req.getAgentId(), req.getAgentToken())) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		
+		try {
+			taskService.appendBatchLogs(req);
+			return ResponseEntity.ok().build();
+		} catch (Exception e) {
+			log.error("批量日志处理失败", e);
+			return ResponseEntity.status(500).build();
+		}
+	}
+
+	@PostMapping("/tasks/executions/{executionId}/encrypted-batch-log")
+	public ResponseEntity<Void> encryptedBatchLog(@PathVariable Long executionId, 
+												 @Valid @RequestBody EncryptedBatchLogRequest req,
+												 @RequestHeader(value = "X-Agent-Public-Key", required = false) String agentPublicKeyHeader) {
+		
+		// 验证加密是否启用
+		if (!serverEncryptionContext.isEncryptionEnabled()) {
+			log.warn("收到加密日志请求但服务器加密未启用: agentId={}", req.getAgentId());
+			return ResponseEntity.status(400).build();
+		}
+		
+		// 验证请求完整性
+		if (!req.isValid()) {
+			log.warn("加密批量日志请求无效: {}", req);
+			return ResponseEntity.status(400).build();
+		}
+		
+		// 验证时间戳
+		if (!req.isTimestampValid()) {
+			log.warn("加密批量日志时间戳无效，可能是重放攻击: agentId={}, timestamp={}", 
+				req.getAgentId(), req.getTimestamp());
+			return ResponseEntity.status(403).build();
+		}
+		
+		try {
+			// 注册Agent公钥（如果提供）
+			if (agentPublicKeyHeader != null && !agentPublicKeyHeader.trim().isEmpty()) {
+				String cleanPublicKey = "-----BEGIN PUBLIC KEY-----\n" + 
+					agentPublicKeyHeader.replaceAll("(.{64})", "$1\n") + 
+					"\n-----END PUBLIC KEY-----";
+				serverEncryptionContext.registerAgentPublicKey(req.getAgentId(), cleanPublicKey);
+			}
+			
+			// 获取Agent公钥
+			String agentPublicKey = serverEncryptionContext.getAgentPublicKey(req.getAgentId());
+			if (agentPublicKey == null) {
+				log.warn("Agent公钥未注册: agentId={}", req.getAgentId());
+				return ResponseEntity.status(403).build();
+			}
+			
+			// 解密批量日志
+			EncryptionService.EncryptedPayload payload = req.toPayload();
+			byte[] decryptedData = encryptionService.decrypt(
+				payload, 
+				serverEncryptionContext.getServerPrivateKey(),
+				agentPublicKey
+			);
+			
+			// 解压缩数据
+			byte[] decompressedData = gzipDecompress(decryptedData);
+			String jsonData = new String(decompressedData, "UTF-8");
+			
+			// 反序列化日志批次
+			com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+			com.fasterxml.jackson.core.type.TypeReference<java.util.List<com.example.lightscript.server.model.AgentModels.LogEntry>> typeRef = 
+				new com.fasterxml.jackson.core.type.TypeReference<java.util.List<com.example.lightscript.server.model.AgentModels.LogEntry>>() {};
+			List<com.example.lightscript.server.model.AgentModels.LogEntry> logs = objectMapper.readValue(jsonData, typeRef);
+			
+			// 创建BatchLogRequest并处理
+			BatchLogRequest batchRequest = new BatchLogRequest();
+			batchRequest.setAgentId(req.getAgentId());
+			batchRequest.setExecutionId(req.getExecutionId());
+			batchRequest.setLogs(logs);
+			
+			taskService.appendBatchLogs(batchRequest);
+			
+			log.info("成功处理加密批量日志: agentId={}, executionId={}, batchSize={}, encryptedSize={}KB", 
+				req.getAgentId(), req.getExecutionId(), req.getBatchSize(), req.getEstimatedSize() / 1024);
+			
+			return ResponseEntity.ok().build();
+			
+		} catch (SecurityException e) {
+			log.warn("加密批量日志安全验证失败: agentId={}, error={}", req.getAgentId(), e.getMessage());
+			return ResponseEntity.status(403).build();
+		} catch (Exception e) {
+			log.error("加密批量日志处理失败: agentId={}, executionId={}", req.getAgentId(), req.getExecutionId(), e);
+			return ResponseEntity.status(500).build();
+		}
+	}
+	
+	/**
+	 * GZIP解压缩数据
+	 */
+	private byte[] gzipDecompress(byte[] compressedData) throws java.io.IOException {
+		try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(compressedData);
+			 java.util.zip.GZIPInputStream gzipIn = new java.util.zip.GZIPInputStream(bais);
+			 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
+			
+			byte[] buffer = new byte[1024];
+			int len;
+			while ((len = gzipIn.read(buffer)) != -1) {
+				baos.write(buffer, 0, len);
+			}
+			return baos.toByteArray();
+		}
 	}
 
 	@PostMapping("/tasks/executions/{executionId}/finish")

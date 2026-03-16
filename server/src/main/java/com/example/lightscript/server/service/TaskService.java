@@ -28,8 +28,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -829,6 +831,33 @@ public class TaskService {
         // 写入日志到文件
         writeLogToFile(logFilePath, request);
     }
+
+    /**
+     * 追加批量日志到执行实例
+     */
+    @Transactional
+    public void appendBatchLogs(BatchLogRequest request) {
+        Optional<TaskExecution> optExecution = taskExecutionService.getExecution(request.getExecutionId());
+        
+        if (!optExecution.isPresent()) {
+            log.warn("Execution {} not found for batch log append", request.getExecutionId());
+            return;
+        }
+        
+        TaskExecution execution = optExecution.get();
+        String logFilePath = execution.getLogFilePath();
+        
+        if (logFilePath == null || logFilePath.isEmpty()) {
+            log.warn("Task execution {} has no log file path, skipping batch log append", execution.getId());
+            return;
+        }
+        
+        // 批量写入日志到文件
+        writeBatchLogsToFile(logFilePath, request);
+        
+        log.info("成功处理批量日志: executionId={}, batchSize={}", 
+                request.getExecutionId(), request.getBatchSize());
+    }
     
     /**
      * 完成任务（使用executionId）
@@ -1021,6 +1050,52 @@ public class TaskService {
         } catch (IOException e) {
             log.error("Failed to write log file: {}", logFilePath, e);
             throw new RuntimeException("写入日志文件失败: " + logFilePath, e);
+        }
+    }
+
+    /**
+     * 批量写入日志到文件 - 性能优化版本
+     * Agent端已排序，服务器端只负责追加写入
+     */
+    private void writeBatchLogsToFile(String logFilePath, BatchLogRequest request) {
+        File logFile = new File(logFilePath);
+        
+        try {
+            // 确保目录存在
+            logFile.getParentFile().mkdirs();
+            
+            // 构建批量日志内容 - Agent端已排序，直接按顺序写入
+            StringBuilder batchContent = new StringBuilder();
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+            
+            for (LogEntry entry : request.getLogs()) {
+                // 使用日志条目自带的时间戳，如果没有则使用当前时间
+                String timestamp;
+                if (entry.getTimestamp() > 0) {
+                    timestamp = LocalDateTime.ofInstant(
+                        Instant.ofEpochMilli(entry.getTimestamp()), 
+                        ZoneId.systemDefault()
+                    ).format(formatter);
+                } else {
+                    timestamp = LocalDateTime.now().format(formatter);
+                }
+                
+                String logLine = String.format("[%s] [%s] %s\n", 
+                    timestamp, entry.getStream(), entry.getData());
+                batchContent.append(logLine);
+            }
+            
+            // 一次性批量写入
+            Files.write(
+                logFile.toPath(), 
+                batchContent.toString().getBytes(StandardCharsets.UTF_8),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND
+            );
+            
+        } catch (IOException e) {
+            log.error("Failed to write batch log file: {}", logFilePath, e);
+            throw new RuntimeException("批量写入日志文件失败: " + logFilePath, e);
         }
     }
 

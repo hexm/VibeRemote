@@ -35,6 +35,6 @@ log.async.enabled=true
 log.retry.max=3
 
 # 加密配置 (第二阶段通信加密)
-encryption.enabled=true
+encryption.enabled=false
 encryption.key.rotation.days=30
 encryption.algorithm=AES-256-GCM
