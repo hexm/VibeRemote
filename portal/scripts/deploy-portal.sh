@@ -23,11 +23,6 @@ if [ ! -d "portal" ]; then
     exit 1
 fi
 
-if [ ! -d "agent/release" ]; then
-    echo "❌ 错误: agent/release 目录不存在"
-    exit 1
-fi
-
 echo "✅ 必要文件检查完成"
 echo ""
 
@@ -39,11 +34,8 @@ echo "📁 创建临时部署目录: $TEMP_DIR"
 echo "📋 准备门户文件..."
 cp -r portal/* "$TEMP_DIR/"
 
-# 复制安装包
-echo "📦 准备安装包..."
-mkdir -p "$TEMP_DIR/agent/release"
-cp agent/release/*.zip "$TEMP_DIR/agent/release/" 2>/dev/null || true
-cp agent/release/*.tar.gz "$TEMP_DIR/agent/release/" 2>/dev/null || true
+# 注意：Agent安装包不在此脚本中上传
+# 如需上传Agent安装包，请使用: ./agent/scripts/deploy-agent-packages.sh
 
 # 创建安装脚本
 echo "📝 创建安装脚本..."
@@ -622,19 +614,22 @@ echo "📤 开始上传文件到服务器..."
 
 # 创建远程目录
 echo "📁 创建远程目录..."
-ssh "$SERVER_USER@$SERVER_IP" "mkdir -p $REMOTE_PORTAL_DIR $REMOTE_RELEASES_DIR $REMOTE_SCRIPTS_DIR"
+ssh "$SERVER_USER@$SERVER_IP" "mkdir -p $REMOTE_PORTAL_DIR $REMOTE_SCRIPTS_DIR"
 
-# 上传门户文件
+# 上传门户文件（不包含Agent安装包）
 echo "🌐 上传门户网站..."
 scp -r "$TEMP_DIR"/* "$SERVER_USER@$SERVER_IP:$REMOTE_PORTAL_DIR/"
 
 echo ""
-echo "🎉 部署完成!"
+echo "🎉 门户网站部署完成!"
 echo ""
 echo "📋 部署信息:"
 echo "  🌐 门户网站: http://$SERVER_IP/"
-echo "  📦 安装包目录: http://$SERVER_IP/agent/release/"
-echo "  📝 安装脚本: http://$SERVER_IP/scripts/"
+echo "  � 安装脚本: http://$SERVER_IP/scripts/"
+echo ""
+echo "📦 Agent安装包部署:"
+echo "  如需上传Agent安装包，请运行: ./agent/scripts/deploy-agent-packages.sh"
+echo "  当前安装包目录: http://$SERVER_IP/agent/release/"
 echo ""
 echo "🔗 可用链接:"
 echo "  • 首页: http://$SERVER_IP/"

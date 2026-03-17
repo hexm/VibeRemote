@@ -159,6 +159,10 @@ agent/start-agent.sh
 - `uninstall-agent.sh` - Agent卸载脚本
 - `build-release.sh` - 构建发布包脚本
 
+**Agent部署**: `agent/scripts/`
+
+- `deploy-agent-packages.sh` - **专门上传Agent安装包到阿里云**
+
 **本地测试**: `agent/localtest/`
 
 - `start-localtest-agent.sh` - 本地测试Agent启动脚本
@@ -204,10 +208,16 @@ agent/start-agent.sh
    # 1. 配置Nginx（参考server/nginx/README.md）
    sudo cp server/nginx/lightscript.conf /etc/nginx/sites-available/
    
-   # 2. 部署门户网站
+   # 2. 部署后端和前端
+   server/scripts/deploy-to-aliyun.sh
+   
+   # 3. 部署门户网站
    portal/scripts/deploy-portal.sh
    
-   # 3. 验证部署
+   # 4. 上传Agent安装包（仅在Agent版本更新时需要）
+   agent/scripts/deploy-agent-packages.sh
+   
+   # 5. 验证部署
    ./verify-deployment.sh
    ```
 

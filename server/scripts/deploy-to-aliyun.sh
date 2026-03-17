@@ -60,6 +60,9 @@ echo -e "${GREEN}✅ 前端构建完成${NC}"
 echo -e "${BLUE}📦 准备门户网站...${NC}"
 # 门户网站是静态文件，直接复制即可
 echo -e "${GREEN}✅ 门户网站准备完成${NC}"
+
+# 注意：Agent安装包不在此脚本中处理
+# 如需上传Agent安装包，请单独运行: ./agent/scripts/deploy-agent-packages.sh
 echo ""
 
 # 创建部署包
@@ -288,6 +291,10 @@ echo -e "${BLUE}访问地址：${NC}"
 echo -e "  门户网站: ${GREEN}http://${SERVER_IP}${NC} (主站)"
 echo -e "  管理后台: ${GREEN}http://${SERVER_IP}/admin${NC} 或 ${GREEN}http://${SERVER_IP}:${FRONTEND_PORT}${NC}"
 echo -e "  后端API: ${GREEN}http://${SERVER_IP}:${BACKEND_PORT}${NC}"
+echo ""
+echo -e "${BLUE}Agent安装包：${NC}"
+echo -e "  如需更新Agent安装包，请运行: ${YELLOW}./agent/scripts/deploy-agent-packages.sh${NC}"
+echo -e "  当前下载地址: ${GREEN}http://${SERVER_IP}/agent/release/${NC}"
 echo ""
 echo -e "${BLUE}管理命令：${NC}"
 echo -e "  查看后端日志: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'tail -f ${REMOTE_DIR}/backend/backend.log'${NC}"
