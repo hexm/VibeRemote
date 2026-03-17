@@ -5,12 +5,19 @@ spring:
   application:
     name: lightscript-server
   
-  # 使用内存数据库快速启动
+  # 使用远程MySQL数据库，但使用不同的数据库名和用户
   datasource:
-    url: jdbc:h2:mem:lightscript
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
+    url: jdbc:mysql://8.138.114.34:3306/lightscript_dev?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8&autoReconnect=true&failOverReadOnly=false&maxReconnects=10
+    username: lightscript_dev
+    password: lightscript_dev123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
   
   h2:
     console:
