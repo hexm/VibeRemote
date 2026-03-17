@@ -215,60 +215,39 @@ create_scripts() {
     local os=$2
     
     if [ "$os" = "windows" ]; then
-        # Windows 启动脚本
+        # Windows 启动脚本 - 简化版
         cat > "$target_dir/start-agent.bat" << 'EOF'
 @echo off
-setlocal enabledelayedexpansion
+REM LightScript Agent 启动脚本 (Windows)
 
-set SCRIPT_DIR=%~dp0
-set JRE_HOME=%SCRIPT_DIR%jre
-set JAVA_EXE=%JRE_HOME%\bin\java.exe
-set PID_FILE=%SCRIPT_DIR%agent.pid
-set LOG_DIR=%SCRIPT_DIR%logs
-set SERVICE_NAME=LightScriptAgent
+REM 切换到脚本目录
+cd /d "%~dp0"
 
 REM 创建日志目录
-if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+if not exist "logs" mkdir "logs"
 
 echo LightScript Agent 启动中...
-echo 工作目录: %SCRIPT_DIR%
+echo 工作目录: %CD%
 
-REM 检查是否已经在运行
-if exist "%PID_FILE%" (
-    set /p EXISTING_PID=<"%PID_FILE%"
-    tasklist /fi "PID eq !EXISTING_PID!" 2>nul | find "!EXISTING_PID!" >nul
-    if !errorlevel! equ 0 (
-        echo Agent 已经在运行 (PID: !EXISTING_PID!)
-        echo 如需重启，请先运行: stop-agent.bat
-        if not "%1"=="--service" pause
-        exit /b 1
-    ) else (
-        echo 清理过期的PID文件...
-        del "%PID_FILE%" 2>nul
-    )
+REM 检查Agent JAR文件
+if not exist "agent.jar" (
+    echo ERROR: Agent JAR file not found: agent.jar
+    pause
+    exit /b 1
 )
 
 REM 优先使用内置JRE
-if exist "%JAVA_EXE%" (
-    echo 使用内置JRE: %JAVA_EXE%
-    
-    REM 测试JRE是否可用
-    "%JAVA_EXE%" -version >nul 2>&1
-    if !errorlevel! equ 0 (
-        set JAVA_CMD=%JAVA_EXE%
-        goto :start_agent
-    ) else (
-        echo 警告: 内置JRE不可用，尝试系统Java...
-    )
-) else (
-    echo 警告: 未找到内置JRE，尝试系统Java...
+if exist "jre\bin\java.exe" (
+    echo 使用内置JRE
+    set "JAVA_CMD=jre\bin\java.exe"
+    goto :start_agent
 )
 
 REM 尝试系统Java
 java -version >nul 2>&1
-if !errorlevel! equ 0 (
+if %errorlevel% equ 0 (
     echo 使用系统Java
-    set JAVA_CMD=java
+    set "JAVA_CMD=java"
     goto :start_agent
 )
 
@@ -276,18 +255,15 @@ REM 尝试JAVA_HOME
 if defined JAVA_HOME (
     if exist "%JAVA_HOME%\bin\java.exe" (
         echo 使用JAVA_HOME: %JAVA_HOME%\bin\java.exe
-        set JAVA_CMD=%JAVA_HOME%\bin\java.exe
+        set "JAVA_CMD=%JAVA_HOME%\bin\java.exe"
         goto :start_agent
     )
 )
 
 REM 未找到Java
-echo 错误: 未找到可用的Java运行时!
-echo.
-echo 请安装Java 8或更高版本:
-echo   下载地址: https://adoptium.net/temurin/releases/
-echo.
-if not "%1"=="--service" pause
+echo ERROR: 未找到可用的Java运行时!
+echo 请安装Java 8或更高版本
+pause
 exit /b 1
 
 :start_agent
@@ -296,46 +272,9 @@ echo Java版本信息:
 
 echo.
 echo 启动LightScript Agent...
-echo Agent JAR: %SCRIPT_DIR%agent.jar
-echo 日志目录: %LOG_DIR%
+"%JAVA_CMD%" -Xmx512m -Xms128m -jar agent.jar
 
-REM 检测启动模式
-if "%1"=="--service" (
-    echo 检测到Windows服务模式，前台启动...
-    REM Windows服务模式，前台启动，不创建PID文件
-    "%JAVA_CMD%" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
-) else (
-    echo 手动启动模式，后台启动...
-    REM 手动启动模式，后台启动
-    start /b "" "%JAVA_CMD%" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m -Dfile.encoding=UTF-8 -Djava.awt.headless=true -jar "%SCRIPT_DIR%agent.jar"
-    
-    REM 等待进程启动
-    timeout /t 3 /nobreak >nul
-    
-    REM 精确查找Agent进程PID（通过命令行参数匹配）
-    set AGENT_PID=
-    for /f "tokens=2" %%i in ('wmic process where "CommandLine like '%%agent.jar%%' and Name='java.exe'" get ProcessId /format:csv 2^>nul ^| find /v "Node" ^| find /v "ProcessId" ^| find /v "^$"') do (
-        set AGENT_PID=%%i
-        goto :found_pid
-    )
-    
-    :found_pid
-    if defined AGENT_PID (
-        echo !AGENT_PID! > "%PID_FILE%"
-        echo ✅ Agent 启动成功 (PID: !AGENT_PID!)
-        echo.
-        echo 使用以下命令:
-        echo   查看日志: type "%LOG_DIR%\agent.log"
-        echo   停止服务: stop-agent.bat
-        echo   查看状态: tasklist /fi "PID eq !AGENT_PID!"
-        echo   安装服务: install-service.bat
-    ) else (
-        echo ❌ Agent 启动失败或无法获取PID
-        echo 请查看日志文件: %LOG_DIR%\agent.log
-        pause
-        exit /b 1
-    )
-)
+pause
 EOF
 
         # Windows 停止脚本
@@ -627,6 +566,71 @@ if /i "!DELETE_DIR!"=="y" (
 
 pause
 EOF
+
+        # 转换Windows批处理文件的换行符为CRLF
+        echo "    🔄 转换批处理文件换行符为CRLF..."
+        
+        # 方法1: 使用unix2dos（如果可用）
+        if command -v unix2dos >/dev/null 2>&1; then
+            echo "    使用unix2dos转换换行符"
+            unix2dos "$target_dir"/*.bat 2>/dev/null && echo "    ✅ unix2dos转换成功" || echo "    ⚠️  unix2dos转换失败"
+        # 方法2: 使用sed添加回车符
+        elif command -v sed >/dev/null 2>&1; then
+            echo "    使用sed转换换行符"
+            for bat_file in "$target_dir"/*.bat; do
+                if [ -f "$bat_file" ]; then
+                    # 先检查是否已经有CRLF，避免重复转换
+                    if ! grep -q $'\r' "$bat_file" 2>/dev/null; then
+                        sed -i.bak 's/$/\r/' "$bat_file" 2>/dev/null && rm -f "${bat_file}.bak"
+                        echo "    ✅ $(basename "$bat_file") 换行符转换完成"
+                    else
+                        echo "    ℹ️  $(basename "$bat_file") 已经是CRLF格式"
+                    fi
+                fi
+            done
+        # 方法3: 使用perl（通常在macOS上可用）
+        elif command -v perl >/dev/null 2>&1; then
+            echo "    使用perl转换换行符"
+            for bat_file in "$target_dir"/*.bat; do
+                if [ -f "$bat_file" ]; then
+                    perl -i -pe 's/\n/\r\n/g unless /\r\n/' "$bat_file" 2>/dev/null
+                    echo "    ✅ $(basename "$bat_file") 换行符转换完成"
+                fi
+            done
+        # 方法4: 使用python（最后的备选方案）
+        elif command -v python3 >/dev/null 2>&1; then
+            echo "    使用python转换换行符"
+            for bat_file in "$target_dir"/*.bat; do
+                if [ -f "$bat_file" ]; then
+                    python3 -c "
+import sys
+with open('$bat_file', 'rb') as f:
+    content = f.read()
+if b'\r\n' not in content:
+    content = content.replace(b'\n', b'\r\n')
+    with open('$bat_file', 'wb') as f:
+        f.write(content)
+    print('    ✅ $(basename "$bat_file") 换行符转换完成')
+else:
+    print('    ℹ️  $(basename "$bat_file") 已经是CRLF格式')
+" 2>/dev/null || echo "    ⚠️  python转换失败"
+                fi
+            done
+        else
+            echo "    ⚠️  警告: 未找到换行符转换工具，Windows批处理文件可能无法正常运行"
+            echo "    请在Windows系统上手动转换换行符或安装dos2unix工具"
+        fi
+        
+        # 验证转换结果
+        for bat_file in "$target_dir"/*.bat; do
+            if [ -f "$bat_file" ]; then
+                if grep -q $'\r' "$bat_file" 2>/dev/null; then
+                    echo "    ✅ $(basename "$bat_file") 使用CRLF换行符"
+                else
+                    echo "    ❌ $(basename "$bat_file") 仍使用LF换行符"
+                fi
+            fi
+        done
 
     else
         # Unix 启动脚本
