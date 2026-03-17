@@ -88,3 +88,6 @@ test-*.jar
 
 # Agent credentials (should be configured per deployment)
 .agent-credentials
+
+# Agent release packages (too large for git)
+agent/release/
