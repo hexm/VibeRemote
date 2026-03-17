@@ -4,6 +4,11 @@ echo "=== 启动LightScript服务器 (MySQL数据库) ==="
 echo "时间: $(date)"
 echo ""
 
+# 获取脚本所在目录的父目录（server目录）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVER_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$SERVER_DIR"
+
 # 检查MySQL连接
 echo "检查MySQL数据库连接..."
 if ! nc -z 8.138.114.34 3306; then
@@ -19,19 +24,17 @@ pkill -f "spring-boot:run" 2>/dev/null || true
 pkill -f "ServerApplication" 2>/dev/null || true
 sleep 2
 
-# 进入服务器目录
-cd server
-
 echo "启动服务器..."
 echo "数据库: MySQL (8.138.114.34:3306/lightscript)"
 echo "端口: 8080"
 echo "批量日志: 启用"
+echo "工作目录: $SERVER_DIR"
 echo ""
 
 # 启动服务器
 mvn spring-boot:run \
     -Dspring-boot.run.jvmArguments="-Xmx1g -Xms512m" \
-    2>&1 | tee ../server-startup.log &
+    2>&1 | tee logs/server-startup.log &
 
 # 等待服务器启动
 echo "等待服务器启动..."
@@ -49,5 +52,5 @@ for i in {1..30}; do
 done
 
 echo ""
-echo "❌ 服务器启动超时，请检查日志: server-startup.log"
+echo "❌ 服务器启动超时，请检查日志: logs/server-startup.log"
 exit 1

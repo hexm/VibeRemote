@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# 获取脚本所在目录（项目根目录）
+# 获取脚本所在目录的父目录（web项目根目录）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WEB_DIR="$SCRIPT_DIR"
+WEB_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "========================================"
 echo "LightScript Web 前端启动脚本"

@@ -11,30 +11,49 @@ class SimpleTaskRunner {
     private volatile boolean shutdown = false;
     private final TaskStatusMonitor taskStatusMonitor;
     private final RobustBatchLogCollector robustBatchLogCollector;
+    private final EncryptedBatchLogCollector encryptedBatchLogCollector;
     private final BackupLogUploader backupLogUploader;
     private final boolean batchModeEnabled;
+    private final boolean encryptionEnabled;
 
     SimpleTaskRunner(AgentApi api, String agentId, String agentToken, TaskStatusMonitor taskStatusMonitor) {
         this.api = api;
         this.agentId = agentId;
         this.agentToken = agentToken;
         this.taskStatusMonitor = taskStatusMonitor;
+        
+        // 检查是否启用加密
+        AgentConfig config = AgentConfig.getInstance();
+        this.encryptionEnabled = config.isEncryptionEnabled();
 
-        this.robustBatchLogCollector = new RobustBatchLogCollector(api.getBaseUrl(), api.getHttpClient(), api.getObjectMapper());
-        this.robustBatchLogCollector.updateCredentials(agentId, agentToken);
+        // 初始化批量日志收集器
+        if (encryptionEnabled) {
+            this.encryptedBatchLogCollector = new EncryptedBatchLogCollector(
+                api.getBaseUrl(), api.getHttpClient(), api.getObjectMapper(), true, api);
+            this.encryptedBatchLogCollector.updateCredentials(agentId, agentToken);
+            this.robustBatchLogCollector = null;
+            System.out.println("[TaskRunner] 加密批量日志模式已启用");
+        } else {
+            this.robustBatchLogCollector = new RobustBatchLogCollector(
+                api.getBaseUrl(), api.getHttpClient(), api.getObjectMapper());
+            this.robustBatchLogCollector.updateCredentials(agentId, agentToken);
+            this.encryptedBatchLogCollector = null;
+            System.out.println("[TaskRunner] 健壮批量日志模式已启用 (支持重试、本地备份和定期补传)");
+        }
 
         this.backupLogUploader = new BackupLogUploader(api.getBaseUrl(), api.getHttpClient(), api.getObjectMapper());
         this.backupLogUploader.updateCredentials(agentId, agentToken);
 
         this.batchModeEnabled = true;
-
-        System.out.println("[TaskRunner] 健壮批量日志模式已启用 (支持重试、本地备份和定期补传)");
     }
 
     void shutdown() {
         this.shutdown = true;
         if (robustBatchLogCollector != null) {
             robustBatchLogCollector.shutdown();
+        }
+        if (encryptedBatchLogCollector != null) {
+            encryptedBatchLogCollector.shutdown();
         }
         if (backupLogUploader != null) {
             backupLogUploader.shutdown();
@@ -46,6 +65,9 @@ class SimpleTaskRunner {
         this.agentToken = newAgentToken;
         if (robustBatchLogCollector != null) {
             robustBatchLogCollector.updateCredentials(newAgentId, newAgentToken);
+        }
+        if (encryptedBatchLogCollector != null) {
+            encryptedBatchLogCollector.updateCredentials(newAgentId, newAgentToken);
         }
         if (backupLogUploader != null) {
             backupLogUploader.updateCredentials(newAgentId, newAgentToken);
@@ -60,7 +82,7 @@ class SimpleTaskRunner {
     }
 
     private void sendLog(Long executionId, String stream, String data, LogBuffer taskBuffer) {
-        if (batchModeEnabled && robustBatchLogCollector != null && taskBuffer != null) {
+        if (batchModeEnabled && taskBuffer != null) {
             long timestamp = System.currentTimeMillis();
             LogEntry entry = new LogEntry(0, stream, data, timestamp);
             taskBuffer.addLogEntry(entry);
@@ -81,7 +103,11 @@ class SimpleTaskRunner {
         if (taskBuffer != null && taskBuffer.hasLogs()) {
             List<LogEntry> logs = taskBuffer.flush();
             if (!logs.isEmpty()) {
-                robustBatchLogCollector.sendBatch(executionId, logs);
+                if (encryptionEnabled && encryptedBatchLogCollector != null) {
+                    encryptedBatchLogCollector.sendBatch(executionId, logs);
+                } else if (robustBatchLogCollector != null) {
+                    robustBatchLogCollector.sendBatch(executionId, logs);
+                }
             }
         }
     }
@@ -128,9 +154,7 @@ class SimpleTaskRunner {
             }
         } finally {
             flushTaskBuffer(executionId, taskBuffer);
-            if (robustBatchLogCollector != null) {
-                robustBatchLogCollector.onTaskComplete(executionId);
-            }
+            onTaskComplete(executionId);
             taskStatusMonitor.onTaskComplete(executionId);
         }
     }
@@ -195,10 +219,16 @@ class SimpleTaskRunner {
             }
         } finally {
             flushTaskBuffer(executionId, taskBuffer);
-            if (robustBatchLogCollector != null) {
-                robustBatchLogCollector.onTaskComplete(executionId);
-            }
+            onTaskComplete(executionId);
             taskStatusMonitor.onTaskComplete(executionId);
+        }
+    }
+
+    private void onTaskComplete(Long executionId) {
+        if (encryptionEnabled && encryptedBatchLogCollector != null) {
+            // EncryptedBatchLogCollector 没有 onTaskComplete 方法，因为它是自动管理的
+        } else if (robustBatchLogCollector != null) {
+            robustBatchLogCollector.onTaskComplete(executionId);
         }
     }
 
