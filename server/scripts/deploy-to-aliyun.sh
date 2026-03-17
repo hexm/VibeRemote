@@ -48,10 +48,12 @@ echo -e "${GREEN}✅ 后端构建完成${NC}"
 
 # 构建前端
 echo -e "${BLUE}📦 构建前端项目...${NC}"
-cd ../web-modern
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT/web"
 npm install
 npm run build
-cd ../server
+cd "$PROJECT_ROOT/server"
 echo -e "${GREEN}✅ 前端构建完成${NC}"
 
 # 构建门户网站
@@ -72,11 +74,11 @@ cp -r src/main/resources/application*.yml ${DEPLOY_DIR}/backend/ 2>/dev/null || 
 
 # 复制前端构建文件
 mkdir -p ${DEPLOY_DIR}/frontend
-cp -r ../web-modern/dist/* ${DEPLOY_DIR}/frontend/
+cp -r "$PROJECT_ROOT/web/dist"/* ${DEPLOY_DIR}/frontend/
 
 # 复制门户网站文件
 mkdir -p ${DEPLOY_DIR}/portal
-cp -r ../portal/* ${DEPLOY_DIR}/portal/
+cp -r "$PROJECT_ROOT/portal"/* ${DEPLOY_DIR}/portal/
 
 # 复制启动脚本
 mkdir -p ${DEPLOY_DIR}/scripts
