@@ -117,7 +117,10 @@ class SimpleTaskRunner {
             }
         } else {
             try {
-                api.sendLog(agentId, agentToken, executionId, 0, stream, data);
+                // 使用最新的凭证
+                synchronized (this) {
+                    api.sendLog(agentId, agentToken, executionId, 0, stream, data);
+                }
             } catch (Exception e) {
                 logger.error("Failed to send log: {}", e.getMessage());
             }
@@ -129,10 +132,13 @@ class SimpleTaskRunner {
             List<LogEntry> logs = taskBuffer.flush();
             if (!logs.isEmpty()) {
                 logger.debug("[TASK-{}] Flushing log buffer with {} entries", executionId, logs.size());
-                if (encryptionEnabled && encryptedBatchLogCollector != null) {
-                    encryptedBatchLogCollector.sendBatch(executionId, logs);
-                } else if (robustBatchLogCollector != null) {
-                    robustBatchLogCollector.sendBatch(executionId, logs);
+                // 确保使用最新的凭证
+                synchronized (this) {
+                    if (encryptionEnabled && encryptedBatchLogCollector != null) {
+                        encryptedBatchLogCollector.sendBatch(executionId, logs);
+                    } else if (robustBatchLogCollector != null) {
+                        robustBatchLogCollector.sendBatch(executionId, logs);
+                    }
                 }
                 logger.debug("[TASK-{}] ✓ Log buffer flushed successfully", executionId);
             }
@@ -172,28 +178,34 @@ class SimpleTaskRunner {
         try {
             logger.info("[TASK-{}] Starting file transfer task", executionId);
             taskStatusMonitor.onTaskStart(executionId);
-            api.ackTask(agentId, agentToken, executionId);
+            synchronized (this) {
+                api.ackTask(agentId, agentToken, executionId);
+            }
             sendLog(executionId, "system", "File transfer task started (fileId: " + fileId + ", target: " + targetPath + ")", taskBuffer);
 
             logger.info("[TASK-{}] Downloading file from server...", executionId);
             sendLog(executionId, "system", "Downloading file from server...", taskBuffer);
-            boolean success = api.downloadFile(agentId, agentToken, fileId, targetPath, overwriteExisting, verifyChecksum);
+            synchronized (this) {
+                boolean success = api.downloadFile(agentId, agentToken, fileId, targetPath, overwriteExisting, verifyChecksum);
 
-            if (success) {
-                logger.info("[TASK-{}] ✓ File transfer completed successfully", executionId);
-                sendLog(executionId, "system", "File transfer completed successfully", taskBuffer);
-                api.finish(agentId, agentToken, executionId, 0, "SUCCESS", "File transferred successfully");
-            } else {
-                logger.error("[TASK-{}] ✗ File transfer failed", executionId);
-                sendLog(executionId, "system", "File transfer failed", taskBuffer);
-                api.finish(agentId, agentToken, executionId, 1, "FAILED", "File transfer failed");
+                if (success) {
+                    logger.info("[TASK-{}] ✓ File transfer completed successfully", executionId);
+                    sendLog(executionId, "system", "File transfer completed successfully", taskBuffer);
+                    api.finish(agentId, agentToken, executionId, 0, "SUCCESS", "File transferred successfully");
+                } else {
+                    logger.error("[TASK-{}] ✗ File transfer failed", executionId);
+                    sendLog(executionId, "system", "File transfer failed", taskBuffer);
+                    api.finish(agentId, agentToken, executionId, 1, "FAILED", "File transfer failed");
+                }
             }
 
         } catch (Exception e) {
             logger.error("[TASK-{}] ✗ Exception during file transfer: {}", executionId, e.getMessage(), e);
             try {
                 sendLog(executionId, "stderr", "Exception: " + e.getMessage(), taskBuffer);
-                api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                }
             } catch (Exception ignored) {
                 logger.error("[TASK-{}] ✗ Failed to report task failure: {}", executionId, ignored.getMessage());
             }
@@ -212,7 +224,9 @@ class SimpleTaskRunner {
         try {
             logger.info("[TASK-{}] Initializing task execution", executionId);
             taskStatusMonitor.onTaskStart(executionId);
-            api.ackTask(agentId, agentToken, executionId);
+            synchronized (this) {
+                api.ackTask(agentId, agentToken, executionId);
+            }
             sendLog(executionId, "system", "Task started (lang: " + scriptLang + ")", taskBuffer);
 
             ProcessBuilder pb;
@@ -256,13 +270,17 @@ class SimpleTaskRunner {
                 logger.warn("[TASK-{}] ✗ Process timeout after {} seconds", executionId, timeoutSec);
                 p.destroyForcibly();
                 sendLog(executionId, "system", "Process timeout after " + timeoutSec + " seconds", taskBuffer);
-                api.finish(agentId, agentToken, executionId, -1, "TIMEOUT", "Process timeout");
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, -1, "TIMEOUT", "Process timeout");
+                }
             } else {
                 int exitCode = p.exitValue();
                 String status = exitCode == 0 ? "SUCCESS" : "FAILED";
                 logger.info("[TASK-{}] ✓ Process finished with exit code: {} ({})", executionId, exitCode, status);
                 sendLog(executionId, "system", "Process finished with exit code: " + exitCode, taskBuffer);
-                api.finish(agentId, agentToken, executionId, exitCode, status, "exitCode=" + exitCode);
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, exitCode, status, "exitCode=" + exitCode);
+                }
             }
 
             logReaderThread.join(2000);
@@ -271,7 +289,9 @@ class SimpleTaskRunner {
             logger.error("[TASK-{}] ✗ Exception during script execution: {}", executionId, e.getMessage(), e);
             try {
                 sendLog(executionId, "stderr", "Exception: " + e.getMessage(), taskBuffer);
-                api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                }
             } catch (Exception ignored) {
                 logger.error("[TASK-{}] ✗ Failed to report task failure: {}", executionId, ignored.getMessage());
             }

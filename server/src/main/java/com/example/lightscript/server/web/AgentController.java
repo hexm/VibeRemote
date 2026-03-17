@@ -80,7 +80,8 @@ public class AgentController {
 		}
 		return "unknown";
 	}
-	public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest req) {
+	@PostMapping("/register")
+public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest req) {
 		log.info("========================================");
 		log.info("AGENT REGISTRATION REQUEST");
 		log.info("========================================");
@@ -364,8 +365,27 @@ public class AgentController {
 				return ResponseEntity.badRequest().body(response);
 			}
 
+			// 清理公钥格式，移除可能存在的BEGIN/END标记和空白字符
+			String cleanPublicKeyContent = agentPublicKey
+				.replace("-----BEGIN PUBLIC KEY-----", "")
+				.replace("-----END PUBLIC KEY-----", "")
+				.replaceAll("\\s", "");
+			
+			// 重新构建正确的PEM格式
+			StringBuilder pemBuilder = new StringBuilder();
+			pemBuilder.append("-----BEGIN PUBLIC KEY-----\n");
+			
+			// 每64个字符换行
+			for (int i = 0; i < cleanPublicKeyContent.length(); i += 64) {
+				int end = Math.min(i + 64, cleanPublicKeyContent.length());
+				pemBuilder.append(cleanPublicKeyContent.substring(i, end)).append("\n");
+			}
+			
+			pemBuilder.append("-----END PUBLIC KEY-----");
+			String formattedPublicKey = pemBuilder.toString();
+
 			// 注册Agent公钥
-			serverEncryptionContext.registerAgentPublicKey(agentId, agentPublicKey);
+			serverEncryptionContext.registerAgentPublicKey(agentId, formattedPublicKey);
 
 			Map<String, Object> response = new HashMap<>();
 			response.put("success", true);
@@ -501,10 +521,26 @@ public class AgentController {
 		try {
 			// 注册Agent公钥（如果提供）
 			if (agentPublicKeyHeader != null && !agentPublicKeyHeader.trim().isEmpty()) {
-				String cleanPublicKey = "-----BEGIN PUBLIC KEY-----\n" + 
-					agentPublicKeyHeader.replaceAll("(.{64})", "$1\n") + 
-					"\n-----END PUBLIC KEY-----";
-				serverEncryptionContext.registerAgentPublicKey(req.getAgentId(), cleanPublicKey);
+				// 清理公钥格式，移除可能存在的BEGIN/END标记和空白字符
+				String cleanPublicKeyContent = agentPublicKeyHeader
+					.replace("-----BEGIN PUBLIC KEY-----", "")
+					.replace("-----END PUBLIC KEY-----", "")
+					.replaceAll("\\s", "");
+				
+				// 重新构建正确的PEM格式
+				StringBuilder pemBuilder = new StringBuilder();
+				pemBuilder.append("-----BEGIN PUBLIC KEY-----\n");
+				
+				// 每64个字符换行
+				for (int i = 0; i < cleanPublicKeyContent.length(); i += 64) {
+					int end = Math.min(i + 64, cleanPublicKeyContent.length());
+					pemBuilder.append(cleanPublicKeyContent.substring(i, end)).append("\n");
+				}
+				
+				pemBuilder.append("-----END PUBLIC KEY-----");
+				String formattedPublicKey = pemBuilder.toString();
+				
+				serverEncryptionContext.registerAgentPublicKey(req.getAgentId(), formattedPublicKey);
 			}
 			
 			// 获取Agent公钥
