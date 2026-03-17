@@ -1,6 +1,10 @@
-# LightScript Web 前端
+# ⚠️ LightScript Web 前端 (已废弃)
 
-LightScript 管理平台的前端界面，基于 Vue.js 3 开发。
+> **注意**: 此项目已被 `web-modern` 替代，请使用新的现代化前端界面。
+> 
+> **新版本地址**: `../web-modern/` (http://localhost:3001)
+
+LightScript 管理平台的传统前端界面，基于 Vue.js 3 开发。
 
 ## 技术栈
 

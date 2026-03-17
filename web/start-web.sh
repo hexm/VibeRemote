@@ -1,7 +1,20 @@
 #!/bin/bash
 
+echo "⚠️  警告: 此项目已废弃"
+echo "📍 请使用新的现代化前端: web-modern"
+echo "🌐 新版本地址: http://localhost:3001"
+echo "🔄 启动脚本: cd ../web-modern && ./start-modern.sh"
+echo ""
+echo "是否仍要启动传统版本? (y/N)"
+read -r response
+
+if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    echo "已取消启动，建议使用新版本"
+    exit 0
+fi
+
 echo "========================================"
-echo "LightScript Web 前端启动脚本"
+echo "LightScript Web 前端启动脚本 (已废弃)"
 echo "========================================"
 echo
 
