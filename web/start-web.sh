@@ -2,19 +2,19 @@
 
 # 获取脚本所在目录（项目根目录）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WEB_MODERN_DIR="$SCRIPT_DIR"
+WEB_DIR="$SCRIPT_DIR"
 
 echo "========================================"
-echo "LightScript 现代化前端启动脚本"
+echo "LightScript Web 前端启动脚本"
 echo "========================================"
 echo
 
-if [ ! -d "$WEB_MODERN_DIR" ]; then
-    echo "[ERROR] web-modern directory not found: $WEB_MODERN_DIR"
+if [ ! -d "$WEB_DIR" ]; then
+    echo "[ERROR] web directory not found: $WEB_DIR"
     exit 1
 fi
 
-cd "$WEB_MODERN_DIR"
+cd "$WEB_DIR"
 
 # 方案1: 优先使用 Node.js + Vite (最佳体验)
 if command -v node &> /dev/null && command -v npm &> /dev/null; then
@@ -98,7 +98,7 @@ cat > static/index.html << 'EOF'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LightScript - 现代化管理平台</title>
+    <title>LightScript - 管理平台</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/antd@5.12.8/dist/antd.min.js"></script>
@@ -120,7 +120,7 @@ cat > static/index.html << 'EOF'
                         <span class="text-2xl">🚀</span>
                     </div>
                     <h1 class="text-3xl font-bold text-gray-800 mb-2">LightScript</h1>
-                    <p class="text-gray-600">现代化分布式脚本管理平台</p>
+                    <p class="text-gray-600">分布式脚本管理平台</p>
                 </div>
                 
                 <div class="space-y-4">
@@ -139,12 +139,12 @@ cat > static/index.html << 'EOF'
                         </a>
                     </div>
                     
-                    <div class="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                        <h3 class="font-semibold text-yellow-800 mb-2">📱 旧版界面</h3>
-                        <p class="text-sm text-yellow-700 mb-2">Vue版本仍可使用：</p>
-                        <a href="http://localhost:3000" target="_blank" 
-                           class="text-sm bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition-colors">
-                            访问旧版前端
+                    <div class="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                        <h3 class="font-semibold text-purple-800 mb-2">📱 门户网站</h3>
+                        <p class="text-sm text-purple-700 mb-2">安装指南和文档：</p>
+                        <a href="http://localhost:8002" target="_blank" 
+                           class="text-sm bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 transition-colors">
+                            访问门户网站
                         </a>
                     </div>
                 </div>
@@ -183,7 +183,7 @@ elif command -v python &> /dev/null; then
 fi
 
 # 最后的备选方案
-echo "[ERROR] 无法启动现代化前端服务"
+echo "[ERROR] 无法启动前端服务"
 echo "        需要以下任一环境："
 echo "        1. Node.js + npm (推荐)"
 echo "        2. Python 3"
@@ -192,7 +192,7 @@ echo
 echo "安装建议:"
 echo "- 安装 Node.js: brew install node"
 echo "- 安装 Python: brew install python"
-echo "- 或直接在浏览器打开: file://$WEB_MODERN_DIR/static/index.html"
+echo "- 或直接在浏览器打开: file://$WEB_DIR/static/index.html"
 echo
 echo "========================================"
 exit 1

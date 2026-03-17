@@ -1,6 +1,6 @@
-# LightScript 现代化前端
+# LightScript Web 前端
 
-这是 LightScript 的全新现代化前端界面，采用最新的前端技术栈，提供更美观、更流畅的用户体验。
+这是 LightScript 的现代化前端界面，采用最新的前端技术栈，提供美观、流畅的用户体验。
 
 ## 🎨 技术栈
 
@@ -46,8 +46,8 @@
 ### 安装和启动
 
 ```bash
-# 进入现代化前端目录
-cd web-modern
+# 进入前端目录
+cd web
 
 # 安装依赖
 npm install
@@ -56,7 +56,7 @@ npm install
 npm run dev
 
 # 或使用启动脚本
-./start-modern.sh
+./start-web.sh
 ```
 
 ### 访问地址
@@ -66,7 +66,7 @@ npm run dev
 ## 📁 项目结构
 
 ```
-web-modern/
+web/
 ├── public/                 # 静态资源
 ├── src/
 │   ├── components/         # 可复用组件
@@ -185,10 +185,10 @@ EXPOSE 3001
 CMD ["npm", "run", "preview"]
 ```
 
-## 🔄 与旧版本对比
+## 🔄 与传统版本对比
 
-| 特性 | 旧版本 | 新版本 |
-|------|--------|--------|
+| 特性 | 传统方案 | 当前版本 |
+|------|----------|----------|
 | 框架 | Vue 3 + Element Plus | React 18 + Ant Design 5 |
 | 样式 | 传统CSS | Tailwind CSS |
 | 构建工具 | 无 | Vite |
@@ -259,4 +259,4 @@ MIT License
 
 ---
 
-**注意**: 这是LightScript的现代化前端重构版本，与原有的Vue版本并行存在。你可以选择使用任一版本，或者逐步迁移到新版本。
+**注意**: 这是LightScript的主要前端界面，提供完整的管理功能和现代化的用户体验。
