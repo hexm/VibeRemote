@@ -215,9 +215,10 @@ create_scripts() {
     local os=$2
     
     if [ "$os" = "windows" ]; then
-        # Windows 启动脚本 - 简化版
+        # Windows 启动脚本 - 修复乱码和日志问题
         cat > "$target_dir/start-agent.bat" << 'EOF'
 @echo off
+chcp 65001 >nul
 REM LightScript Agent 启动脚本 (Windows)
 
 REM 切换到脚本目录
@@ -272,14 +273,41 @@ echo Java版本信息:
 
 echo.
 echo 启动LightScript Agent...
-"%JAVA_CMD%" -Xmx512m -Xms128m -jar agent.jar
 
+REM 设置JVM参数，包括文件编码和日志配置
+set "JVM_OPTS=-Xmx512m -Xms128m -Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8"
+
+REM 后台启动Agent，重定向输出到日志文件
+start /b "" "%JAVA_CMD%" %JVM_OPTS% -jar agent.jar > logs\agent-console.log 2>&1
+
+REM 等待一下确保启动
+timeout /t 3 /nobreak >nul
+
+REM 检查是否启动成功
+tasklist /fi "imagename eq java.exe" | find "java.exe" >nul
+if %errorlevel% equ 0 (
+    echo ✅ Agent 启动成功
+    echo.
+    echo 使用以下命令:
+    echo   查看日志: type logs\agent.log
+    echo   查看控制台日志: type logs\agent-console.log
+    echo   停止服务: stop-agent.bat
+) else (
+    echo ❌ Agent 启动失败
+    echo 请查看日志文件: logs\agent-console.log
+    pause
+    exit /b 1
+)
+
+echo.
+echo Agent 已在后台运行，可以关闭此窗口
 pause
 EOF
 
-        # Windows 停止脚本
+        # Windows 停止脚本 - 修复乱码
         cat > "$target_dir/stop-agent.bat" << 'EOF'
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
@@ -342,31 +370,35 @@ if exist "%PID_FILE%" (
 REM 精确查找剩余的Agent进程（通过命令行参数匹配）
 echo 检查剩余的Agent进程...
 set FOUND_PROCESSES=0
-for /f "tokens=1,2" %%i in ('wmic process where "CommandLine like '%%agent.jar%%' and Name='java.exe'" get ProcessId^,CommandLine /format:csv 2^>nul ^| find /v "Node" ^| find /v "ProcessId" ^| find /v "^$"') do (
-    set REMAINING_PID=%%j
-    if defined REMAINING_PID (
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv ^| find "java.exe"') do (
+    set JAVA_PID=%%i
+    set JAVA_PID=!JAVA_PID:"=!
+    
+    REM 检查是否是Agent进程
+    wmic process where "ProcessId=!JAVA_PID!" get CommandLine /format:list 2>nul | find "agent.jar" >nul
+    if !errorlevel! equ 0 (
         set FOUND_PROCESSES=1
-        echo 发现剩余的Agent进程: !REMAINING_PID!
-        echo 停止进程 !REMAINING_PID!...
+        echo 发现Agent进程: !JAVA_PID!
+        echo 停止进程 !JAVA_PID!...
         
         REM 尝试优雅停止
-        taskkill /pid !REMAINING_PID! >nul 2>&1
+        taskkill /pid !JAVA_PID! >nul 2>&1
         
         REM 等待进程退出
         for /l %%k in (1,1,10) do (
-            tasklist /fi "PID eq !REMAINING_PID!" 2>nul | find "!REMAINING_PID!" >nul
+            tasklist /fi "PID eq !JAVA_PID!" 2>nul | find "!JAVA_PID!" >nul
             if !errorlevel! neq 0 (
-                echo 进程 !REMAINING_PID! 已停止
+                echo 进程 !JAVA_PID! 已停止
                 goto :next_process
             )
             timeout /t 1 /nobreak >nul
         )
         
         REM 强制停止
-        tasklist /fi "PID eq !REMAINING_PID!" 2>nul | find "!REMAINING_PID!" >nul
+        tasklist /fi "PID eq !JAVA_PID!" 2>nul | find "!JAVA_PID!" >nul
         if !errorlevel! equ 0 (
-            echo 强制停止进程 !REMAINING_PID!...
-            taskkill /f /pid !REMAINING_PID! >nul 2>&1
+            echo 强制停止进程 !JAVA_PID!...
+            taskkill /f /pid !JAVA_PID! >nul 2>&1
         )
         
         :next_process
@@ -948,7 +980,56 @@ build_package() {
     # 复制基础文件
     cp "$AGENT_JAR" "$temp_dir/agent.jar"
     cp "$UPGRADER_JAR" "$temp_dir/upgrader.jar"
-    cp "$SCRIPT_DIR/src/main/resources/agent.properties" "$temp_dir/"
+    
+    # 创建配置文件，根据平台设置默认服务器地址
+    if [ "$os" = "windows" ]; then
+        # Windows版本默认连接阿里云
+        cat > "$temp_dir/agent.properties" << 'EOF'
+# LightScript Agent 配置文件
+
+# 服务器配置 (默认连接阿里云)
+server.url=http://8.138.114.34:8080
+server.register.token=dev-register-token
+
+# Agent配置
+agent.name=${hostname}
+agent.labels=
+
+# 心跳配置
+heartbeat.interval=30000
+heartbeat.system.info.interval=600000
+heartbeat.max.failures=3
+
+# 任务配置
+task.pull.max=10
+task.pull.interval=5000
+
+# 升级配置
+upgrade.backup.keep=1
+upgrade.verify.timeout=15000
+
+# 日志配置
+log.level=INFO
+log.file.max.size=10MB
+log.file.max.count=5
+
+# 批量日志配置 (第一阶段性能优化)
+log.batch.enabled=true
+log.batch.size=1000
+log.batch.timeout=5000
+log.compression.enabled=false
+log.async.enabled=true
+log.retry.max=3
+
+# 加密配置 (第二阶段通信加密)
+encryption.enabled=true
+encryption.key.rotation.days=30
+encryption.algorithm=AES-256-GCM
+EOF
+    else
+        # Unix版本使用原配置文件
+        cp "$SCRIPT_DIR/src/main/resources/agent.properties" "$temp_dir/"
+    fi
     
     # 创建启动脚本
     create_scripts "$temp_dir" "$os"

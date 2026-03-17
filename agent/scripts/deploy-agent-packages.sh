@@ -114,22 +114,20 @@ echo -e "${BLUE}上传进度:${NC}"
 
 upload_start_time=$(date +%s)
 
-for i, package in "${!PACKAGES[@]}"; do
+for i in "${!PACKAGES[@]}"; do
+    package="${PACKAGES[i]}"
     package_path="$RELEASE_DIR/$package"
     progress=$((i + 1))
     total=${#PACKAGES[@]}
     
     echo -e "${BLUE}[$progress/$total] 上传 $package...${NC}"
     
-    # 使用rsync进行断点续传和进度显示
-    if command -v rsync >/dev/null 2>&1; then
-        rsync -avz --progress "$package_path" "${SERVER_USER}@${SERVER_IP}:${REMOTE_RELEASES_DIR}/"
-    else
-        # 备用方案：使用scp
-        scp "$package_path" "${SERVER_USER}@${SERVER_IP}:${REMOTE_RELEASES_DIR}/"
-    fi
+    # 使用scp上传（rsync在某些系统上不可用）
+    echo -e "${BLUE}使用scp上传...${NC}"
+    scp "$package_path" "${SERVER_USER}@${SERVER_IP}:${REMOTE_RELEASES_DIR}/"
+    upload_result=$?
     
-    if [ $? -eq 0 ]; then
+    if [ $upload_result -eq 0 ]; then
         echo -e "${GREEN}  ✅ $package 上传成功${NC}"
     else
         echo -e "${RED}  ❌ $package 上传失败${NC}"
