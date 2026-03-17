@@ -396,8 +396,8 @@
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('linux-manual')">复制</button>
                                 <pre id="linux-manual"># 下载客户端
-wget http://8.138.114.34/releases/lightscript-agent-linux.tar.gz
-tar -xzf lightscript-agent-linux.tar.gz
+wget http://8.138.114.34/agent/release/lightscript-agent-0.4.0-linux-x64.tar.gz
+tar -xzf lightscript-agent-0.4.0-linux-x64.tar.gz
 cd lightscript-agent
 
 # 配置服务器地址
@@ -461,7 +461,7 @@ iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scrip
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
                                 <pre id="windows-manual"># 下载并解压
-Invoke-WebRequest -Uri "http://8.138.114.34/releases/lightscript-agent-windows.zip" -OutFile "lightscript-agent.zip"
+Invoke-WebRequest -Uri "http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip" -OutFile "lightscript-agent.zip"
 Expand-Archive -Path "lightscript-agent.zip" -DestinationPath "C:\Program Files\LightScript"
 
 # 安装服务

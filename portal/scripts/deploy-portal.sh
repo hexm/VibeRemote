@@ -8,9 +8,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_IP="8.138.114.34"
 SERVER_USER="root"
-REMOTE_PORTAL_DIR="/var/www/html"
-REMOTE_RELEASES_DIR="/var/www/html/agent/release"
-REMOTE_SCRIPTS_DIR="/var/www/html/scripts"
+REMOTE_PORTAL_DIR="/opt/lightscript/portal"
+REMOTE_RELEASES_DIR="/opt/lightscript/portal/agent/release"
+REMOTE_SCRIPTS_DIR="/opt/lightscript/portal/scripts"
 
 echo "🚀 开始部署 LightScript 门户网站和安装包..."
 echo "📡 目标服务器: $SERVER_USER@$SERVER_IP"
