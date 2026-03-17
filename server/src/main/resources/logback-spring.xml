@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <!-- 定义日志文件路径 -->
+    <property name="LOG_HOME" value="./logs" />
+    
     <!-- 控制台输出 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level [SERVER] - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
         <!-- 过滤掉一些不重要的日志 -->
@@ -16,18 +19,16 @@
         </filter>
     </appender>
 
-    <!-- 文件输出 -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/lightscript-server.log</file>
+    <!-- 统一服务器日志文件 -->
+    <appender name="UNIFIED_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/lightscript-server.log</file>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [SERVER] - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/lightscript-server.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>100MB</maxFileSize>
-            </timeBasedFileNamingAndTriggeringPolicy>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/lightscript-server.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>3GB</totalSizeCap>
         </rollingPolicy>
@@ -35,47 +36,96 @@
 
     <!-- 错误日志单独输出 -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/lightscript-server-error.log</file>
+        <file>${LOG_HOME}/lightscript-server-error.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>ERROR</level>
             <onMatch>ACCEPT</onMatch>
             <onMismatch>DENY</onMismatch>
         </filter>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [SERVER] - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/lightscript-server-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>100MB</maxFileSize>
-            </timeBasedFileNamingAndTriggeringPolicy>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/lightscript-server-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
     </appender>
 
-    <!-- 业务日志 -->
-    <appender name="BUSINESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/lightscript-business.log</file>
+    <!-- Agent相关业务日志 -->
+    <appender name="AGENT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/lightscript-agent-ops.log</file>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [AGENT-OPS] - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/lightscript-business.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>100MB</maxFileSize>
-            </timeBasedFileNamingAndTriggeringPolicy>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/lightscript-agent-ops.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>2GB</totalSizeCap>
         </rollingPolicy>
     </appender>
 
-    <!-- 业务日志记录器 -->
-    <logger name="com.example.lightscript.server.service" level="INFO" additivity="false">
-        <appender-ref ref="BUSINESS_FILE"/>
-        <appender-ref ref="CONSOLE"/>
+    <!-- 任务执行日志 -->
+    <appender name="TASK_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/lightscript-task-ops.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [TASK-OPS] - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/lightscript-task-ops.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 用户认证日志 -->
+    <appender name="AUTH_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/lightscript-auth.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [AUTH] - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/lightscript-auth.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Agent服务日志记录器 -->
+    <logger name="com.example.lightscript.server.service.AgentService" level="DEBUG" additivity="true">
+        <appender-ref ref="AGENT_FILE"/>
+    </logger>
+    
+    <!-- Agent控制器日志记录器 -->
+    <logger name="com.example.lightscript.server.web.AgentController" level="DEBUG" additivity="true">
+        <appender-ref ref="AGENT_FILE"/>
+    </logger>
+
+    <!-- 任务服务日志记录器 -->
+    <logger name="com.example.lightscript.server.service.TaskService" level="DEBUG" additivity="true">
+        <appender-ref ref="TASK_FILE"/>
+    </logger>
+    
+    <!-- 任务执行服务日志记录器 -->
+    <logger name="com.example.lightscript.server.service.TaskExecutionService" level="DEBUG" additivity="true">
+        <appender-ref ref="TASK_FILE"/>
+    </logger>
+
+    <!-- 认证相关日志记录器 -->
+    <logger name="com.example.lightscript.server.web.AuthController" level="DEBUG" additivity="true">
+        <appender-ref ref="AUTH_FILE"/>
+    </logger>
+    
+    <logger name="com.example.lightscript.server.security" level="DEBUG" additivity="true">
+        <appender-ref ref="AUTH_FILE"/>
     </logger>
 
     <!-- 完全关闭SQL调试日志 -->
@@ -83,18 +133,18 @@
     <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="OFF" additivity="false"/>
     <logger name="org.hibernate.type" level="OFF" additivity="false"/>
     <logger name="org.hibernate" level="WARN" additivity="false">
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="UNIFIED_FILE"/>
     </logger>
     
     <!-- 关闭Spring Web的调试日志 -->
     <logger name="org.springframework.web" level="WARN" additivity="false">
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="UNIFIED_FILE"/>
     </logger>
 
     <!-- 根日志记录器 -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="UNIFIED_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </root>
 
@@ -103,16 +153,17 @@
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
-        <!-- 开发环境只显示业务日志的DEBUG级别 -->
+        <!-- 开发环境显示业务日志的DEBUG级别 -->
         <logger name="com.example.lightscript.server" level="DEBUG" additivity="false">
             <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="UNIFIED_FILE"/>
         </logger>
     </springProfile>
 
     <!-- 生产环境配置 -->
     <springProfile name="prod">
         <root level="INFO">
-            <appender-ref ref="FILE"/>
+            <appender-ref ref="UNIFIED_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
         </root>
     </springProfile>

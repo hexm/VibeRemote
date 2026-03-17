@@ -77,7 +77,7 @@ if [ $? -ne 0 ]; then
     echo "❌ Agent编译失败"
     exit 1
 fi
-# 复制JAR文件到根目录
+# 复制JAR文件到根目录并构建安装包
 cp target/agent-*-jar-with-dependencies.jar agent.jar
 echo "✅ Agent编译完成"
 cd ..
@@ -177,15 +177,22 @@ done
 # 启动本地测试Agent
 echo "启动本地测试Agent..."
 cd agent/localtest
-./start-localtest-agent.sh
-if [ $? -eq 0 ]; then
+nohup ./start-localtest-agent.sh > ../../agent-restart.log 2>&1 &
+AGENT_PID=$!
+cd ../..
+
+# 等待Agent启动
+echo "等待Agent启动..."
+sleep 3
+
+# 检查Agent是否启动成功
+if pgrep -f "agent.jar" >/dev/null 2>&1; then
     echo "✅ 本地测试Agent启动成功"
 else
     echo "❌ 本地测试Agent启动失败"
-    echo "查看日志: tail -f agent/localtest/logs/agent-startup.log"
+    echo "查看日志: tail -f agent-restart.log"
     exit 1
 fi
-cd ../..
 
 echo "✅ 所有服务启动完成"
 echo
@@ -250,7 +257,7 @@ echo "📝 日志文件:"
 echo "  • 服务器: server-restart.log"
 echo "  • 前端: web-restart.log"
 echo "  • 门户: portal-restart.log"
-echo "  • Agent: agent/localtest/logs/"
+echo "  • Agent: agent-restart.log"
 echo ""
 echo "🔧 管理命令:"
 echo "  • 查看所有日志: tail -f *-restart.log"

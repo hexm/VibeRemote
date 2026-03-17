@@ -18,11 +18,55 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# 显示使用说明
+show_usage() {
+    echo "用法: $0 [选项]"
+    echo ""
+    echo "选项:"
+    echo "  --platform=PLATFORM    只上传指定平台的安装包"
+    echo "                         可选值: windows, linux, macos-x64, macos-arm64, all"
+    echo "  --help                 显示此帮助信息"
+    echo ""
+    echo "示例:"
+    echo "  $0                     # 上传所有平台安装包"
+    echo "  $0 --platform=windows # 只上传Windows安装包"
+    echo "  $0 --platform=linux   # 只上传Linux安装包"
+    echo "  $0 --platform=macos-x64 # 只上传macOS x64安装包"
+    echo "  $0 --platform=all     # 上传所有平台安装包"
+}
+
+# 解析命令行参数
+PLATFORM="all"
+AUTO_CONFIRM=false
+
+for arg in "$@"; do
+    case $arg in
+        --platform=*)
+            PLATFORM="${arg#*=}"
+            shift
+            ;;
+        --yes|-y)
+            AUTO_CONFIRM=true
+            shift
+            ;;
+        --help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}未知参数: $arg${NC}"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
 echo -e "${BLUE}=========================================="
 echo "LightScript Agent 安装包部署脚本"
 echo -e "==========================================${NC}"
 echo -e "服务器: ${GREEN}${SERVER_IP}${NC}"
 echo -e "目标目录: ${GREEN}${REMOTE_RELEASES_DIR}${NC}"
+echo -e "部署平台: ${GREEN}${PLATFORM}${NC}"
 echo ""
 
 # 检查SSH连接
@@ -45,13 +89,36 @@ if [ ! -d "$RELEASE_DIR" ]; then
     exit 1
 fi
 
-# 检查安装包文件
-PACKAGES=(
+# 根据平台选择要上传的安装包
+ALL_PACKAGES=(
     "lightscript-agent-0.4.0-windows-x64.zip"
     "lightscript-agent-0.4.0-linux-x64.tar.gz"
     "lightscript-agent-0.4.0-macos-x64.tar.gz"
     "lightscript-agent-0.4.0-macos-arm64.tar.gz"
 )
+
+case "$PLATFORM" in
+    "windows")
+        PACKAGES=("lightscript-agent-0.4.0-windows-x64.zip")
+        ;;
+    "linux")
+        PACKAGES=("lightscript-agent-0.4.0-linux-x64.tar.gz")
+        ;;
+    "macos-x64")
+        PACKAGES=("lightscript-agent-0.4.0-macos-x64.tar.gz")
+        ;;
+    "macos-arm64")
+        PACKAGES=("lightscript-agent-0.4.0-macos-arm64.tar.gz")
+        ;;
+    "all")
+        PACKAGES=("${ALL_PACKAGES[@]}")
+        ;;
+    *)
+        echo -e "${RED}❌ 不支持的平台: $PLATFORM${NC}"
+        echo -e "${YELLOW}支持的平台: windows, linux, macos-x64, macos-arm64, all${NC}"
+        exit 1
+        ;;
+esac
 
 MISSING_PACKAGES=()
 TOTAL_SIZE=0
@@ -76,16 +143,34 @@ if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
 fi
 
 TOTAL_SIZE_MB=$((TOTAL_SIZE / 1024 / 1024))
-echo -e "${GREEN}✅ 所有安装包文件就绪，总大小: ${TOTAL_SIZE_MB}MB${NC}"
+echo -e "${GREEN}✅ 选定的安装包文件就绪，总大小: ${TOTAL_SIZE_MB}MB${NC}"
+echo ""
+
+# 显示将要上传的文件
+echo -e "${BLUE}将要上传的文件:${NC}"
+for package in "${PACKAGES[@]}"; do
+    package_path="$RELEASE_DIR/$package"
+    if [ -f "$package_path" ]; then
+        size=$(stat -f%z "$package_path" 2>/dev/null || stat -c%s "$package_path" 2>/dev/null || echo "0")
+        size_mb=$((size / 1024 / 1024))
+        echo -e "  📦 $package (${size_mb}MB)"
+    fi
+done
 echo ""
 
 # 询问是否继续
 echo -e "${YELLOW}⚠️  即将上传 ${TOTAL_SIZE_MB}MB 的安装包文件到阿里云${NC}"
-read -p "是否继续？(y/N): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}取消上传${NC}"
-    exit 0
+
+# 检查是否有自动确认参数
+if [ "$AUTO_CONFIRM" = true ]; then
+    echo "自动确认上传..."
+else
+    read -p "是否继续？(y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}取消上传${NC}"
+        exit 0
+    fi
 fi
 
 # 创建远程目录
@@ -139,7 +224,7 @@ upload_end_time=$(date +%s)
 upload_duration=$((upload_end_time - upload_start_time))
 upload_speed=$((TOTAL_SIZE_MB / upload_duration))
 
-echo -e "${GREEN}✅ 所有安装包上传完成${NC}"
+echo -e "${GREEN}✅ 选定的安装包上传完成${NC}"
 echo -e "${BLUE}上传统计: ${TOTAL_SIZE_MB}MB 用时 ${upload_duration}秒，平均速度 ${upload_speed}MB/s${NC}"
 echo ""
 
@@ -172,7 +257,7 @@ echo -e "${GREEN}=========================================="
 echo "✅ Agent 安装包部署完成！"
 echo -e "==========================================${NC}"
 echo ""
-echo -e "${BLUE}下载链接：${NC}"
+echo -e "${BLUE}已上传的安装包：${NC}"
 for package in "${PACKAGES[@]}"; do
     echo -e "  • http://${SERVER_IP}/agent/release/${package}"
 done

@@ -736,39 +736,79 @@ public class TaskService {
      */
     @Transactional
     public List<TaskSpec> pullTasks(String agentId, int maxTasks) {
-        // 检查Agent是否正在升级
-        Optional<Agent> agentOpt = agentRepository.findByAgentId(agentId);
-        if (agentOpt.isPresent()) {
-            Agent agent = agentOpt.get();
-            if ("UPGRADING".equals(agent.getStatus())) {
-                log.info("Agent {} is upgrading, no tasks will be assigned", agentId);
-                return Collections.emptyList(); // 升级中不分发任务
+        log.debug("========================================");
+        log.debug("TASK PULL REQUEST");
+        log.debug("========================================");
+        log.debug("Agent ID: {}", agentId);
+        log.debug("Max tasks: {}", maxTasks);
+        
+        try {
+            // 检查Agent是否正在升级
+            Optional<Agent> agentOpt = agentRepository.findByAgentId(agentId);
+            if (agentOpt.isPresent()) {
+                Agent agent = agentOpt.get();
+                if ("UPGRADING".equals(agent.getStatus())) {
+                    log.info("Agent {} is upgrading, no tasks will be assigned", agentId);
+                    log.debug("========================================");
+                    return Collections.emptyList(); // 升级中不分发任务
+                }
+                log.debug("Agent status: {}", agent.getStatus());
+            } else {
+                log.warn("Agent not found: {}", agentId);
+                log.debug("========================================");
+                return Collections.emptyList();
             }
+            
+            // 使用新的Repository方法，只查询可执行状态任务的待处理执行实例
+            List<TaskExecution> pendingExecutions = taskExecutionRepository.findPendingExecutionsForActiveTasks(agentId);
+            log.debug("Found {} pending executions for agent", pendingExecutions.size());
+            
+            List<TaskSpec> result = pendingExecutions.stream()
+                    .limit(maxTasks)
+                    .peek(execution -> {
+                        // 更新执行状态为 PULLED
+                        taskExecutionService.updateStatus(execution.getId(), "PULLED");
+                        log.info("✓ Task execution {} pulled by agent {} (taskId: {})", 
+                            execution.getId(), agentId, execution.getTaskId());
+                    })
+                    .map(execution -> {
+                        // 获取任务信息并转换为 TaskSpec
+                        Task task = taskRepository.findById(execution.getTaskId()).orElse(null);
+                        if (task != null) {
+                            TaskSpec spec = convertToTaskSpec(task, execution);
+                            spec.setTaskId(execution.getTaskId());
+                            spec.setExecutionId(execution.getId()); // 设置执行实例ID
+                            log.debug("Task spec created: taskId={}, executionId={}, scriptLang={}", 
+                                spec.getTaskId(), spec.getExecutionId(), spec.getScriptLang());
+                            return spec;
+                        } else {
+                            log.warn("Task not found for execution: {}", execution.getId());
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            
+            if (result.isEmpty()) {
+                log.debug("No tasks available for agent: {}", agentId);
+            } else {
+                log.info("✓ Assigned {} tasks to agent: {}", result.size(), agentId);
+                if (log.isDebugEnabled()) {
+                    String executionIds = result.stream()
+                        .map(spec -> String.valueOf(spec.getExecutionId()))
+                        .collect(Collectors.joining(", "));
+                    log.debug("Execution IDs: [{}]", executionIds);
+                }
+            }
+            
+            log.debug("========================================");
+            return result;
+            
+        } catch (Exception e) {
+            log.error("✗ Task pull failed for agent {}: {}", agentId, e.getMessage(), e);
+            log.debug("========================================");
+            throw e;
         }
-        
-        // 使用新的Repository方法，只查询可执行状态任务的待处理执行实例
-        List<TaskExecution> pendingExecutions = taskExecutionRepository.findPendingExecutionsForActiveTasks(agentId);
-        
-        return pendingExecutions.stream()
-                .limit(maxTasks)
-                .peek(execution -> {
-                    // 更新执行状态为 PULLED
-                    taskExecutionService.updateStatus(execution.getId(), "PULLED");
-                    log.info("Task execution {} pulled by agent {}", execution.getId(), agentId);
-                })
-                .map(execution -> {
-                    // 获取任务信息并转换为 TaskSpec
-                    Task task = taskRepository.findById(execution.getTaskId()).orElse(null);
-                    if (task != null) {
-                        TaskSpec spec = convertToTaskSpec(task, execution);
-                        spec.setTaskId(execution.getTaskId());
-                        spec.setExecutionId(execution.getId()); // 设置执行实例ID
-                        return spec;
-                    }
-                    return null;
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
     }
     
     /**
@@ -776,36 +816,60 @@ public class TaskService {
      */
     @Transactional
     public void ackTaskExecution(Long executionId) {
-        Optional<TaskExecution> optExecution = taskExecutionService.getExecution(executionId);
+        log.info("========================================");
+        log.info("TASK EXECUTION ACK");
+        log.info("========================================");
+        log.info("Execution ID: {}", executionId);
         
-        if (!optExecution.isPresent()) {
-            log.warn("Execution {} not found for ACK", executionId);
-            throw new IllegalArgumentException("执行实例不存在: " + executionId);
+        try {
+            Optional<TaskExecution> optExecution = taskExecutionService.getExecution(executionId);
+            
+            if (!optExecution.isPresent()) {
+                log.error("✗ Execution {} not found for ACK", executionId);
+                log.info("========================================");
+                throw new IllegalArgumentException("执行实例不存在: " + executionId);
+            }
+            
+            TaskExecution execution = optExecution.get();
+            log.info("Task ID: {}", execution.getTaskId());
+            log.info("Agent ID: {}", execution.getAgentId());
+            log.info("Current status: {}", execution.getStatus());
+            
+            if (!"PULLED".equals(execution.getStatus())) {
+                log.warn("✗ Execution {} ACK ignored, status is {} (expected: PULLED)", 
+                    executionId, execution.getStatus());
+                log.info("========================================");
+                return;
+            }
+            
+            execution.setStatus("RUNNING");
+            execution.setStartedAt(LocalDateTime.now());
+            
+            // 生成日志文件路径
+            String logFilePath = generateLogFilePath(execution);
+            execution.setLogFilePath(logFilePath);
+            log.info("Log file path: {}", logFilePath);
+            
+            taskExecutionRepository.save(execution);
+            log.info("Task execution {} acknowledged and started, log file: {}", 
+                execution.getId(), logFilePath);
+            
+            // 增加Agent任务计数
+            agentService.incrementTaskCount(execution.getAgentId());
+            
+            // 更新任务状态
+            updateTaskStatus(execution.getTaskId());
+            
+            log.info("✓ Task execution acknowledged successfully");
+            log.info("Status: PULLED -> RUNNING");
+            log.info("Started at: {}", execution.getStartedAt());
+            log.info("========================================");
+            
+        } catch (Exception e) {
+            log.error("✗ Task execution ACK failed for executionId {}: {}", executionId, e.getMessage(), e);
+            log.info("========================================");
+            throw e;
         }
-        
-        TaskExecution execution = optExecution.get();
-        
-        if (!"PULLED".equals(execution.getStatus())) {
-            log.warn("Execution {} ACK ignored, status is {}", executionId, execution.getStatus());
-            return;
-        }
-        
-        execution.setStatus("RUNNING");
-        execution.setStartedAt(LocalDateTime.now());
-        
-        // 生成日志文件路径
-        String logFilePath = generateLogFilePath(execution);
-        execution.setLogFilePath(logFilePath);
-        
-        taskExecutionRepository.save(execution);
-        log.info("Task execution {} acknowledged and started, log file: {}", 
-            execution.getId(), logFilePath);
-        
-        // 增加Agent任务计数
-        agentService.incrementTaskCount(execution.getAgentId());
-        
-        // 更新任务状态
-        updateTaskStatus(execution.getTaskId());
     }
     
     /**

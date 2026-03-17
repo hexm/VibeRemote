@@ -48,9 +48,14 @@ public class AgentMain {
         String server = args.length > 0 ? args[0] : config.getServerUrl();
         String registerToken = args.length > 1 ? args[1] : config.getRegisterToken();
 
+        logger.info("========================================");
         logger.info("Starting LightScript Agent...");
+        logger.info("========================================");
         logger.info("Server: {}", server);
         logger.info("Register Token: {}", (registerToken.length() > 10 ? registerToken.substring(0, 10) + "..." : registerToken));
+        logger.info("Working Directory: {}", System.getProperty("user.dir"));
+        logger.info("Java Version: {}", System.getProperty("java.version"));
+        logger.info("OS: {} {}", System.getProperty("os.name"), System.getProperty("os.version"));
         
         // 打印配置信息（调试模式）
         if ("DEBUG".equalsIgnoreCase(config.getLogLevel())) {
@@ -82,27 +87,43 @@ public class AgentMain {
         
         // 如果有已保存的凭证，先尝试验证
         if (savedCredentials != null) {
+            logger.info("========================================");
+            logger.info("CREDENTIAL VALIDATION");
+            logger.info("========================================");
             logger.info("Found saved agent credentials, validating...");
+            logger.info("Saved Agent ID: {}", savedCredentials.getAgentId());
             try {
                 // 尝试发送心跳验证凭证是否有效
                 api.heartbeat(savedCredentials.getAgentId(), savedCredentials.getAgentToken(), false);
                 agentId = savedCredentials.getAgentId();
                 agentToken = savedCredentials.getAgentToken();
-                logger.info("Saved credentials are valid, reusing Agent ID: {}", agentId);
+                logger.info("✓ Saved credentials are valid, reusing Agent ID: {}", agentId);
+                logger.info("========================================");
             } catch (Exception e) {
-                logger.warn("Saved credentials are invalid: {}, will re-register", e.getMessage());
+                logger.warn("✗ Saved credentials are invalid: {}", e.getMessage());
+                logger.info("Deleting invalid credentials and will re-register");
+                logger.info("========================================");
                 idStore.delete(); // 删除无效的凭证
             }
+        } else {
+            logger.info("========================================");
+            logger.info("NO SAVED CREDENTIALS FOUND");
+            logger.info("========================================");
+            logger.info("No saved credentials found, will register new agent");
         }
         
         // 如果没有有效凭证，进行注册
         if (agentId == null) {
+            logger.info("========================================");
+            logger.info("AGENT REGISTRATION");
+            logger.info("========================================");
             int retryCount = 0;
             int retryDelay = 1000; // 初始延迟1秒
             
             while (agentId == null) {
                 try {
                     logger.info("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
+                    logger.info("Hostname: {}, OS Type: {}", hostname, osType);
                     Map<String, Object> reg = api.register(registerToken, hostname, osType);
                     agentId = String.valueOf(reg.get("agentId"));
                     agentToken = String.valueOf(reg.get("agentToken"));
@@ -110,12 +131,13 @@ public class AgentMain {
                     // 保存新的凭证
                     idStore.save(agentId, agentToken);
                     
-                    logger.info("Agent registered successfully!");
+                    logger.info("✓ Agent registered successfully!");
                     logger.info("Agent ID: {}", agentId);
-                    logger.info("Agent Token: {}", agentToken);
+                    logger.info("Agent Token: {}", agentToken.substring(0, Math.min(10, agentToken.length())) + "...");
+                    logger.info("========================================");
                 } catch (Exception e) {
                     retryCount++;
-                    logger.error("Failed to register agent: {}", e.getMessage());
+                    logger.error("✗ Failed to register agent (attempt {}): {}", retryCount, e.getMessage());
                     logger.info("Retrying in {} seconds...", (retryDelay / 1000));
                     
                     try {
@@ -147,6 +169,9 @@ public class AgentMain {
         // 初始化加密上下文（如果启用加密）
         AgentEncryptionContext encryptionContext = null;
         if (config.isEncryptionEnabled()) {
+            logger.info("========================================");
+            logger.info("ENCRYPTION INITIALIZATION");
+            logger.info("========================================");
             try {
                 EncryptionService encryptionService = new EncryptionService();
                 encryptionContext = new AgentEncryptionContext(finalAgentId, encryptionService, api);
@@ -155,9 +180,12 @@ public class AgentMain {
                 // 设置凭证并注册公钥
                 encryptionContext.updateCredentials(finalAgentId, finalAgentToken);
                 
-                logger.info("Encryption context initialized for agent: {}", finalAgentId);
+                logger.info("✓ Encryption context initialized for agent: {}", finalAgentId);
+                logger.info("Encryption algorithm: {}", config.getProperty("encryption.algorithm", "AES-256-GCM"));
+                logger.info("========================================");
             } catch (Exception e) {
-                logger.error("Failed to initialize encryption context: {}", e.getMessage());
+                logger.error("✗ Failed to initialize encryption context: {}", e.getMessage());
+                logger.info("========================================");
                 // 如果加密初始化失败，可以选择继续运行（降级为明文）或退出
                 if (config.isEncryptionRequired()) {
                     logger.error("Encryption is required but initialization failed. Exiting...");
@@ -165,6 +193,11 @@ public class AgentMain {
                     System.exit(1);
                 }
             }
+        } else {
+            logger.info("========================================");
+            logger.info("ENCRYPTION DISABLED");
+            logger.info("========================================");
+            logger.info("Encryption is disabled in configuration");
         }
 
         // 创建任务执行器和升级相关组件
@@ -185,34 +218,52 @@ public class AgentMain {
 
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Agent shutting down...");
+            logger.info("========================================");
+            logger.info("AGENT SHUTDOWN INITIATED");
+            logger.info("========================================");
             
             // 主动向服务器报告离线状态
             try {
                 if (currentAgentId[0] != null && currentAgentToken[0] != null) {
                     logger.info("Notifying server of agent shutdown...");
                     api.offline(currentAgentId[0], currentAgentToken[0]);
-                    logger.info("Server notified successfully");
+                    logger.info("✓ Server notified successfully");
                 }
             } catch (Exception e) {
-                logger.warn("Failed to notify server of shutdown: {}", e.getMessage());
+                logger.warn("✗ Failed to notify server of shutdown: {}", e.getMessage());
             }
             
+            logger.info("Shutting down task runner...");
             taskRunner.shutdown();
+            logger.info("Shutting down task executor...");
             taskExecutor.shutdown();
+            logger.info("Shutting down upgrade scheduler...");
             upgradeScheduler.shutdown();
             try {
                 if (client != null) {
+                    logger.info("Closing HTTP client...");
                     client.close();
+                    logger.info("✓ HTTP client closed");
                 }
             } catch (Exception e) {
                 // 忽略关闭错误，避免在关闭过程中抛出异常
                 logger.warn("Warning: Error closing HTTP client: {}", e.getMessage());
             }
             releaseLock(); // 释放文件锁
+            logger.info("✓ Agent shutdown complete");
+            logger.info("========================================");
         }));
 
-        logger.info("Agent started. Waiting for tasks...");
+        logger.info("========================================");
+        logger.info("AGENT STARTUP COMPLETE");
+        logger.info("========================================");
+        logger.info("Agent ID: {}", finalAgentId);
+        logger.info("Heartbeat interval: {}ms", config.getHeartbeatInterval());
+        logger.info("Task pull interval: {}ms", config.getTaskPullInterval());
+        logger.info("Max heartbeat failures: {}", config.getMaxHeartbeatFailures());
+        logger.info("Encryption enabled: {}", config.isEncryptionEnabled());
+        logger.info("Agent started successfully. Waiting for tasks...");
+        logger.info("========================================");
 
         // 主循环
         long lastHeartbeat = 0L;
@@ -227,9 +278,11 @@ public class AgentMain {
             try {
                 // 检查是否需要重新注册
                 if (needReRegister[0]) {
-                    logger.info("========================================");
-                    logger.info("Connection lost. Re-registering agent...");
-                    logger.info("========================================");
+                    logger.error("========================================");
+                    logger.error("CONNECTION LOST - RE-REGISTRATION REQUIRED");
+                    logger.error("========================================");
+                    logger.error("Heartbeat failures: {}/{}", heartbeatFailures, MAX_HEARTBEAT_FAILURES);
+                    logger.info("Starting re-registration process...");
                     
                     int retryCount = 0;
                     int retryDelay = 1000;
@@ -238,6 +291,7 @@ public class AgentMain {
                         try {
                             retryCount++;
                             logger.info("Re-registration attempt {}...", retryCount);
+                            logger.info("Hostname: {}, OS Type: {}", hostname, osType);
                             Map<String, Object> reg = api.register(registerToken, hostname, osType);
                             currentAgentId[0] = String.valueOf(reg.get("agentId"));
                             currentAgentToken[0] = String.valueOf(reg.get("agentToken"));
@@ -251,15 +305,17 @@ public class AgentMain {
                             // 更新加密上下文的凭证
                             if (currentEncryptionContext[0] != null) {
                                 currentEncryptionContext[0].updateCredentials(currentAgentId[0], currentAgentToken[0]);
+                                logger.info("✓ Encryption context credentials updated");
                             }
                             
                             // 更新升级报告器的凭证
                             upgradeReporter = new UpgradeStatusReporter(server, client, MAPPER, currentAgentId[0], currentAgentToken[0]);
                             upgradeExecutor = new UpgradeExecutor(upgradeReporter, taskStatusMonitor, upgradeScheduler, server, currentAgentId[0], currentAgentToken[0]);
                             
-                            logger.info("Agent re-registered successfully!");
+                            logger.info("✓ Agent re-registered successfully!");
                             logger.info("New Agent ID: {}", currentAgentId[0]);
-                            logger.info("New Agent Token: {}", currentAgentToken[0]);
+                            logger.info("New Agent Token: {}", currentAgentToken[0].substring(0, Math.min(10, currentAgentToken[0].length())) + "...");
+                            logger.info("✓ All components updated with new credentials");
                             logger.info("========================================");
                             
                             needReRegister[0] = false;
@@ -268,7 +324,7 @@ public class AgentMain {
                             reRegistered = true;
                             
                         } catch (Exception e) {
-                            logger.error("Re-registration failed: {}", e.getMessage());
+                            logger.error("✗ Re-registration attempt {} failed: {}", retryCount, e.getMessage());
                             logger.info("Retrying in {} seconds...", (retryDelay / 1000));
                             
                             Thread.sleep(retryDelay);
@@ -290,7 +346,7 @@ public class AgentMain {
                 // 心跳检测 - 使用配置的间隔时间
                 if (now - lastHeartbeat > config.getHeartbeatInterval()) {
                     try {
-                        logger.debug("Sending heartbeat...");
+                        logger.debug("Sending heartbeat... (failures: {}/{})", heartbeatFailures, MAX_HEARTBEAT_FAILURES);
                         // 使用配置的系统信息间隔时间
                         boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > config.getSystemInfoInterval()) || reRegistered;
                         
@@ -298,24 +354,27 @@ public class AgentMain {
                         if (includeSystemInfo) {
                             heartbeatResponse = api.heartbeat(currentAgentId[0], currentAgentToken[0], true);
                             lastSystemInfoHeartbeat[0] = now;
-                            logger.info("Heartbeat with system info sent at {}", new java.util.Date());
+                            logger.info("✓ Heartbeat with system info sent successfully");
                         } else {
                             heartbeatResponse = api.heartbeat(currentAgentId[0], currentAgentToken[0], false);
-                            logger.debug("Heartbeat sent at {}", new java.util.Date());
+                            logger.debug("✓ Heartbeat sent successfully");
                         }
                         
                         // 处理心跳响应中的版本检查信息
                         handleHeartbeatResponse(heartbeatResponse, upgradeExecutor, api, currentAgentId[0], currentAgentToken[0], taskStatusMonitor);
                         
                         lastHeartbeat = now;
+                        if (heartbeatFailures > 0) {
+                            logger.info("✓ Connection restored after {} failures", heartbeatFailures);
+                        }
                         heartbeatFailures = 0; // 重置失败计数
                         reRegistered = false; // 重置重新注册标志
                     } catch (Exception e) {
                         heartbeatFailures++;
-                        System.err.println("Heartbeat failed (" + heartbeatFailures + "/" + MAX_HEARTBEAT_FAILURES + "): " + e.getMessage());
+                        logger.warn("✗ Heartbeat failed ({}/{}): {}", heartbeatFailures, MAX_HEARTBEAT_FAILURES, e.getMessage());
                         
                         if (heartbeatFailures >= MAX_HEARTBEAT_FAILURES) {
-                            System.err.println("Max heartbeat failures reached. Triggering re-registration...");
+                            logger.error("✗ Max heartbeat failures reached. Triggering re-registration...");
                             needReRegister[0] = true;
                             heartbeatFailures = 0;
                         } else {
@@ -332,6 +391,9 @@ public class AgentMain {
                 List<Map<String, Object>> tasks = (List<Map<String, Object>>) response.get("tasks");
 
                 if (tasks != null && !tasks.isEmpty()) {
+                    logger.info("========================================");
+                    logger.info("RECEIVED {} TASKS FROM SERVER", tasks.size());
+                    logger.info("========================================");
                     for (Map<String, Object> task : tasks) {
                         String taskId = String.valueOf(task.get("taskId"));
                         Long executionId = task.get("executionId") != null ? 
@@ -347,25 +409,59 @@ public class AgentMain {
                         Boolean overwriteExisting = (Boolean) task.getOrDefault("overwriteExisting", false);
                         Boolean verifyChecksum = (Boolean) task.getOrDefault("verifyChecksum", true);
 
-                        logger.info("Received task: {} (executionId: {}, type: {})", taskId, executionId, taskType);
+                        logger.info("Task received: {} (executionId: {}, type: {})", taskId, executionId, taskType);
+                        logger.debug("Task details - scriptLang: {}, timeoutSec: {}", scriptLang, timeoutSec);
+                        if ("SCRIPT".equals(taskType)) {
+                            logger.debug("Script content length: {} chars", scriptContent != null && !"null".equals(scriptContent) ? scriptContent.length() : 0);
+                        } else if ("FILE_TRANSFER".equals(taskType)) {
+                            logger.debug("File transfer - fileId: {}, targetPath: {}", fileId, targetPath);
+                        }
                         
                         // 检查基本字段
                         if (taskId == null || "null".equals(taskId) || executionId == null) {
-                            System.err.println("ERROR: Invalid task data - taskId or executionId is null");
+                            logger.error("✗ INVALID TASK DATA - taskId or executionId is null");
+                            logger.error("  taskId: {}, executionId: {}", taskId, executionId);
                             continue;
                         }
                         
-                        // 根据任务类型检查必要字段
+                        // 根据任务类型检查必要字段，如果无效则报告失败
+                        boolean isValidTask = true;
+                        String errorMessage = null;
+                        
                         if ("FILE_TRANSFER".equals(taskType)) {
                             if (fileId == null || "null".equals(fileId) || targetPath == null || "null".equals(targetPath)) {
-                                System.err.println("ERROR: Invalid file transfer task - fileId or targetPath is null");
-                                continue;
+                                isValidTask = false;
+                                errorMessage = "Invalid file transfer task - fileId or targetPath is null. fileId: " + fileId + ", targetPath: " + targetPath;
+                                logger.error("✗ INVALID FILE TRANSFER TASK");
+                                logger.error("  fileId: {}, targetPath: {}", fileId, targetPath);
                             }
                         } else {
                             if (scriptContent == null || "null".equals(scriptContent)) {
-                                System.err.println("ERROR: Invalid script task - scriptContent is null");
-                                continue;
+                                isValidTask = false;
+                                errorMessage = "Invalid script task - scriptContent is null";
+                                logger.error("✗ INVALID SCRIPT TASK - scriptContent is null");
                             }
+                        }
+                        
+                        // 如果任务无效，立即报告失败并继续处理下一个任务
+                        if (!isValidTask) {
+                            final Long finalExecutionId = executionId;
+                            final String finalErrorMessage = errorMessage;
+                            
+                            logger.info("Reporting invalid task failure for executionId: {}", finalExecutionId);
+                            // 异步报告任务失败，避免阻塞主循环
+                            taskExecutor.submit(() -> {
+                                try {
+                                    logger.info("[TASK-{}] Acknowledging invalid task", finalExecutionId);
+                                    api.ackTask(currentAgentId[0], currentAgentToken[0], finalExecutionId);
+                                    logger.info("[TASK-{}] Reporting failure: {}", finalExecutionId, finalErrorMessage);
+                                    api.finish(currentAgentId[0], currentAgentToken[0], finalExecutionId, -3, "FAILED", finalErrorMessage);
+                                    logger.info("[TASK-{}] ✓ Invalid task failure reported successfully", finalExecutionId);
+                                } catch (Exception e) {
+                                    logger.error("[TASK-{}] ✗ Failed to report invalid task failure: {}", finalExecutionId, e.getMessage());
+                                }
+                            });
+                            continue;
                         }
                         
                         // 异步执行任务
@@ -376,11 +472,18 @@ public class AgentMain {
                         final boolean finalOverwriteExisting = overwriteExisting;
                         final boolean finalVerifyChecksum = verifyChecksum;
                         
+                        logger.info("[TASK-{}] ✓ Submitting valid task to executor", executionId);
                         taskExecutor.submit(() -> {
-                            taskRunner.runTask(finalExecutionId, taskId, finalTaskType, scriptLang, scriptContent, 
-                                             timeoutSec, finalFileId, finalTargetPath, finalOverwriteExisting, finalVerifyChecksum);
+                            logger.info("[TASK-{}] TaskExecutor thread started", finalExecutionId);
+                            try {
+                                taskRunner.runTask(finalExecutionId, taskId, finalTaskType, scriptLang, scriptContent, 
+                                                 timeoutSec, finalFileId, finalTargetPath, finalOverwriteExisting, finalVerifyChecksum);
+                            } catch (Exception e) {
+                                logger.error("[TASK-{}] ✗ Error in taskExecutor thread: {}", finalExecutionId, e.getMessage(), e);
+                            }
                         });
                     }
+                    logger.info("========================================");
                 }
 
                 // 短暂休眠避免过度轮询 - 使用配置的间隔时间
@@ -391,7 +494,10 @@ public class AgentMain {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                System.err.println("Error in main loop: " + e.getMessage());
+                logger.error("========================================");
+                logger.error("ERROR IN MAIN LOOP");
+                logger.error("========================================");
+                logger.error("Error details: {}", e.getMessage());
                 
                 // 检查是否是认证相关错误
                 if (e.getMessage() != null && 
@@ -399,7 +505,9 @@ public class AgentMain {
                      e.getMessage().contains("401") || 
                      e.getMessage().contains("403") ||
                      e.getMessage().contains("token"))) {
-                    System.err.println("Authentication error detected. Triggering re-registration...");
+                    logger.error("✗ Authentication error detected: {}", e.getMessage());
+                    logger.error("Triggering re-registration...");
+                    logger.error("========================================");
                     needReRegister[0] = true;
                     // 短暂等待后重试
                     try {
@@ -410,7 +518,9 @@ public class AgentMain {
                     }
                 } else {
                     // 其他错误，打印堆栈并等待更长时间
-                    e.printStackTrace();
+                    logger.error("✗ Unexpected error in main loop", e);
+                    logger.error("Waiting 10 seconds before retry...");
+                    logger.error("========================================");
                     try {
                         Thread.sleep(10000);
                     } catch (InterruptedException ie) {

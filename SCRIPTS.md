@@ -168,6 +168,39 @@ agent/start-agent.sh
 - `start-localtest-agent.sh` - 本地测试Agent启动脚本
 - `agent.properties` - 本地测试配置文件
 
+### Windows Agent 安装脚本
+
+**位置**: `portal/scripts/` (部署后可通过HTTP访问)
+
+#### PowerShell 版本（推荐）
+- **文件**: `install-windows.ps1`
+- **特点**: 功能完整，支持所有Windows版本
+- **使用**: 
+  ```powershell
+  Set-ExecutionPolicy Bypass -Scope Process -Force
+  iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))
+  ```
+
+#### 纯批处理版本（无PowerShell依赖）
+- **文件**: `install-windows-pure.bat`
+- **特点**: 不依赖PowerShell，使用系统内置curl和tar
+- **要求**: Windows 10 1903+ 或 Windows 11
+- **使用**:
+  ```batch
+  curl -o install-windows-pure.bat http://8.138.114.34/scripts/install-windows-pure.bat
+  install-windows-pure.bat
+  ```
+- **参数**:
+  - `--server URL`: 指定服务器地址
+  - `--install-dir DIR`: 指定安装目录  
+  - `--manual`: 手动模式，不安装Windows服务
+  - `--help`: 显示帮助信息
+
+#### 批处理备用版本
+- **文件**: `install-windows.bat`
+- **特点**: 使用PowerShell进行下载和解压，批处理界面
+- **兼容性**: 适用于较旧的Windows版本
+
 ### 全局脚本
 
 **位置**: 根目录

@@ -261,6 +261,33 @@ class AgentApi {
 			if (statusCode == 401 || statusCode == 403) {
 				throw new RuntimeException("Agent token invalid or encryption not configured, need re-register");
 			}
+			
+			// 处理公钥损坏的情况
+			if (statusCode == 422) {
+				String errorCode = response.getFirstHeader("X-Error-Code") != null ? 
+					response.getFirstHeader("X-Error-Code").getValue() : "";
+				String errorMessage = response.getFirstHeader("X-Error-Message") != null ? 
+					response.getFirstHeader("X-Error-Message").getValue() : "";
+				
+				if ("CORRUPTED_PUBLIC_KEY".equals(errorCode)) {
+					System.err.println("[AgentApi] 服务器检测到公钥损坏，需要重新注册: " + errorMessage);
+					
+					// 触发公钥重新注册
+					AgentEncryptionContext encryptionContext = getEncryptionContext(agentId);
+					if (encryptionContext != null) {
+						System.out.println("[AgentApi] 正在重新生成和注册公钥...");
+						encryptionContext.rotateKeys();
+						encryptionContext.updateCredentials(agentId, agentToken);
+						
+						// 重试任务拉取
+						System.out.println("[AgentApi] 公钥重新注册完成，重试任务拉取...");
+						return pullTasksEncrypted(agentId, agentToken, max);
+					}
+				}
+				
+				throw new RuntimeException("Server rejected request: " + errorMessage);
+			}
+			
 			if (statusCode != 200) {
 				throw new RuntimeException("Pull encrypted tasks failed: " + responseBody);
 			}

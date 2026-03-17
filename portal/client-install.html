@@ -449,7 +449,7 @@ sudo systemctl enable lightscript-agent</pre>
                     <!-- Windows 脚本安装 -->
                     <div id="windows-script" class="tab-content">
                         <div class="download-card">
-                            <h3 class="text-xl font-semibold mb-4">Windows PowerShell 安装</h3>
+                            <h3 class="text-xl font-semibold mb-4">Windows PowerShell 安装（推荐）</h3>
                             <p class="text-gray-600 mb-4">以管理员身份运行 PowerShell，执行以下命令：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-install-cmd')">复制</button>
@@ -457,12 +457,33 @@ sudo systemctl enable lightscript-agent</pre>
 iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))</pre>
                             </div>
                             
+                            <h3 class="text-xl font-semibold mb-4 mt-6">Windows 批处理安装（纯BAT）</h3>
+                            <p class="text-gray-600 mb-4">不依赖PowerShell，适用于受限环境。需要Windows 10 1903+或Windows 11：</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyToClipboard('windows-bat-install')">复制</button>
+                                <pre id="windows-bat-install"># 下载并运行安装脚本
+curl -o install-windows-pure.bat http://8.138.114.34/scripts/install-windows-pure.bat
+install-windows-pure.bat</pre>
+                            </div>
+                            
+                            <div class="text-xs text-blue-600 mt-2">
+                                ✓ 不依赖PowerShell<br>
+                                ✓ 使用系统内置curl和tar<br>
+                                ✓ 支持服务模式和手动模式<br>
+                                ✓ 适用于Windows 10 1903+
+                            </div>
+                            
                             <h4 class="font-semibold mb-2 mt-4">手动安装步骤</h4>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
-                                <pre id="windows-manual"># 下载并解压
+                                <pre id="windows-manual"># PowerShell方式
 Invoke-WebRequest -Uri "http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip" -OutFile "lightscript-agent.zip"
 Expand-Archive -Path "lightscript-agent.zip" -DestinationPath "C:\Program Files\LightScript"
+
+# 或使用curl和tar（Windows 10 1903+）
+curl -o lightscript-agent.zip http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip
+mkdir "C:\Program Files\LightScript"
+tar -xf lightscript-agent.zip -C "C:\Program Files\LightScript"
 
 # 安装服务
 cd "C:\Program Files\LightScript"

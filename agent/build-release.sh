@@ -304,7 +304,7 @@ echo Agent 已在后台运行，可以关闭此窗口
 pause
 EOF
 
-        # Windows 停止脚本 - 修复乱码
+        # Windows 停止脚本 - 修复乱码和逻辑错误
         cat > "$target_dir/stop-agent.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
@@ -367,25 +367,26 @@ if exist "%PID_FILE%" (
     echo 未找到PID文件，尝试通过进程名查找...
 )
 
-REM 精确查找剩余的Agent进程（通过命令行参数匹配）
+REM 查找剩余的Agent进程（简化版本，避免复杂的wmic命令）
 echo 检查剩余的Agent进程...
 set FOUND_PROCESSES=0
-for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv ^| find "java.exe"') do (
+
+REM 使用简单的方法查找Java进程
+for /f "tokens=2 delims=," %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
     set JAVA_PID=%%i
     set JAVA_PID=!JAVA_PID:"=!
     
-    REM 检查是否是Agent进程
-    wmic process where "ProcessId=!JAVA_PID!" get CommandLine /format:list 2>nul | find "agent.jar" >nul
-    if !errorlevel! equ 0 (
+    REM 简单检查：如果有java进程且当前目录有agent.jar，就认为可能是Agent进程
+    if exist "agent.jar" (
         set FOUND_PROCESSES=1
-        echo 发现Agent进程: !JAVA_PID!
+        echo 发现可能的Agent进程: !JAVA_PID!
         echo 停止进程 !JAVA_PID!...
         
         REM 尝试优雅停止
         taskkill /pid !JAVA_PID! >nul 2>&1
         
         REM 等待进程退出
-        for /l %%k in (1,1,10) do (
+        for /l %%k in (1,1,5) do (
             tasklist /fi "PID eq !JAVA_PID!" 2>nul | find "!JAVA_PID!" >nul
             if !errorlevel! neq 0 (
                 echo 进程 !JAVA_PID! 已停止
@@ -413,9 +414,10 @@ echo ✅ Agent 已停止
 pause
 EOF
 
-        # Windows 服务安装脚本
+        # Windows 服务安装脚本 - 修复乱码
         cat > "$target_dir/install-service.bat" << 'EOF'
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
@@ -483,9 +485,10 @@ if !errorlevel! equ 0 (
 pause
 EOF
 
-        # Windows 服务卸载脚本
+        # Windows 服务卸载脚本 - 修复乱码
         cat > "$target_dir/uninstall-service.bat" << 'EOF'
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SERVICE_NAME=LightScriptAgent
@@ -546,9 +549,10 @@ if /i "!DELETE_DIR!"=="y" (
 pause
 EOF
 
-        # Windows 完整卸载脚本
+        # Windows 完整卸载脚本 - 修复乱码和逻辑错误
         cat > "$target_dir/uninstall-agent.bat" << 'EOF'
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
@@ -565,14 +569,25 @@ if !errorlevel! equ 0 (
     echo Windows服务已卸载
 )
 
-REM 停止所有Agent进程
+REM 停止所有Agent进程（简化版本）
 echo 停止Agent进程...
-for /f "tokens=1,2" %%i in ('wmic process where "CommandLine like '%%agent.jar%%' and Name='java.exe'" get ProcessId^,CommandLine /format:csv 2^>nul ^| find /v "Node" ^| find /v "ProcessId" ^| find /v "^$"') do (
-    set AGENT_PID=%%j
-    if defined AGENT_PID (
-        echo 停止进程: !AGENT_PID!
-        taskkill /f /pid !AGENT_PID! >nul 2>&1
+set FOUND_PROCESSES=0
+
+REM 使用简单的方法查找并停止Java进程
+for /f "tokens=2 delims=," %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
+    set JAVA_PID=%%i
+    set JAVA_PID=!JAVA_PID:"=!
+    
+    REM 如果当前目录有agent.jar，就停止所有java进程（简单但有效）
+    if exist "agent.jar" (
+        set FOUND_PROCESSES=1
+        echo 停止进程: !JAVA_PID!
+        taskkill /f /pid !JAVA_PID! >nul 2>&1
     )
+)
+
+if !FOUND_PROCESSES! equ 0 (
+    echo 未找到运行中的Agent进程
 )
 
 REM 清理PID文件

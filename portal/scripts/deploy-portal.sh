@@ -460,7 +460,10 @@ if ($Manual) {
 }
 EOF
 
-# Windows 批处理安装脚本（备用方案）
+# Windows 批处理安装脚本（纯BAT版本，不依赖PowerShell）
+cp "$SCRIPT_DIR/install-windows-pure-bat.bat" "$TEMP_DIR/scripts/install-windows-pure.bat"
+
+# Windows 批处理安装脚本（原版本，保持兼容性）
 cat > "$TEMP_DIR/scripts/install-windows.bat" << 'EOF'
 @echo off
 setlocal enabledelayedexpansion
@@ -645,6 +648,7 @@ echo "           curl -fsSL http://$SERVER_IP/scripts/install-macos.sh | sudo ba
 echo "  Windows: PowerShell (推荐):"
 echo "           Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('http://$SERVER_IP/scripts/install-windows.ps1'))"
 echo "           手动模式: iex ((New-Object System.Net.WebClient).DownloadString('http://$SERVER_IP/scripts/install-windows.ps1')) -Manual"
+echo "           批处理纯BAT: 下载并运行 http://$SERVER_IP/scripts/install-windows-pure.bat"
 echo "           批处理备用: 下载并运行 http://$SERVER_IP/scripts/install-windows.bat"
 
 # 清理临时目录

@@ -41,6 +41,9 @@ public class ServerEncryptionContext {
     // Agent公钥存储
     private final ConcurrentHashMap<String, String> agentPublicKeys = new ConcurrentHashMap<>();
     
+    // 损坏的Agent公钥记录
+    private final ConcurrentHashMap<String, String> corruptedAgentKeys = new ConcurrentHashMap<>();
+    
     @Value("${lightscript.encryption.enabled:false}")
     private boolean encryptionEnabled;
     
@@ -226,17 +229,72 @@ public class ServerEncryptionContext {
             return;
         }
         
-        agentPublicKeys.put(agentId, publicKey);
-        saveAgentPublicKeys();
-        
-        log.info("[ServerEncryption] Agent公钥已注册: {}", agentId);
+        // 验证公钥格式
+        try {
+            // 尝试解析公钥以验证格式
+            encryptionService.parsePublicKey(publicKey);
+            
+            // 格式正确，注册公钥
+            agentPublicKeys.put(agentId, publicKey);
+            
+            // 如果之前标记为损坏，现在移除标记
+            corruptedAgentKeys.remove(agentId);
+            
+            saveAgentPublicKeys();
+            
+            log.info("[ServerEncryption] Agent公钥已注册: {}", agentId);
+            
+        } catch (Exception e) {
+            // 公钥格式错误，记录但不影响其他Agent
+            log.error("[ServerEncryption] Agent公钥格式错误，拒绝注册: agentId={}, error={}", 
+                agentId, e.getMessage());
+            
+            // 标记为损坏
+            corruptedAgentKeys.put(agentId, "Registration failed: " + e.getMessage());
+            
+            throw new RuntimeException("公钥格式错误: " + e.getMessage());
+        }
     }
     
     /**
      * 获取Agent公钥
      */
     public String getAgentPublicKey(String agentId) {
+        // 检查是否被标记为损坏
+        if (corruptedAgentKeys.containsKey(agentId)) {
+            log.warn("[ServerEncryption] Agent公钥已被标记为损坏: agentId={}, reason={}", 
+                agentId, corruptedAgentKeys.get(agentId));
+            return null;
+        }
+        
         return agentPublicKeys.get(agentId);
+    }
+    
+    /**
+     * 标记Agent公钥为损坏
+     */
+    public void markAgentPublicKeyAsCorrupted(String agentId, String reason) {
+        corruptedAgentKeys.put(agentId, reason);
+        
+        // 从正常公钥列表中移除
+        agentPublicKeys.remove(agentId);
+        saveAgentPublicKeys();
+        
+        log.error("[ServerEncryption] Agent公钥已标记为损坏: agentId={}, reason={}", agentId, reason);
+    }
+    
+    /**
+     * 检查Agent公钥是否损坏
+     */
+    public boolean isAgentPublicKeyCorrupted(String agentId) {
+        return corruptedAgentKeys.containsKey(agentId);
+    }
+    
+    /**
+     * 获取损坏公钥的原因
+     */
+    public String getCorruptedKeyReason(String agentId) {
+        return corruptedAgentKeys.get(agentId);
     }
     
     /**

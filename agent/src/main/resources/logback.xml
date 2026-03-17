@@ -53,17 +53,17 @@
     </appender>
     
     <!-- 任务执行器的日志 -->
-    <logger name="com.example.lightscript.agent.SimpleTaskRunner" level="DEBUG" additivity="false">
+    <logger name="com.example.lightscript.agent.SimpleTaskRunner" level="DEBUG" additivity="true">
         <appender-ref ref="TASK_FILE"/>
     </logger>
     
     <!-- 升级执行器的日志 -->
-    <logger name="com.example.lightscript.agent.UpgradeExecutor" level="DEBUG" additivity="false">
+    <logger name="com.example.lightscript.agent.UpgradeExecutor" level="DEBUG" additivity="true">
         <appender-ref ref="UPGRADE_FILE"/>
     </logger>
     
     <!-- 根日志级别 - 只输出到文件，避免LaunchAgent重复捕获 -->
-    <root level="INFO">
+    <root level="DEBUG">
         <appender-ref ref="UNIFIED_FILE"/>
     </root>
 </configuration>

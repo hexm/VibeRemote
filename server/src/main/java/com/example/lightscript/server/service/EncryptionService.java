@@ -115,7 +115,7 @@ public class EncryptionService {
             System.arraycopy(encryptedData, ciphertext.length, authTag, 0, GCM_TAG_LENGTH);
             
             // 5. 使用RSA加密会话密钥
-            PublicKey agentPublicKey = parsePublicKey(agentPublicKeyPem);
+            PublicKey agentPublicKey = parsePublicKeyInternal(agentPublicKeyPem);
             Cipher rsaCipher = Cipher.getInstance(RSA_TRANSFORMATION);
             rsaCipher.init(Cipher.ENCRYPT_MODE, agentPublicKey);
             byte[] encryptedKey = rsaCipher.doFinal(sessionKey.getEncoded());
@@ -173,7 +173,7 @@ public class EncryptionService {
                                  payload.getIv() + 
                                  payload.getTimestamp();
             
-            PublicKey agentPublicKey = parsePublicKey(agentPublicKeyPem);
+            PublicKey agentPublicKey = parsePublicKeyInternal(agentPublicKeyPem);
             Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
             signature.initVerify(agentPublicKey);
             signature.update(signatureData.getBytes());
@@ -226,9 +226,16 @@ public class EncryptionService {
     }
     
     /**
-     * 解析PEM格式公钥
+     * 验证并解析PEM格式公钥（用于格式验证）
      */
-    private PublicKey parsePublicKey(String publicKeyPem) {
+    public PublicKey parsePublicKey(String publicKeyPem) {
+        return parsePublicKeyInternal(publicKeyPem);
+    }
+    
+    /**
+     * 解析PEM格式公钥（内部使用）
+     */
+    private PublicKey parsePublicKeyInternal(String publicKeyPem) {
         try {
             String publicKeyContent = publicKeyPem
                 .replace("-----BEGIN PUBLIC KEY-----", "")
@@ -240,7 +247,7 @@ public class EncryptionService {
             KeyFactory keyFactory = KeyFactory.getInstance(RSA_ALGORITHM);
             return keyFactory.generatePublic(keySpec);
         } catch (Exception e) {
-            throw new RuntimeException("公钥解析失败", e);
+            throw new RuntimeException("公钥解析失败: " + e.getMessage(), e);
         }
     }
     
@@ -269,9 +276,19 @@ public class EncryptionService {
     public String publicKeyToPem(PublicKey publicKey) {
         byte[] encoded = publicKey.getEncoded();
         String base64 = Base64.getEncoder().encodeToString(encoded);
-        return "-----BEGIN PUBLIC KEY-----\n" + 
-               base64.replaceAll("(.{64})", "$1\n") + 
-               "\n-----END PUBLIC KEY-----";
+        
+        // 手动处理换行，确保格式正确
+        StringBuilder pem = new StringBuilder();
+        pem.append("-----BEGIN PUBLIC KEY-----\n");
+        
+        // 每64个字符换行
+        for (int i = 0; i < base64.length(); i += 64) {
+            int end = Math.min(i + 64, base64.length());
+            pem.append(base64.substring(i, end)).append("\n");
+        }
+        
+        pem.append("-----END PUBLIC KEY-----");
+        return pem.toString();
     }
     
     /**
@@ -280,8 +297,18 @@ public class EncryptionService {
     public String privateKeyToPem(PrivateKey privateKey) {
         byte[] encoded = privateKey.getEncoded();
         String base64 = Base64.getEncoder().encodeToString(encoded);
-        return "-----BEGIN PRIVATE KEY-----\n" + 
-               base64.replaceAll("(.{64})", "$1\n") + 
-               "\n-----END PRIVATE KEY-----";
+        
+        // 手动处理换行，确保格式正确
+        StringBuilder pem = new StringBuilder();
+        pem.append("-----BEGIN PRIVATE KEY-----\n");
+        
+        // 每64个字符换行
+        for (int i = 0; i < base64.length(); i += 64) {
+            int end = Math.min(i + 64, base64.length());
+            pem.append(base64.substring(i, end)).append("\n");
+        }
+        
+        pem.append("-----END PRIVATE KEY-----");
+        return pem.toString();
     }
 }

@@ -32,101 +32,134 @@ public class AgentService {
     
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
-        log.info("[Agent] Registration attempt from {} ({})", 
-                request.getHostname(), request.getOsType());
+        log.info("========================================");
+        log.info("AGENT REGISTRATION PROCESSING");
+        log.info("========================================");
+        log.info("Hostname: {}", request.getHostname());
+        log.info("OS Type: {}", request.getOsType());
+        log.info("IP: {}", request.getIp());
+        log.info("Labels: {}", request.getLabels());
         
-        if (!registerToken.equals(request.getRegisterToken())) {
-            log.warn("[Agent] Registration failed - Invalid token from {}", request.getHostname());
-            throw new BusinessException(ErrorCode.INVALID_REGISTER_TOKEN);
-        }
-        
-        Agent agent;
-        boolean isNewRegistration = false;
-        boolean wasOffline = false;
-        
-        // 先查询是否已存在
-        Optional<Agent> existingAgent = agentRepository.findByHostnameAndOsType(
-                request.getHostname(), request.getOsType());
-        
-        if (existingAgent.isPresent()) {
-            // 已存在，复用并更新
-            agent = existingAgent.get();
-            wasOffline = "OFFLINE".equals(agent.getStatus());
+        try {
+            if (!registerToken.equals(request.getRegisterToken())) {
+                log.error("✗ Registration failed - Invalid token from {}", request.getHostname());
+                log.info("Expected token: {}", registerToken.substring(0, Math.min(10, registerToken.length())) + "...");
+                log.info("Received token: {}", request.getRegisterToken().substring(0, Math.min(10, request.getRegisterToken().length())) + "...");
+                log.info("========================================");
+                throw new BusinessException(ErrorCode.INVALID_REGISTER_TOKEN);
+            }
             
-            agent.setIp(request.getIp());
-            agent.setLabels(request.getLabels());
-            agent.setLastHeartbeat(LocalDateTime.now());
-            agent.setStatus("ONLINE");
-            // 生成新的token，确保服务器重启后agent可以重新建立连接
-            agent.setAgentToken(UUID.randomUUID().toString());
-            agent = agentRepository.save(agent);
+            Agent agent;
+            boolean isNewRegistration = false;
+            boolean wasOffline = false;
             
-            log.info("[Agent] Re-registered: {} ({}) - AgentId: {} (new token generated, was offline: {})", 
-                    agent.getHostname(), agent.getOsType(), agent.getAgentId(), wasOffline);
+            // 先查询是否已存在
+            Optional<Agent> existingAgent = agentRepository.findByHostnameAndOsType(
+                    request.getHostname(), request.getOsType());
             
-            // 注意：不在这里立即重置任务！
-            // 原因：agent离线不代表进程崩溃，可能只是网络中断，任务还在执行
-            // 如果立即重置任务，会导致任务重复执行
-            // 由定时任务checkOfflineAgentTasks()在agent真正离线一段时间后才重置任务
-        } else {
-            // 不存在，尝试创建新Agent
-            try {
-                agent = new Agent();
-                agent.setAgentId(UUID.randomUUID().toString());
-                agent.setAgentToken(UUID.randomUUID().toString());
-                agent.setHostname(request.getHostname());
-                agent.setOsType(request.getOsType());
+            if (existingAgent.isPresent()) {
+                // 已存在，复用并更新
+                agent = existingAgent.get();
+                wasOffline = "OFFLINE".equals(agent.getStatus());
+                
+                log.info("Found existing agent: {}", agent.getAgentId());
+                log.info("Previous status: {}", agent.getStatus());
+                log.info("Was offline: {}", wasOffline);
+                
                 agent.setIp(request.getIp());
                 agent.setLabels(request.getLabels());
                 agent.setLastHeartbeat(LocalDateTime.now());
                 agent.setStatus("ONLINE");
-                
+                // 生成新的token，确保服务器重启后agent可以重新建立连接
+                String oldToken = agent.getAgentToken();
+                agent.setAgentToken(UUID.randomUUID().toString());
                 agent = agentRepository.save(agent);
-                isNewRegistration = true;
                 
-                log.info("[Agent] NEW registration: {} ({}) - AgentId: {}", 
-                        agent.getHostname(), agent.getOsType(), agent.getAgentId());
-                        
-            } catch (Exception e) {
-                // 并发情况下可能违反唯一约束，重新查询已存在的Agent
-                log.warn("Concurrent registration detected for {} ({}), retrying query", 
-                        request.getHostname(), request.getOsType());
-                        
-                existingAgent = agentRepository.findByHostnameAndOsType(
-                        request.getHostname(), request.getOsType());
-                        
-                if (existingAgent.isPresent()) {
-                    agent = existingAgent.get();
-                    wasOffline = "OFFLINE".equals(agent.getStatus());
-                    
+                log.info("✓ Agent re-registered successfully");
+                log.info("Agent ID: {}", agent.getAgentId());
+                log.info("Old token: {}", oldToken.substring(0, Math.min(10, oldToken.length())) + "...");
+                log.info("New token: {}", agent.getAgentToken().substring(0, Math.min(10, agent.getAgentToken().length())) + "...");
+                log.info("Status: {} -> ONLINE", wasOffline ? "OFFLINE" : "ONLINE");
+                
+                // 注意：不在这里立即重置任务！
+                // 原因：agent离线不代表进程崩溃，可能只是网络中断，任务还在执行
+                // 如果立即重置任务，会导致任务重复执行
+                // 由定时任务checkOfflineAgentTasks()在agent真正离线一段时间后才重置任务
+            } else {
+                // 不存在，尝试创建新Agent
+                log.info("Creating new agent registration");
+                try {
+                    agent = new Agent();
+                    agent.setAgentId(UUID.randomUUID().toString());
+                    agent.setAgentToken(UUID.randomUUID().toString());
+                    agent.setHostname(request.getHostname());
+                    agent.setOsType(request.getOsType());
                     agent.setIp(request.getIp());
                     agent.setLabels(request.getLabels());
                     agent.setLastHeartbeat(LocalDateTime.now());
                     agent.setStatus("ONLINE");
-                    // 生成新的token
-                    agent.setAgentToken(UUID.randomUUID().toString());
+                    
                     agent = agentRepository.save(agent);
+                    isNewRegistration = true;
                     
-                    log.info("Agent re-registered after concurrent conflict: {} ({}), ID: {} (new token generated)", 
-                            agent.getHostname(), agent.getOsType(), agent.getAgentId());
-                    
-                    // 不立即重置任务，避免重复执行
-                } else {
-                    // 极端情况：仍然查不到，抛出原始异常
-                    throw e;
+                    log.info("✓ NEW agent registered successfully");
+                    log.info("Agent ID: {}", agent.getAgentId());
+                    log.info("Agent Token: {}", agent.getAgentToken().substring(0, Math.min(10, agent.getAgentToken().length())) + "...");
+                            
+                } catch (Exception e) {
+                    // 并发情况下可能违反唯一约束，重新查询已存在的Agent
+                    log.warn("Concurrent registration detected for {} ({}), retrying query", 
+                            request.getHostname(), request.getOsType());
+                            
+                    existingAgent = agentRepository.findByHostnameAndOsType(
+                            request.getHostname(), request.getOsType());
+                            
+                    if (existingAgent.isPresent()) {
+                        agent = existingAgent.get();
+                        wasOffline = "OFFLINE".equals(agent.getStatus());
+                        
+                        log.info("Found agent after concurrent conflict: {}", agent.getAgentId());
+                        
+                        agent.setIp(request.getIp());
+                        agent.setLabels(request.getLabels());
+                        agent.setLastHeartbeat(LocalDateTime.now());
+                        agent.setStatus("ONLINE");
+                        // 生成新的token
+                        agent.setAgentToken(UUID.randomUUID().toString());
+                        agent = agentRepository.save(agent);
+                        
+                        log.info("✓ Agent re-registered after concurrent conflict");
+                        log.info("Agent ID: {}", agent.getAgentId());
+                        log.info("New token generated");
+                        
+                        // 不立即重置任务，避免重复执行
+                    } else {
+                        // 极端情况：仍然查不到，抛出原始异常
+                        log.error("✗ Failed to create or find agent after concurrent conflict");
+                        throw e;
+                    }
                 }
             }
+            
+            RegisterResponse response = new RegisterResponse();
+            response.setAgentId(agent.getAgentId());
+            response.setAgentToken(agent.getAgentToken());
+            
+            LogUtil.logAgent(isNewRegistration ? "REGISTER" : "RE-REGISTER", 
+                    agent.getAgentId(), agent.getHostname(), 
+                    String.format("OS: %s, IP: %s", agent.getOsType(), agent.getIp()));
+            
+            log.info("Registration type: {}", isNewRegistration ? "NEW" : "RE-REGISTER");
+            log.info("========================================");
+            return response;
+            
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("✗ Agent registration failed: {}", e.getMessage(), e);
+            log.info("========================================");
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
-        
-        RegisterResponse response = new RegisterResponse();
-        response.setAgentId(agent.getAgentId());
-        response.setAgentToken(agent.getAgentToken());
-        
-        LogUtil.logAgent(isNewRegistration ? "REGISTER" : "RE-REGISTER", 
-                agent.getAgentId(), agent.getHostname(), 
-                String.format("OS: %s, IP: %s", agent.getOsType(), agent.getIp()));
-        
-        return response;
     }
     
     @Transactional

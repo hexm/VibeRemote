@@ -16,6 +16,9 @@ import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.entity.AgentVersion;
 import com.example.lightscript.server.entity.AgentUpgradeLog;
 import lombok.extern.slf4j.Slf4j;
+import javax.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import javax.validation.Valid;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -54,69 +57,169 @@ public class AgentController {
 		this.serverEncryptionContext = serverEncryptionContext;
 	}
 
-	@PostMapping("/register")
+	/**
+	 * 获取客户端IP地址
+	 */
+	private String getClientIpAddress() {
+		try {
+			ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+			if (attributes != null) {
+				HttpServletRequest request = attributes.getRequest();
+				String xForwardedFor = request.getHeader("X-Forwarded-For");
+				if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+					return xForwardedFor.split(",")[0].trim();
+				}
+				String xRealIp = request.getHeader("X-Real-IP");
+				if (xRealIp != null && !xRealIp.isEmpty()) {
+					return xRealIp;
+				}
+				return request.getRemoteAddr();
+			}
+		} catch (Exception e) {
+			log.debug("Failed to get client IP: {}", e.getMessage());
+		}
+		return "unknown";
+	}
 	public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest req) {
-		RegisterResponse response = agentService.register(req);
-		return ResponseEntity.ok(response);
+		log.info("========================================");
+		log.info("AGENT REGISTRATION REQUEST");
+		log.info("========================================");
+		log.info("Registration token: {}", req.getRegisterToken().substring(0, Math.min(10, req.getRegisterToken().length())) + "...");
+		log.info("Hostname: {}", req.getHostname());
+		log.info("OS Type: {}", req.getOsType());
+		log.info("Client IP: {}", getClientIpAddress());
+		
+		try {
+			RegisterResponse response = agentService.register(req);
+			log.info("✓ Agent registration successful");
+			log.info("Agent ID: {}", response.getAgentId());
+			log.info("Agent Token: {}", response.getAgentToken().substring(0, Math.min(10, response.getAgentToken().length())) + "...");
+			log.info("========================================");
+			return ResponseEntity.ok(response);
+		} catch (Exception e) {
+			log.error("✗ Agent registration failed: {}", e.getMessage());
+			log.error("========================================");
+			throw e;
+		}
 	}
 
 	@PostMapping("/heartbeat")
 	public ResponseEntity<HeartbeatResponse> heartbeat(@Valid @RequestBody HeartbeatRequest req) {
-		boolean success = agentService.updateHeartbeat(req.getAgentId(), req.getAgentToken(), req);
-		if (!success) {
-			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
-		}
+		log.debug("Heartbeat received from Agent: {}", req.getAgentId());
+		log.debug("System info included: {}", req.getCpuLoad() != null || req.getFreeMemMb() != null);
 		
-		// 构建响应，包含版本检查信息
-		HeartbeatResponse response = new HeartbeatResponse();
-		
-		// 检查版本更新（如果Agent在心跳中报告了版本信息）
-		if (req.getAgentVersion() != null) {
-			AgentVersionService.VersionCheckResult versionCheck = agentVersionService.checkForUpdate(
-				req.getAgentVersion(), 
-				"ALL" // 暂时使用ALL平台，后续可以根据osType判断
-			);
-			
-			if (versionCheck.isUpdateAvailable()) {
-				AgentVersion latestVersion = versionCheck.getLatestVersion();
-				
-				VersionCheckResult result = new VersionCheckResult();
-				result.setUpdateAvailable(true);
-				result.setMessage(versionCheck.getMessage());
-				
-				VersionInfo versionInfo = new VersionInfo();
-				versionInfo.setVersion(latestVersion.getVersion());
-				versionInfo.setDownloadUrl(latestVersion.getDownloadUrl());
-				versionInfo.setFileSize(latestVersion.getFileSize());
-				versionInfo.setFileHash(latestVersion.getFileHash());
-				versionInfo.setForceUpgrade(Boolean.TRUE.equals(latestVersion.getForceUpgrade()));
-				versionInfo.setReleaseNotes(latestVersion.getReleaseNotes());
-				
-				result.setLatestVersion(versionInfo);
-				response.setVersionCheck(result);
+		try {
+			boolean success = agentService.updateHeartbeat(req.getAgentId(), req.getAgentToken(), req);
+			if (!success) {
+				log.warn("✗ Heartbeat failed - invalid agent token: {}", req.getAgentId());
+				throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 			}
+			
+			// 构建响应，包含版本检查信息
+			HeartbeatResponse response = new HeartbeatResponse();
+			
+			// 检查版本更新（如果Agent在心跳中报告了版本信息）
+			if (req.getAgentVersion() != null) {
+				log.debug("Checking version update for Agent: {} (current: {})", req.getAgentId(), req.getAgentVersion());
+				AgentVersionService.VersionCheckResult versionCheck = agentVersionService.checkForUpdate(
+					req.getAgentVersion(), 
+					"ALL" // 暂时使用ALL平台，后续可以根据osType判断
+				);
+				
+				if (versionCheck.isUpdateAvailable()) {
+					AgentVersion latestVersion = versionCheck.getLatestVersion();
+					log.info("Version update available for Agent: {} (current: {} -> latest: {})", 
+						req.getAgentId(), req.getAgentVersion(), latestVersion.getVersion());
+					
+					VersionCheckResult result = new VersionCheckResult();
+					result.setUpdateAvailable(true);
+					result.setMessage(versionCheck.getMessage());
+					
+					VersionInfo versionInfo = new VersionInfo();
+					versionInfo.setVersion(latestVersion.getVersion());
+					versionInfo.setDownloadUrl(latestVersion.getDownloadUrl());
+					versionInfo.setFileSize(latestVersion.getFileSize());
+					versionInfo.setFileHash(latestVersion.getFileHash());
+					versionInfo.setForceUpgrade(Boolean.TRUE.equals(latestVersion.getForceUpgrade()));
+					versionInfo.setReleaseNotes(latestVersion.getReleaseNotes());
+					
+					result.setLatestVersion(versionInfo);
+					response.setVersionCheck(result);
+					
+					if (versionInfo.isForceUpgrade()) {
+						log.warn("Force upgrade required for Agent: {} (current: {} -> required: {})", 
+							req.getAgentId(), req.getAgentVersion(), latestVersion.getVersion());
+					}
+				} else {
+					log.debug("Agent version is up to date: {} ({})", req.getAgentId(), req.getAgentVersion());
+				}
+			}
+			
+			log.debug("✓ Heartbeat processed successfully for Agent: {}", req.getAgentId());
+			return ResponseEntity.ok(response);
+			
+		} catch (BusinessException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error("✗ Heartbeat processing failed for Agent: {}: {}", req.getAgentId(), e.getMessage(), e);
+			throw new BusinessException(ErrorCode.SYSTEM_ERROR);
 		}
-		
-		return ResponseEntity.ok(response);
 	}
 
 	@PostMapping("/offline")
 	public ResponseEntity<Void> offline(@RequestParam String agentId, @RequestParam String agentToken) {
-		boolean success = agentService.markOffline(agentId, agentToken);
-		if (!success) {
-			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		log.info("Agent offline request: {}", agentId);
+		try {
+			boolean success = agentService.markOffline(agentId, agentToken);
+			if (!success) {
+				log.warn("✗ Agent offline failed - invalid token: {}", agentId);
+				throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+			}
+			log.info("✓ Agent marked offline successfully: {}", agentId);
+			return ResponseEntity.ok().build();
+		} catch (BusinessException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error("✗ Agent offline processing failed: {}: {}", agentId, e.getMessage(), e);
+			throw new BusinessException(ErrorCode.SYSTEM_ERROR);
 		}
-		return ResponseEntity.ok().build();
 	}
 
 	@GetMapping("/tasks/pull")
 	public ResponseEntity<PullTasksResponse> pull(@RequestParam String agentId, @RequestParam String agentToken, @RequestParam(defaultValue = "10") int max) {
-		if (!agentService.validateAgent(agentId, agentToken)) {
-			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		log.debug("Task pull request from Agent: {} (max: {})", agentId, max);
+		
+		try {
+			if (!agentService.validateAgent(agentId, agentToken)) {
+				log.warn("✗ Task pull failed - invalid agent token: {}", agentId);
+				throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+			}
+			
+			int normalizedMax = Math.min(Math.max(max, 1), 50);
+			PullTasksResponse rsp = new PullTasksResponse();
+			rsp.setTasks(taskService.pullTasks(agentId, normalizedMax));
+			
+			if (rsp.getTasks().isEmpty()) {
+				log.debug("No tasks available for Agent: {}", agentId);
+			} else {
+				log.info("✓ Pulled {} tasks for Agent: {}", rsp.getTasks().size(), agentId);
+				// 记录任务ID列表用于调试
+				if (log.isDebugEnabled()) {
+					String taskIds = rsp.getTasks().stream()
+						.map(task -> task.getTaskId())
+						.collect(java.util.stream.Collectors.joining(", "));
+					log.debug("Task IDs: [{}]", taskIds);
+				}
+			}
+			
+			return ResponseEntity.ok(rsp);
+			
+		} catch (BusinessException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error("✗ Task pull processing failed for Agent: {}: {}", agentId, e.getMessage(), e);
+			throw new BusinessException(ErrorCode.SYSTEM_ERROR);
 		}
-		PullTasksResponse rsp = new PullTasksResponse();
-		rsp.setTasks(taskService.pullTasks(agentId, Math.min(Math.max(max, 1), 50)));
-		return ResponseEntity.ok(rsp);
 	}
 
 	@GetMapping("/tasks/encrypted-pull")
@@ -154,12 +257,28 @@ public class AgentController {
 			// GZIP压缩
 			byte[] compressedData = gzipCompress(jsonData.getBytes("UTF-8"));
 			
-			// 加密数据
-			EncryptionService.EncryptedPayload payload = encryptionService.encrypt(
-				compressedData,
-				agentPublicKey,
-				serverEncryptionContext.getServerPrivateKey()
-			);
+			// 加密数据 - 增加Agent级别的错误处理
+			EncryptionService.EncryptedPayload payload;
+			try {
+				payload = encryptionService.encrypt(
+					compressedData,
+					agentPublicKey,
+					serverEncryptionContext.getServerPrivateKey()
+				);
+			} catch (Exception encryptionError) {
+				// 记录详细的加密错误信息
+				log.error("Agent公钥加密失败，可能公钥格式损坏: agentId={}, error={}", 
+					agentId, encryptionError.getMessage());
+				
+				// 标记该Agent的公钥为有问题
+				serverEncryptionContext.markAgentPublicKeyAsCorrupted(agentId, encryptionError.getMessage());
+				
+				// 返回特定错误码，提示Agent重新注册公钥
+				return ResponseEntity.status(422) // Unprocessable Entity
+					.header("X-Error-Code", "CORRUPTED_PUBLIC_KEY")
+					.header("X-Error-Message", "Agent public key is corrupted, please re-register")
+					.build();
+			}
 			
 			// 返回加密载荷的JSON
 			String encryptedResponse = objectMapper.writeValueAsString(payload);
