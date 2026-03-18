@@ -16,9 +16,11 @@ import {
   DownloadOutlined,
   CodeOutlined,
   PlusOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/auth'
+import ScreenMonitorModal from '../components/ScreenMonitorModal'
 
 const { Title, Text } = Typography
 const { Search } = Input
@@ -36,6 +38,8 @@ const Agents = () => {
   const [detailLoading, setDetailLoading] = useState(false)
   const [upgradeHistoryModalVisible, setUpgradeHistoryModalVisible] = useState(false)
   const [selectedAgentForHistory, setSelectedAgentForHistory] = useState(null)
+  const [screenMonitorVisible, setScreenMonitorVisible] = useState(false)
+  const [screenMonitorAgent, setScreenMonitorAgent] = useState(null)
 
   // 处理单个 Agent 数据的辅助函数
   const processAgentData = async (agent) => {
@@ -631,6 +635,22 @@ env | sort
         bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
         footer={[
           <Button 
+            key="screen"
+            icon={<VideoCameraOutlined />}
+            onClick={() => {
+              if (selectedAgent) {
+                setScreenMonitorAgent(selectedAgent)
+                setScreenMonitorVisible(true)
+              }
+            }}
+            disabled={
+              (selectedAgent?.status !== 'online' && selectedAgent?.status !== 'ONLINE') ||
+              !['WINDOWS', 'MACOS'].includes((selectedAgent?.osType || selectedAgent?.os || '').toUpperCase())
+            }
+          >
+            屏幕监控
+          </Button>,
+          <Button 
             key="collect" 
             type="primary"
             icon={<SyncOutlined />}
@@ -839,6 +859,14 @@ env | sort
           <UpgradeHistory agentId={selectedAgentForHistory.agentId || selectedAgentForHistory.id} />
         )}
       </Modal>
+
+      {/* 屏幕监控弹窗 */}
+      <ScreenMonitorModal
+        agentId={screenMonitorAgent?.agentId || screenMonitorAgent?.id}
+        hostname={screenMonitorAgent?.hostname}
+        visible={screenMonitorVisible}
+        onClose={() => setScreenMonitorVisible(false)}
+      />
     </div>
   )
 }

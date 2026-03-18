@@ -528,6 +528,40 @@ class AgentApi {
 		}
 	}
 	/**
+	/**
+	 * 推送截图帧到服务器（屏幕监控）
+	 * @return true=继续截图，false=服务器要求停止（无人观看）
+	 */
+	boolean uploadScreen(String agentId, String agentToken, String base64ImageData) {
+		try {
+			java.util.Map<String, Object> payload = new java.util.HashMap<>();
+			payload.put("agentId", agentId);
+			payload.put("agentToken", agentToken);
+			payload.put("imageData", base64ImageData);
+			payload.put("timestamp", java.time.Instant.now().toString());
+
+			HttpPost post = new HttpPost(baseUrl + "/api/agent/screen/" + agentId);
+			post.setHeader("Content-Type", "application/json");
+			post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+
+			try (CloseableHttpResponse response = httpClient.execute(post)) {
+				int status = response.getStatusLine().getStatusCode();
+				if (status == 200) {
+					String body = EntityUtils.toString(response.getEntity(), "UTF-8");
+					// {"skip":true} 表示无人观看，通知截图线程停止
+					if (body != null && body.contains("\"skip\":true")) {
+						return false;
+					}
+				}
+			}
+		} catch (Exception e) {
+			// 静默失败，不打印堆栈，避免日志污染
+			System.err.println("[Screen] uploadScreen failed: " + e.getMessage());
+		}
+		return true;
+	}
+
+	/**
 	 * 获取服务器公钥 - 用于自动密钥分发
 	 */
 	public Map<String, Object> getServerPublicKey(String agentId, String agentToken) throws Exception {

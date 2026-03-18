@@ -163,7 +163,7 @@ stop_existing_service() {
 download_and_install() {
     echo -e "${YELLOW}📦 下载Agent安装包...${NC}"
     
-    DOWNLOAD_URL="${SERVER_URL%:*}:80/agent/release/$PACKAGE_NAME"
+    DOWNLOAD_URL="${SERVER_URL%:*}/agent/release/$PACKAGE_NAME"
     echo -e "${BLUE}下载地址: ${DOWNLOAD_URL}${NC}"
     
     # 创建临时目录
@@ -211,7 +211,7 @@ configure_agent() {
 
 # 服务器配置
 server.url=$SERVER_URL
-register.token=$REGISTER_TOKEN
+server.register.token=$REGISTER_TOKEN
 
 # Agent配置
 agent.name=$(hostname)

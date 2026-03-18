@@ -1050,6 +1050,7 @@ const Tasks = () => {
                           {agent.status === 'ONLINE' ? '在线' : '离线'}
                         </Tag>
                         {agent.hostname}
+                        {agent.ip && <Text type="secondary" style={{fontSize: 12}}>{agent.ip}</Text>}
                       </Space>
                     </Option>
                   ))}
@@ -1084,6 +1085,7 @@ const Tasks = () => {
                         <Space>
                           <Tag color="purple">{script.type}</Tag>
                           {script.name}
+                          {script.filename && <Text type="secondary" style={{fontSize: 12}}>{script.filename}</Text>}
                         </Space>
                       </Option>
                     ))}
@@ -1218,6 +1220,7 @@ const Tasks = () => {
                           {agent.status === 'ONLINE' ? '在线' : '离线'}
                         </Tag>
                         {agent.hostname}
+                        {agent.ip && <Text type="secondary" style={{fontSize: 12}}>{agent.ip}</Text>}
                       </Space>
                     </Option>
                   ))}

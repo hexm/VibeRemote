@@ -10,6 +10,7 @@ import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.FileService;
 import com.example.lightscript.server.service.AgentVersionService;
 import com.example.lightscript.server.service.UpgradeStatusService;
+import com.example.lightscript.server.screen.ScreenSessionHandler;
 import com.example.lightscript.server.service.EncryptionService;
 import com.example.lightscript.server.service.ServerEncryptionContext;
 import com.example.lightscript.server.entity.TaskLog;
@@ -44,10 +45,12 @@ public class AgentController {
 	private final UpgradeStatusService upgradeStatusService;
 	private final EncryptionService encryptionService;
 	private final ServerEncryptionContext serverEncryptionContext;
+	private final ScreenSessionHandler screenSessionHandler;
 
 	public AgentController(AgentService agentService, TaskService taskService, FileService fileService, 
 						  AgentVersionService agentVersionService, UpgradeStatusService upgradeStatusService,
-						  EncryptionService encryptionService, ServerEncryptionContext serverEncryptionContext) {
+						  EncryptionService encryptionService, ServerEncryptionContext serverEncryptionContext,
+						  ScreenSessionHandler screenSessionHandler) {
 		this.agentService = agentService;
 		this.taskService = taskService;
 		this.fileService = fileService;
@@ -55,6 +58,7 @@ public class AgentController {
 		this.upgradeStatusService = upgradeStatusService;
 		this.encryptionService = encryptionService;
 		this.serverEncryptionContext = serverEncryptionContext;
+		this.screenSessionHandler = screenSessionHandler;
 	}
 
 	/**
@@ -199,6 +203,8 @@ public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterReq
 			int normalizedMax = Math.min(Math.max(max, 1), 50);
 			PullTasksResponse rsp = new PullTasksResponse();
 			rsp.setTasks(taskService.pullTasks(agentId, normalizedMax));
+			// null=不变, 0=停止, >0=截图间隔
+			rsp.setScreenCaptureInterval(screenSessionHandler.getScreenCaptureInterval(agentId));
 			
 			if (rsp.getTasks().isEmpty()) {
 				log.debug("No tasks available for Agent: {}", agentId);
@@ -250,6 +256,8 @@ public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterReq
 			// 获取任务列表
 			PullTasksResponse response = new PullTasksResponse();
 			response.setTasks(taskService.pullTasks(agentId, Math.min(Math.max(max, 1), 50)));
+			// null=不变, 0=停止, >0=截图间隔
+			response.setScreenCaptureInterval(screenSessionHandler.getScreenCaptureInterval(agentId));
 			
 			// 序列化任务数据
 			com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();

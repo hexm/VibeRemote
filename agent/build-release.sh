@@ -756,8 +756,11 @@ create_package() {
     echo "  📦 打包 $package_name..."
     
     # 创建 README
+    local build_time
+    build_time=$(date '+%Y-%m-%d %H:%M:%S %Z')
     cat > "$temp_dir/README.txt" << EOF
 LightScript Agent v$VERSION
+Build Time: $build_time
 
 安装说明:
 1. 解压此文件到目标目录

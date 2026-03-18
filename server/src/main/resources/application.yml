@@ -46,3 +46,5 @@ lightscript:
     enabled: true
     key-rotation-days: 30
     max-time-skew: 300000  # 5分钟时间窗口
+  screen:
+    max-duration-minutes: 30  # 单次屏幕监控最长时间，超时服务器主动断开

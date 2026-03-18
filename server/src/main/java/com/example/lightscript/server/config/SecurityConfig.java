@@ -34,6 +34,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/agent/**").permitAll()  // Agent API不需要JWT认证
                 .antMatchers("/api/web/files/*/download-for-agent").permitAll()  // Agent文件下载不需要认证
+                .antMatchers("/ws/screen/**").permitAll()  // WS握手由Handler内部验证JWT
                 .antMatchers("/", "/static/**", "/index.html", "/css/**", "/js/**").permitAll()
                 .antMatchers("/actuator/health", "/actuator/info").permitAll()  // 健康检查端点公开
                 .anyRequest().authenticated()

@@ -18,6 +18,21 @@ import java.util.Map;
 public class GlobalExceptionHandler {
     
     /**
+     * 处理业务异常 - 返回 400，不是 500
+     */
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<?> handleBusinessException(BusinessException e) {
+        log.warn("业务异常: {}", e.getMessage());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("error", e.getErrorCode().name());
+        response.put("message", e.getMessage());
+        response.put("status", 400);
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
      * 处理文件上传大小超限异常
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)

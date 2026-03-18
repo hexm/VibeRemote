@@ -78,6 +78,10 @@ public class AgentMain {
         CloseableHttpClient client = HttpClients.createDefault();
         AgentApi api = new AgentApi(server, client, MAPPER);
 
+        // 初始化屏幕截图服务（仅 Windows / macOS）
+        // 在注册完成后用 finalAgentId/finalAgentToken 重新初始化，此处先置 null
+        final boolean[] screenCapableOs = {osName.contains("win") || osName.contains("mac")};
+
         // 尝试加载已保存的Agent凭证
         AgentIdStore idStore = new AgentIdStore();
         AgentIdStore.AgentCredentials savedCredentials = idStore.load();
@@ -166,6 +170,20 @@ public class AgentMain {
         final String finalAgentId = agentId;
         final String finalAgentToken = agentToken;
 
+        // 初始化屏幕截图服务（仅 Windows / macOS）
+        ScreenCaptureService screenCaptureService = null;
+        if (screenCapableOs[0]) {
+            try {
+                screenCaptureService = new ScreenCaptureService(api, finalAgentId, finalAgentToken);
+                logger.info("[Screen] ScreenCaptureService initialized for OS: {}", osType);
+            } catch (Exception e) {
+                logger.warn("[Screen] Failed to initialize ScreenCaptureService: {}", e.getMessage());
+            }
+        } else {
+            logger.info("[Screen] Screen capture not supported on OS: {}", osType);
+        }
+        final ScreenCaptureService finalScreenCaptureService = screenCaptureService;
+
         // 初始化加密上下文（如果启用加密）
         AgentEncryptionContext encryptionContext = null;
         if (config.isEncryptionEnabled()) {
@@ -239,6 +257,10 @@ public class AgentMain {
             taskExecutor.shutdown();
             logger.info("Shutting down upgrade scheduler...");
             upgradeScheduler.shutdown();
+            // 停止屏幕截图
+            if (finalScreenCaptureService != null) {
+                finalScreenCaptureService.stop();
+            }
             try {
                 if (client != null) {
                     logger.info("Closing HTTP client...");
@@ -390,6 +412,12 @@ public class AgentMain {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> tasks = (List<Map<String, Object>>) response.get("tasks");
 
+                // 处理屏幕截图指令（task pull 间隔 5s，比心跳 30s 快，用于快速触发）
+                Object screenIntervalFromPull = response.get("screenCaptureInterval");
+                if (screenIntervalFromPull != null && finalScreenCaptureService != null) {
+                    finalScreenCaptureService.updateInterval(((Number) screenIntervalFromPull).intValue());
+                }
+
                 if (tasks != null && !tasks.isEmpty()) {
                     logger.info("========================================");
                     logger.info("RECEIVED {} TASKS FROM SERVER", tasks.size());
@@ -538,10 +566,13 @@ public class AgentMain {
      * 处理心跳响应中的版本检查信息
      */
     private static void handleHeartbeatResponse(Map<String, Object> response, UpgradeExecutor upgradeExecutor, 
-                                               AgentApi agentApi, String agentId, String agentToken, TaskStatusMonitor taskStatusMonitor) {
+                                               AgentApi agentApi, String agentId, String agentToken, 
+                                               TaskStatusMonitor taskStatusMonitor) {
         if (response == null || response.isEmpty()) {
             return;
         }
+
+        // 屏幕截图指令仅通过 pull 通道下发，此处不处理
         
         try {
             @SuppressWarnings("unchecked")

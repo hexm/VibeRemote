@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SERVER_IP="8.138.114.34"
 SERVER_USER="root"
-REMOTE_RELEASES_DIR="/opt/lightscript/portal/agent/release"
+REMOTE_RELEASES_DIR="/var/www/html/agent/release"
 
 # 颜色输出
 RED='\033[0;31m'

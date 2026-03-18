@@ -70,6 +70,7 @@ public class AgentModels {
 	@Data
 	public static class PullTasksResponse {
 		private List<TaskSpec> tasks;
+		private Integer screenCaptureInterval; // null=不变, 0=停止, >0=截图间隔秒数
 	}
 
 	@Data

@@ -60,7 +60,7 @@ echo ""
 echo -e "${YELLOW}📤 [3/5] 部署后端 + 前端 + 门户...${NC}"
 
 # 创建远程目录
-ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p ${REMOTE_DIR}/backend ${REMOTE_DIR}/frontend ${REMOTE_DIR}/portal ${REMOTE_DIR}/logs/tasks"
+ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p ${REMOTE_DIR}/backend ${REMOTE_DIR}/frontend ${REMOTE_DIR}/logs/tasks /var/www/html/agent/release"
 
 # 停止后端
 echo "停止后端服务..."
@@ -80,15 +80,15 @@ ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p ${REMOTE_DIR}/scripts"
 scp "$PROJECT_ROOT/server/scripts/start-server-aliyun.sh" ${SERVER_USER}@${SERVER_IP}:${REMOTE_DIR}/scripts/
 ssh ${SERVER_USER}@${SERVER_IP} "chmod +x ${REMOTE_DIR}/scripts/start-server-aliyun.sh"
 
-# 上传前端
+# 上传前端（Nginx 3000 端口 root）
 echo "上传前端..."
 ssh ${SERVER_USER}@${SERVER_IP} "rm -rf ${REMOTE_DIR}/frontend/*"
 scp -r "$PROJECT_ROOT/web/dist/." ${SERVER_USER}@${SERVER_IP}:${REMOTE_DIR}/frontend/
 
-# 上传门户
+# 上传门户（Nginx 80 端口 root = /var/www/html）
 echo "上传门户..."
-ssh ${SERVER_USER}@${SERVER_IP} "rm -rf ${REMOTE_DIR}/portal/*"
-scp -r "$PROJECT_ROOT/portal/." ${SERVER_USER}@${SERVER_IP}:${REMOTE_DIR}/portal/
+ssh ${SERVER_USER}@${SERVER_IP} "find /var/www/html -maxdepth 1 -not -name 'agent' -not -name '.' | xargs rm -rf"
+scp -r "$PROJECT_ROOT/portal/." ${SERVER_USER}@${SERVER_IP}:/var/www/html/
 
 # 启动后端
 echo "启动后端服务..."
@@ -98,9 +98,18 @@ echo -e "${GREEN}✅ 后端 + 前端 + 门户部署完成${NC}"
 echo ""
 
 # ============================================================
-# 第四步：构建并上传 agent 安装包
+# 第四步：更新 Nginx 配置
 # ============================================================
-echo -e "${YELLOW}📦 [4/5] 构建 agent 安装包...${NC}"
+echo -e "${YELLOW}🔧 [4/5] 更新 Nginx 配置...${NC}"
+scp "$PROJECT_ROOT/server/nginx/lightscript.conf" ${SERVER_USER}@${SERVER_IP}:/etc/nginx/conf.d/lightscript.conf
+ssh ${SERVER_USER}@${SERVER_IP} "nginx -t && nginx -s reload"
+echo -e "${GREEN}✅ Nginx 配置更新完成${NC}"
+echo ""
+
+# ============================================================
+# 第五步：构建并上传 agent 安装包
+# ============================================================
+echo -e "${YELLOW}📦 [5/6] 构建 agent 安装包...${NC}"
 cd "$PROJECT_ROOT/agent"
 bash build-release.sh
 echo -e "${GREEN}✅ agent 安装包构建完成${NC}"
@@ -112,9 +121,9 @@ echo -e "${GREEN}✅ agent 安装包上传完成${NC}"
 echo ""
 
 # ============================================================
-# 第五步：服务器上重装 agent
+# 第六步：服务器上重装 agent
 # ============================================================
-echo -e "${YELLOW}🤖 [5/5] 服务器上重装 agent...${NC}"
+echo -e "${YELLOW}🤖 [6/6] 服务器上重装 agent...${NC}"
 ssh ${SERVER_USER}@${SERVER_IP} "curl -fsSL http://${SERVER_IP}/scripts/install-linux.sh | bash -s -- --server=http://${SERVER_IP}:8080"
 echo -e "${GREEN}✅ agent 重装完成${NC}"
 echo ""
