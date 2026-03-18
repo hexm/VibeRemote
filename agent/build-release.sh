@@ -221,87 +221,50 @@ create_scripts() {
 chcp 65001 >nul
 REM LightScript Agent 启动脚本 (Windows)
 
-REM 切换到脚本目录
 cd /d "%~dp0"
 
-REM 创建日志目录
 if not exist "logs" mkdir "logs"
 
-echo LightScript Agent 启动中...
-echo 工作目录: %CD%
-
-REM 检查Agent JAR文件
 if not exist "agent.jar" (
-    echo ERROR: Agent JAR file not found: agent.jar
+    echo [错误] 未找到 agent.jar
     pause
     exit /b 1
 )
 
 REM 优先使用内置JRE
 if exist "jre\bin\java.exe" (
-    echo 使用内置JRE
     set "JAVA_CMD=jre\bin\java.exe"
     goto :start_agent
 )
 
-REM 尝试系统Java
+REM 尝试系统 Java
 java -version >nul 2>&1
 if %errorlevel% equ 0 (
-    echo 使用系统Java
     set "JAVA_CMD=java"
     goto :start_agent
 )
 
-REM 尝试JAVA_HOME
 if defined JAVA_HOME (
     if exist "%JAVA_HOME%\bin\java.exe" (
-        echo 使用JAVA_HOME: %JAVA_HOME%\bin\java.exe
         set "JAVA_CMD=%JAVA_HOME%\bin\java.exe"
         goto :start_agent
     )
 )
 
-REM 未找到Java
-echo ERROR: 未找到可用的Java运行时!
-echo 请安装Java 8或更高版本
+echo [错误] 未找到 Java，请安装 Java 8 或更高版本
 pause
 exit /b 1
 
 :start_agent
-echo Java版本信息:
-"%JAVA_CMD%" -version
-
+echo LightScript Agent 启动中...
+echo Java: %JAVA_CMD%
+echo 工作目录: %CD%
+echo 日志文件: %CD%\logs\agent.log
 echo.
-echo 启动LightScript Agent...
+echo 按 Ctrl+C 停止 Agent
+echo ----------------------------------------
 
-REM 设置JVM参数，包括文件编码和日志配置
-set "JVM_OPTS=-Xmx512m -Xms128m -Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8"
-
-REM 后台启动Agent，重定向输出到日志文件
-start /b "" "%JAVA_CMD%" %JVM_OPTS% -jar agent.jar > logs\agent-console.log 2>&1
-
-REM 等待一下确保启动
-timeout /t 3 /nobreak >nul
-
-REM 检查是否启动成功
-tasklist /fi "imagename eq java.exe" | find "java.exe" >nul
-if %errorlevel% equ 0 (
-    echo ✅ Agent 启动成功
-    echo.
-    echo 使用以下命令:
-    echo   查看日志: type logs\agent.log
-    echo   查看控制台日志: type logs\agent-console.log
-    echo   停止服务: stop-agent.bat
-) else (
-    echo ❌ Agent 启动失败
-    echo 请查看日志文件: logs\agent-console.log
-    pause
-    exit /b 1
-)
-
-echo.
-echo Agent 已在后台运行，可以关闭此窗口
-pause
+"%JAVA_CMD%" -Xmx512m -Xms128m -Dfile.encoding=UTF-8 -jar agent.jar
 EOF
 
         # Windows 停止脚本 - 修复乱码和逻辑错误
