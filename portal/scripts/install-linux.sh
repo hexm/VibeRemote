@@ -27,9 +27,17 @@ echo ""
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --server=*)
+            SERVER_URL="${1#*=}"
+            shift
+            ;;
         --server)
             SERVER_URL="$2"
             shift 2
+            ;;
+        --install-dir=*)
+            INSTALL_DIR="${1#*=}"
+            shift
             ;;
         --install-dir)
             INSTALL_DIR="$2"
@@ -37,6 +45,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --manual)
             MANUAL_MODE="1"
+            shift
+            ;;
+        --token=*)
+            REGISTER_TOKEN="${1#*=}"
             shift
             ;;
         --token)
