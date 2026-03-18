@@ -335,7 +335,7 @@ if defined MANUAL_MODE (
     echo 🛑 停止服务: net stop "%SERVICE_NAME%"
     echo 🚀 启动服务: net start "%SERVICE_NAME%"
     echo 📋 查看日志: type "%INSTALL_DIR%\logs\agent.log"
-    echo 🗑️  卸载服务: "%INSTALL_DIR%\uninstall-service.bat"
+    echo 🗑️  卸载: "%INSTALL_DIR%\uninstall.bat"
     echo 📁 安装目录: %INSTALL_DIR%
     echo 🌐 管理后台: %SERVER_URL%
     echo.

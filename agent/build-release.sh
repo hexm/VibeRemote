@@ -475,7 +475,7 @@ if !errorlevel! equ 0 (
         echo   查看状态: sc query "%SERVICE_NAME%"
         echo   启动服务: net start "%SERVICE_NAME%"
         echo   停止服务: net stop "%SERVICE_NAME%"
-        echo   卸载服务: uninstall-service.bat
+        echo   卸载服务: uninstall.bat
     ) else (
         echo ❌ 服务启动失败
         echo 请检查日志文件: %SCRIPT_DIR%logs\agent.log
@@ -488,71 +488,7 @@ pause
 EOF
 
         # Windows 服务卸载脚本 - 修复乱码
-        cat > "$target_dir/uninstall-service.bat" << 'EOF'
-@echo off
-chcp 65001 >nul
-setlocal enabledelayedexpansion
-
-set SERVICE_NAME=LightScriptAgent
-
-echo 卸载 LightScript Agent Windows 服务...
-
-REM 检查管理员权限
-net session >nul 2>&1
-if !errorlevel! neq 0 (
-    echo ❌ 需要管理员权限卸载服务
-    echo 请以管理员身份运行此脚本
-    pause
-    exit /b 1
-)
-
-REM 检查服务是否存在
-sc query "%SERVICE_NAME%" >nul 2>&1
-if !errorlevel! neq 0 (
-    echo 服务不存在或已卸载
-    pause
-    exit /b 0
-)
-
-REM 停止服务
-echo 停止服务...
-net stop "%SERVICE_NAME%" >nul 2>&1
-if !errorlevel! equ 0 (
-    echo 服务已停止
-) else (
-    echo 警告: 停止服务失败，可能服务未运行
-)
-
-REM 删除服务
-echo 删除服务...
-sc delete "%SERVICE_NAME%" >nul 2>&1
-if !errorlevel! equ 0 (
-    echo ✅ 服务已删除
-) else (
-    echo ❌ 删除服务失败
-)
-
-REM 询问是否删除安装目录
-echo.
-set /p DELETE_DIR="是否删除安装目录 %~dp0? (y/N): "
-if /i "!DELETE_DIR!"=="y" (
-    echo 删除安装目录...
-    cd /d "%TEMP%"
-    rmdir /s /q "%~dp0" 2>nul
-    if !errorlevel! equ 0 (
-        echo ✅ LightScript Agent 已完全卸载
-    ) else (
-        echo ⚠️  部分文件可能仍在使用中，请手动删除: %~dp0
-    )
-) else (
-    echo ✅ LightScript Agent 服务已卸载，文件保留
-)
-
-pause
-EOF
-
-        # Windows 完整卸载脚本 - 修复乱码和逻辑错误
-        cat > "$target_dir/uninstall-agent.bat" << 'EOF'
+        cat > "$target_dir/uninstall.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
@@ -561,41 +497,53 @@ set SCRIPT_DIR=%~dp0
 set SERVICE_NAME=LightScriptAgent
 
 echo 卸载 LightScript Agent...
+echo.
 
-REM 停止服务（如果存在）
+REM 检查管理员权限（卸载服务需要）
+net session >nul 2>&1
+if !errorlevel! neq 0 (
+    echo 警告: 未检测到管理员权限，将跳过服务卸载步骤
+    echo 如需卸载 Windows 服务，请以管理员身份重新运行
+    echo.
+)
+
+REM 停止并删除 Windows 服务（如果存在）
 sc query "%SERVICE_NAME%" >nul 2>&1
 if !errorlevel! equ 0 (
-    echo 停止Windows服务...
+    echo 停止 Windows 服务...
     net stop "%SERVICE_NAME%" >nul 2>&1
+    timeout /t 3 /nobreak >nul
+    echo 删除 Windows 服务...
     sc delete "%SERVICE_NAME%" >nul 2>&1
-    echo Windows服务已卸载
+    if !errorlevel! equ 0 (
+        echo Windows 服务已卸载
+    ) else (
+        echo 警告: 服务删除失败，请手动执行: sc delete %SERVICE_NAME%
+    )
+) else (
+    echo 未检测到 Windows 服务，跳过
 )
 
-REM 停止所有Agent进程（简化版本）
-echo 停止Agent进程...
-set FOUND_PROCESSES=0
-
-REM 使用简单的方法查找并停止Java进程
-for /f "tokens=2 delims=," %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
-    set JAVA_PID=%%i
-    set JAVA_PID=!JAVA_PID:"=!
-    
-    REM 如果当前目录有agent.jar，就停止所有java进程（简单但有效）
-    if exist "agent.jar" (
-        set FOUND_PROCESSES=1
-        echo 停止进程: !JAVA_PID!
-        taskkill /f /pid !JAVA_PID! >nul 2>&1
+REM 通过 wmic 精确查找并停止 agent.jar 进程
+echo 停止 Agent 进程...
+set STOPPED=false
+for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
+    set "WPID=%%i"
+    if defined WPID (
+        if "!WPID!" neq "" (
+            echo 停止进程 (PID: !WPID!)...
+            taskkill /PID !WPID! /F >nul 2>&1
+            set STOPPED=true
+        )
     )
 )
-
-if !FOUND_PROCESSES! equ 0 (
-    echo 未找到运行中的Agent进程
+if "!STOPPED!"=="false" (
+    echo 未找到运行中的 Agent 进程
 )
 
-REM 清理PID文件
-if exist "%SCRIPT_DIR%agent.pid" (
-    del "%SCRIPT_DIR%agent.pid" 2>nul
-)
+REM 清理 PID 文件和锁文件
+if exist "%SCRIPT_DIR%agent.pid" del /f /q "%SCRIPT_DIR%agent.pid" >nul 2>&1
+if exist "%USERPROFILE%\.lightscript\.agent.lock" del /f /q "%USERPROFILE%\.lightscript\.agent.lock" >nul 2>&1
 
 REM 询问是否删除安装目录
 echo.
@@ -607,7 +555,7 @@ if /i "!DELETE_DIR!"=="y" (
     if !errorlevel! equ 0 (
         echo ✅ LightScript Agent 已完全卸载
     ) else (
-        echo ⚠️  部分文件可能仍在使用中，请手动删除: %SCRIPT_DIR%
+        echo ⚠️  部分文件仍在使用中，请手动删除: %SCRIPT_DIR%
     )
 ) else (
     echo ✅ LightScript Agent 已卸载，文件保留
