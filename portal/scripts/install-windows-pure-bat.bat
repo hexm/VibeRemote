@@ -70,36 +70,19 @@ if !errorlevel! neq 0 (
     pause & exit /b 1
 )
 
-REM 停止已有进程
+REM 停止已有进程并清空安装目录
 echo [2/4] 检查并停止已有 Agent 进程...
-set AGENT_RUNNING=false
 for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
     if "%%i" neq "" (
         echo 停止已有进程 (PID: %%i)...
         taskkill /PID %%i /F >nul 2>&1
-        set AGENT_RUNNING=true
     )
 )
-if "!AGENT_RUNNING!"=="true" (
-    timeout /t 2 /nobreak >nul
-    echo 已有进程已停止
-) else (
-    echo 未发现运行中的 Agent 进程
+if exist "%INSTALL_DIR%" (
+    echo 清空旧安装目录...
+    rmdir /s /q "%INSTALL_DIR%" >nul 2>&1
 )
-
-REM 保留旧配置，清空安装目录
-if exist "%INSTALL_DIR%\agent.jar" (
-    echo 发现已有安装，保留配置文件并清空旧文件...
-    if exist "%INSTALL_DIR%\agent.properties" (
-        copy /y "%INSTALL_DIR%\agent.properties" "%TEMP%\agent.properties.bak" >nul 2>&1
-    )
-    REM 清空目录内容（保留目录本身）
-    for /d %%d in ("%INSTALL_DIR%\*") do (
-        if /i not "%%~nxd"=="logs" rmdir /s /q "%%d" >nul 2>&1
-    )
-    del /f /q "%INSTALL_DIR%\*.jar" "%INSTALL_DIR%\*.bat" "%INSTALL_DIR%\*.txt" "%INSTALL_DIR%\*.properties" >nul 2>&1
-    echo 旧文件已清理
-)
+mkdir "%INSTALL_DIR%"
 
 echo [3/4] 下载安装包...
 set ZIP_FILE=%INSTALL_DIR%\agent.zip
@@ -125,13 +108,7 @@ if not exist "%INSTALL_DIR%\agent.jar" (
     pause & exit /b 1
 )
 
-REM 恢复旧配置（如果有备份），再更新服务器地址
-if exist "%TEMP%\agent.properties.bak" (
-    echo 恢复旧配置文件...
-    copy /y "%TEMP%\agent.properties.bak" "%INSTALL_DIR%\agent.properties" >nul 2>&1
-    del /f /q "%TEMP%\agent.properties.bak" >nul 2>&1
-)
-REM 更新配置中的服务器地址（确保新地址生效）
+REM 更新配置中的服务器地址
 if exist "%INSTALL_DIR%\agent.properties" (
     powershell -Command "(Get-Content '%INSTALL_DIR%\agent.properties') -replace '^server\.url=.*', 'server.url=%SERVER_URL%' | Set-Content '%INSTALL_DIR%\agent.properties'" >nul 2>&1
 )
