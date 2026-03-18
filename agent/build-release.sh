@@ -246,113 +246,52 @@ echo Agent 已在后台启动，窗口将自动关闭
 timeout /t 2 /nobreak >nul
 EOF
 
-        # Windows 停止脚本 - 修复乱码和逻辑错误
+        # Windows 停止脚本 - 先通知 server 离线，再杀进程
         cat > "$target_dir/stop-agent.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
-set PID_FILE=%SCRIPT_DIR%agent.pid
-set SERVICE_NAME=LightScriptAgent
+set ID_FILE=%USERPROFILE%\.lightscript\.agent_id
+set PROPS_FILE=%SCRIPT_DIR%agent.properties
 
 echo 停止 LightScript Agent...
 
-REM 检查Windows服务是否存在并运行
-sc query "%SERVICE_NAME%" >nul 2>&1
-if !errorlevel! equ 0 (
-    echo 检测到Windows服务，正在停止...
-    net stop "%SERVICE_NAME%" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo Windows服务已停止
-    ) else (
-        echo 警告: 停止Windows服务失败，可能服务未运行
-    )
+REM 读取 server.url 和凭证，主动通知服务器离线
+set SERVER_URL=
+set AGENT_ID=
+set AGENT_TOKEN=
+
+if exist "%PROPS_FILE%" (
+    for /f "tokens=1,* delims==" %%a in ('findstr /b "server.url" "%PROPS_FILE%"') do set SERVER_URL=%%b
+)
+if exist "%ID_FILE%" (
+    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentId" "%ID_FILE%"') do set AGENT_ID=%%b
+    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentToken" "%ID_FILE%"') do set AGENT_TOKEN=%%b
 )
 
-REM 检查PID文件是否存在
-if exist "%PID_FILE%" (
-    set /p AGENT_PID=<"%PID_FILE%"
-    
-    REM 检查进程是否存在
-    tasklist /fi "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" >nul
+if defined SERVER_URL if defined AGENT_ID if defined AGENT_TOKEN (
+    echo 通知服务器离线...
+    curl -s -X POST "%SERVER_URL%/api/agent/offline" -d "agentId=!AGENT_ID!&agentToken=!AGENT_TOKEN!" >nul 2>&1
     if !errorlevel! equ 0 (
-        echo 找到Agent进程 (PID: !AGENT_PID!)，正在停止...
-        
-        REM 尝试优雅停止
-        taskkill /pid !AGENT_PID! >nul 2>&1
-        
-        REM 等待进程退出
-        echo 等待进程退出...
-        for /l %%i in (1,1,15) do (
-            tasklist /fi "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" >nul
-            if !errorlevel! neq 0 (
-                echo 进程 !AGENT_PID! 已停止
-                goto :cleanup_pid
-            )
-            timeout /t 1 /nobreak >nul
-        )
-        
-        REM 如果进程仍在运行，强制停止
-        tasklist /fi "PID eq !AGENT_PID!" 2>nul | find "!AGENT_PID!" >nul
-        if !errorlevel! equ 0 (
-            echo 强制停止进程 !AGENT_PID!...
-            taskkill /f /pid !AGENT_PID! >nul 2>&1
-        )
+        echo 服务器已收到离线通知
     ) else (
-        echo PID文件中的进程 !AGENT_PID! 不存在，清理PID文件...
+        echo 警告: 离线通知发送失败，继续停止进程
     )
-    
-    :cleanup_pid
-    del "%PID_FILE%" 2>nul
 ) else (
-    echo 未找到PID文件，尝试通过进程名查找...
+    echo 未找到凭证，跳过离线通知
 )
 
-REM 查找剩余的Agent进程（简化版本，避免复杂的wmic命令）
-echo 检查剩余的Agent进程...
-set FOUND_PROCESSES=0
-
-REM 使用简单的方法查找Java进程
-for /f "tokens=2 delims=," %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
-    set JAVA_PID=%%i
-    set JAVA_PID=!JAVA_PID:"=!
-    
-    REM 简单检查：如果有java进程且当前目录有agent.jar，就认为可能是Agent进程
-    if exist "agent.jar" (
-        set FOUND_PROCESSES=1
-        echo 发现可能的Agent进程: !JAVA_PID!
-        echo 停止进程 !JAVA_PID!...
-        
-        REM 尝试优雅停止
-        taskkill /pid !JAVA_PID! >nul 2>&1
-        
-        REM 等待进程退出
-        for /l %%k in (1,1,5) do (
-            tasklist /fi "PID eq !JAVA_PID!" 2>nul | find "!JAVA_PID!" >nul
-            if !errorlevel! neq 0 (
-                echo 进程 !JAVA_PID! 已停止
-                goto :next_process
-            )
-            timeout /t 1 /nobreak >nul
-        )
-        
-        REM 强制停止
-        tasklist /fi "PID eq !JAVA_PID!" 2>nul | find "!JAVA_PID!" >nul
-        if !errorlevel! equ 0 (
-            echo 强制停止进程 !JAVA_PID!...
-            taskkill /f /pid !JAVA_PID! >nul 2>&1
-        )
-        
-        :next_process
+REM 通过 wmic 精确查找并停止 agent.jar 进程
+for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
+    if "%%i" neq "" (
+        echo 停止进程 (PID: %%i)...
+        taskkill /PID %%i /F >nul 2>&1
     )
 )
 
-if !FOUND_PROCESSES! equ 0 (
-    echo 未找到运行中的Agent进程
-)
-
-echo ✅ Agent 已停止
+echo Agent 已停止
 pause
 EOF
 
@@ -468,6 +407,21 @@ if !errorlevel! equ 0 (
 
 REM 通过 wmic 精确查找并停止 agent.jar 进程
 echo 停止 Agent 进程...
+set ID_FILE=%USERPROFILE%\.lightscript\.agent_id
+set PROPS_FILE=%SCRIPT_DIR%agent.properties
+set SERVER_URL=
+set AGENT_ID=
+set AGENT_TOKEN=
+if exist "%PROPS_FILE%" (
+    for /f "tokens=1,* delims==" %%a in ('findstr /b "server.url" "%PROPS_FILE%"') do set SERVER_URL=%%b
+)
+if exist "%ID_FILE%" (
+    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentId" "%ID_FILE%"') do set AGENT_ID=%%b
+    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentToken" "%ID_FILE%"') do set AGENT_TOKEN=%%b
+)
+if defined SERVER_URL if defined AGENT_ID if defined AGENT_TOKEN (
+    curl -s -X POST "!SERVER_URL!/api/agent/offline" -d "agentId=!AGENT_ID!&agentToken=!AGENT_TOKEN!" >nul 2>&1
+)
 set STOPPED=false
 for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
     set "WPID=%%i"
@@ -699,85 +653,43 @@ EOF
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PID_FILE="$SCRIPT_DIR/agent.pid"
+ID_FILE="$HOME/.lightscript/.agent_id"
+PROPS_FILE="$SCRIPT_DIR/agent.properties"
 
 echo "停止 LightScript Agent..."
 
-# 检查是否有LaunchAgent服务运行
-LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.lightscript.agent.plist"
-LAUNCH_DAEMON_PLIST="/Library/LaunchDaemons/com.lightscript.agent.plist"
+# 读取 server.url 和凭证，主动通知服务器离线
+SERVER_URL=$(grep -m1 "^server\.url=" "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+AGENT_ID=$(grep -m1 "^agentId=" "$ID_FILE" 2>/dev/null | cut -d= -f2-)
+AGENT_TOKEN=$(grep -m1 "^agentToken=" "$ID_FILE" 2>/dev/null | cut -d= -f2-)
 
-if [ -f "$LAUNCH_AGENT_PLIST" ]; then
-    echo "检测到用户级LaunchAgent服务，正在停止..."
-    launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
-    echo "用户级LaunchAgent服务已停止"
-elif [ -f "$LAUNCH_DAEMON_PLIST" ]; then
-    echo "检测到系统级LaunchDaemon服务，正在停止..."
-    sudo launchctl unload "$LAUNCH_DAEMON_PLIST" 2>/dev/null || true
-    echo "系统级LaunchDaemon服务已停止"
+if [ -n "$SERVER_URL" ] && [ -n "$AGENT_ID" ] && [ -n "$AGENT_TOKEN" ]; then
+    echo "通知服务器离线..."
+    curl -s -X POST "$SERVER_URL/api/agent/offline" \
+        -d "agentId=$AGENT_ID&agentToken=$AGENT_TOKEN" >/dev/null 2>&1 \
+        && echo "服务器已收到离线通知" \
+        || echo "警告: 离线通知发送失败，继续停止进程"
+else
+    echo "未找到凭证，跳过离线通知"
 fi
 
-# 检查PID文件是否存在
-if [ -f "$PID_FILE" ]; then
-    PID=$(cat "$PID_FILE")
-    
-    # 检查进程是否存在
-    if ps -p $PID > /dev/null 2>&1; then
-        echo "找到Agent进程 (PID: $PID)，正在停止..."
-        
-        # 发送TERM信号
-        kill $PID
-        
-        # 等待进程优雅退出
-        echo "等待进程退出..."
-        for i in {1..15}; do
-            if ! ps -p $PID > /dev/null 2>&1; then
-                echo "进程 $PID 已停止"
-                break
-            fi
-            sleep 1
-        done
-        
-        # 如果进程仍在运行，强制杀死
-        if ps -p $PID > /dev/null 2>&1; then
-            echo "强制停止进程 $PID..."
-            kill -9 $PID
-        fi
-    else
-        echo "PID文件中的进程 $PID 不存在，清理PID文件..."
-    fi
-    
-    # 清理PID文件
-    rm -f "$PID_FILE"
-fi
-
-# 通过进程名查找剩余的Agent进程
+# 查找并停止 agent 进程
 PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
-
-if [ ! -z "$PIDS" ]; then
-    echo "发现剩余的Agent进程: $PIDS"
+if [ -n "$PIDS" ]; then
     for PID in $PIDS; do
         echo "停止进程 $PID..."
         kill $PID 2>/dev/null || true
-        
-        # 等待进程结束
         for i in {1..10}; do
-            if ! ps -p $PID > /dev/null 2>&1; then
-                echo "进程 $PID 已停止"
-                break
-            fi
+            ps -p $PID > /dev/null 2>&1 || break
             sleep 1
         done
-        
-        # 如果进程仍在运行，强制杀死
-        if ps -p $PID > /dev/null 2>&1; then
-            echo "强制停止进程 $PID..."
-            kill -9 $PID 2>/dev/null || true
-        fi
+        ps -p $PID > /dev/null 2>&1 && kill -9 $PID 2>/dev/null || true
     done
+else
+    echo "未找到运行中的 Agent 进程"
 fi
 
-echo "✅ Agent 已停止"
+echo "Agent 已停止"
 EOF
 
         # 设置执行权限
