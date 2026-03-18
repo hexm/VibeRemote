@@ -6,6 +6,8 @@ import com.example.lightscript.server.exception.ErrorCode;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.repository.AgentRepository;
 import com.example.lightscript.server.util.LogUtil;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +32,12 @@ public class AgentService {
     
     @Value("${lightscript.register.token}")
     private String registerToken;
+
+    // agentId -> agentToken 缓存，TTL 60s 兜底，正常由 register() 主动失效
+    private final Cache<String, String> tokenCache = Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(60, TimeUnit.SECONDS)
+            .build();
     
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
@@ -145,6 +154,9 @@ public class AgentService {
             response.setAgentId(agent.getAgentId());
             response.setAgentToken(agent.getAgentToken());
             
+            // token 已变更，主动失效缓存，避免旧 token 被误判为合法
+            tokenCache.invalidate(agent.getAgentId());
+            
             LogUtil.logAgent(isNewRegistration ? "REGISTER" : "RE-REGISTER", 
                     agent.getAgentId(), agent.getHostname(), 
                     String.format("OS: %s, IP: %s", agent.getOsType(), agent.getIp()));
@@ -234,7 +246,18 @@ public class AgentService {
     }
     
     public boolean validateAgent(String agentId, String agentToken) {
-        return agentRepository.findByAgentIdAndAgentToken(agentId, agentToken).isPresent();
+        // 先查缓存，命中则纯内存比较，不查 DB
+        String cached = tokenCache.getIfPresent(agentId);
+        if (cached != null) {
+            return cached.equals(agentToken);
+        }
+        // 缓存未命中，查 DB 并回填缓存
+        Optional<Agent> agent = agentRepository.findByAgentIdAndAgentToken(agentId, agentToken);
+        if (agent.isPresent()) {
+            tokenCache.put(agentId, agentToken);
+            return true;
+        }
+        return false;
     }
     
     @Transactional
@@ -344,6 +367,7 @@ public class AgentService {
         }
 
         agentRepository.deleteById(agentId);
+        tokenCache.invalidate(agentId);
         log.info("[Agent] Deleted agent: {} ({})", agent.getHostname(), agentId);
         LogUtil.logAgent("DELETE", agentId, agent.getHostname(), "Agent deleted");
     }
