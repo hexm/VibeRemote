@@ -1,63 +1,49 @@
-server:
-  port: 8080
+# ============================================================
+# 开发环境配置（已加入 .gitignore，不提交 git）
+# ============================================================
 
 spring:
-  application:
-    name: lightscript-server
-  
-  # 使用远程MySQL数据库，但使用不同的数据库名和用户
   datasource:
     url: jdbc:mysql://8.138.114.34:3306/lightscript_dev?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8&autoReconnect=true&failOverReadOnly=false&maxReconnects=10
     username: lightscript_dev
     password: lightscript_dev123
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
+      maximum-pool-size: 5
+      minimum-idle: 2
       connection-timeout: 20000
-      idle-timeout: 300000
-      max-lifetime: 1200000
-      leak-detection-threshold: 60000
-  
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-  
+      idle-timeout: 300000       # 5分钟，小于 MySQL wait_timeout(默认8小时)
+      max-lifetime: 600000       # 10分钟，确保连接在 MySQL 关闭前主动回收
+      keepalive-time: 60000      # 每60秒发一次 keepalive，防止连接被服务器关闭
+      connection-test-query: SELECT 1
   jpa:
     hibernate:
-      ddl-auto: create-drop
-    show-sql: false
+      ddl-auto: update
+    show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
-        format_sql: false
-  
-  # 禁用安全功能以快速启动
+        format_sql: true
   security:
-    enabled: false
+    user:
+      name: admin
+      password: admin123
 
 logging:
   level:
-    com.example.lightscript: INFO
+    com.example.lightscript: DEBUG
     org.springframework.security: WARN
-    org.hibernate.SQL: WARN
+    org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: WARN
   file:
     name: server/logs/server-dev.log
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# 应用配置
 lightscript:
   jwt:
-    secret: lightscript-dev-secret-key-for-testing-only
-    expiration: 86400000
+    secret: lightscript-dev-secret-key-for-testing-only-not-for-production
   register:
     token: dev-register-token
   log:
     storage:
-      path: logs/tasks  # 日志文件存储根目录
+      path: logs/tasks
     retention:
-      days: 30  # 开发环境保留30天
+      days: 30

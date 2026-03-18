@@ -445,10 +445,12 @@ if !errorlevel! equ 0 (
     timeout /t 2 /nobreak >nul
 )
 
-REM 创建服务
+REM 创建服务（直接用内置 jre\bin\java.exe 启动 jar，避免 cmd 包装不稳定）
 echo 创建Windows服务...
+set "JAVA_EXE=%SCRIPT_DIR%jre\bin\java.exe"
+if not exist "!JAVA_EXE!" set "JAVA_EXE=java"
 sc create "%SERVICE_NAME%" ^
-    binPath= "cmd.exe /c \"%SCRIPT_DIR%start-agent.bat\" --service" ^
+    binPath= "\"!JAVA_EXE!\" -Xmx512m -Xms128m -jar \"%SCRIPT_DIR%agent.jar\"" ^
     DisplayName= "%SERVICE_DISPLAY_NAME%" ^
     start= auto ^
     depend= Tcpip
@@ -1004,7 +1006,7 @@ build_package() {
 
 # 服务器配置 (默认连接阿里云)
 server.url=http://8.138.114.34:8080
-server.register.token=dev-register-token
+register.token=917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83
 
 # Agent配置
 agent.name=${hostname}
