@@ -215,12 +215,10 @@ create_scripts() {
     local os=$2
     
     if [ "$os" = "windows" ]; then
-        # Windows 启动脚本 - 修复乱码和日志问题
+        # Windows 启动脚本 - 后台启动，所有输出重定向到日志文件
         cat > "$target_dir/start-agent.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
-REM LightScript Agent 启动脚本 (Windows)
-
 cd /d "%~dp0"
 
 if not exist "logs" mkdir "logs"
@@ -231,40 +229,21 @@ if not exist "agent.jar" (
     exit /b 1
 )
 
-REM 优先使用内置JRE
+REM 优先使用内置JRE，其次系统 Java
 if exist "jre\bin\java.exe" (
-    set "JAVA_CMD=jre\bin\java.exe"
-    goto :start_agent
-)
-
-REM 尝试系统 Java
-java -version >nul 2>&1
-if %errorlevel% equ 0 (
+    set "JAVA_CMD=%~dp0jre\bin\java.exe"
+) else if defined JAVA_HOME (
+    set "JAVA_CMD=%JAVA_HOME%\bin\java.exe"
+) else (
     set "JAVA_CMD=java"
-    goto :start_agent
 )
 
-if defined JAVA_HOME (
-    if exist "%JAVA_HOME%\bin\java.exe" (
-        set "JAVA_CMD=%JAVA_HOME%\bin\java.exe"
-        goto :start_agent
-    )
-)
-
-echo [错误] 未找到 Java，请安装 Java 8 或更高版本
-pause
-exit /b 1
-
-:start_agent
-echo LightScript Agent 启动中...
-echo Java: %JAVA_CMD%
-echo 工作目录: %CD%
-echo 日志文件: %CD%\logs\agent.log
-echo.
-echo 按 Ctrl+C 停止 Agent
-echo ----------------------------------------
-
-"%JAVA_CMD%" -Xmx512m -Xms128m -Dfile.encoding=UTF-8 -jar agent.jar
+REM 后台启动，stdout 和 stderr 全部写入日志文件
+echo 启动 LightScript Agent...
+echo 日志文件: %~dp0logs\agent.log
+start /b "" "%JAVA_CMD%" -Xmx512m -Xms128m -Dfile.encoding=UTF-8 -jar "%~dp0agent.jar" >>"%~dp0logs\agent.log" 2>&1
+echo Agent 已在后台启动，窗口将自动关闭
+timeout /t 2 /nobreak >nul
 EOF
 
         # Windows 停止脚本 - 修复乱码和逻辑错误

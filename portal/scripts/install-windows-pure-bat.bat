@@ -64,11 +64,6 @@ if !errorlevel! neq 0 (
 )
 
 echo [1/4] 创建安装目录...
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-if !errorlevel! neq 0 (
-    echo [错误] 无法创建目录: %INSTALL_DIR%
-    pause & exit /b 1
-)
 
 REM 停止已有进程并清空安装目录
 echo [2/4] 检查并停止已有 Agent 进程...
@@ -83,6 +78,10 @@ if exist "%INSTALL_DIR%" (
     rmdir /s /q "%INSTALL_DIR%" >nul 2>&1
 )
 mkdir "%INSTALL_DIR%"
+if !errorlevel! neq 0 (
+    echo [错误] 无法创建目录: %INSTALL_DIR%
+    pause & exit /b 1
+)
 
 echo [3/4] 下载安装包...
 set ZIP_FILE=%INSTALL_DIR%\agent.zip
