@@ -22,11 +22,15 @@ public class AgentEncryptionContext {
     private static final String AGENT_PRIVATE_KEY = "agent.private.key";
     private static final String AGENT_PUBLIC_KEY = "agent.public.key";
     private static final String KEY_GENERATION_TIME = "key.generation.time";
+    private static final String SERVER_KEY_VERSION = "server.key.version";
     
     private String serverPublicKey;
     private String agentPrivateKey;
     private String agentPublicKey;
     private long keyGenerationTime;
+    
+    /** 服务器公钥版本号，从注册响应中获取并持久化 */
+    private int serverKeyVersion;
     
     // Agent凭证
     private volatile String currentAgentId;
@@ -62,6 +66,14 @@ public class AgentEncryptionContext {
     }
     
     /**
+     * 注册Agent公钥到服务器（公开方法，供外部触发重新注册）
+     * 需求：12.3
+     */
+    public void registerPublicKey() {
+        registerPublicKeyToServer();
+    }
+
+    /**
      * 注册Agent公钥到服务器
      */
     private void registerPublicKeyToServer() {
@@ -77,8 +89,27 @@ public class AgentEncryptionContext {
         
         try {
             System.out.println("[EncryptionContext] 注册Agent公钥到服务器...");
-            agentApi.registerAgentPublicKey(currentAgentId, currentAgentToken, agentPublicKey);
+            Map<String, Object> response = agentApi.registerAgentPublicKey(currentAgentId, currentAgentToken, agentPublicKey);
             System.out.println("[EncryptionContext] Agent公钥注册成功");
+            
+            // 从注册响应中获取服务器公钥和版本号
+            if (response != null) {
+                String respServerPublicKey = (String) response.get("serverPublicKey");
+                if (respServerPublicKey != null && !respServerPublicKey.isEmpty()) {
+                    this.serverPublicKey = respServerPublicKey;
+                    
+                    Object versionObj = response.get("keyVersion");
+                    if (versionObj instanceof Number) {
+                        this.serverKeyVersion = ((Number) versionObj).intValue();
+                    }
+                    
+                    // 持久化
+                    File keysFile = new File(configDir, KEYS_FILE);
+                    saveKeysToFile(keysFile);
+                    
+                    System.out.println("[EncryptionContext] 从注册响应中获取服务器公钥，版本号: " + this.serverKeyVersion);
+                }
+            }
         } catch (Exception e) {
             System.err.println("[EncryptionContext] 注册Agent公钥失败: " + e.getMessage());
         }
@@ -94,11 +125,17 @@ public class AgentEncryptionContext {
                 Map<String, Object> response = agentApi.getServerPublicKey(currentAgentId, currentAgentToken);
                 this.serverPublicKey = (String) response.get("serverPublicKey");
                 
+                // 读取服务器公钥版本号
+                Object versionObj = response.get("keyVersion");
+                if (versionObj instanceof Number) {
+                    this.serverKeyVersion = ((Number) versionObj).intValue();
+                }
+                
                 // 保存到文件
                 File keysFile = new File(configDir, KEYS_FILE);
                 saveKeysToFile(keysFile);
                 
-                System.out.println("[EncryptionContext] 服务器公钥获取成功");
+                System.out.println("[EncryptionContext] 服务器公钥获取成功，版本号: " + this.serverKeyVersion);
             }
         } catch (Exception e) {
             System.err.println("[EncryptionContext] 获取服务器公钥失败: " + e.getMessage());
@@ -147,6 +184,7 @@ public class AgentEncryptionContext {
             this.agentPrivateKey = props.getProperty(AGENT_PRIVATE_KEY);
             this.agentPublicKey = props.getProperty(AGENT_PUBLIC_KEY);
             this.keyGenerationTime = Long.parseLong(props.getProperty(KEY_GENERATION_TIME, "0"));
+            this.serverKeyVersion = Integer.parseInt(props.getProperty(SERVER_KEY_VERSION, "0"));
             
         } catch (Exception e) {
             System.err.println("[EncryptionContext] 加载密钥失败，将重新生成: " + e.getMessage());
@@ -188,6 +226,7 @@ public class AgentEncryptionContext {
             props.setProperty(AGENT_PRIVATE_KEY, agentPrivateKey);
             props.setProperty(AGENT_PUBLIC_KEY, agentPublicKey);
             props.setProperty(KEY_GENERATION_TIME, String.valueOf(keyGenerationTime));
+            props.setProperty(SERVER_KEY_VERSION, String.valueOf(serverKeyVersion));
             
             props.store(fos, "LightScript Agent Encryption Keys - Generated at " + 
                 new java.util.Date(keyGenerationTime));
@@ -253,12 +292,57 @@ public class AgentEncryptionContext {
     }
 
     /**
+     * 更新服务器公钥（带版本号）
+     */
+    public void updateServerPublicKey(String serverPublicKey, int keyVersion) {
+        this.serverPublicKey = serverPublicKey;
+        this.serverKeyVersion = keyVersion;
+
+        // 保存到文件
+        File keysFile = new File(configDir, KEYS_FILE);
+        saveKeysToFile(keysFile);
+
+        System.out.println("[EncryptionContext] 服务器公钥已更新，版本号: " + keyVersion);
+    }
+
+    /**
+     * 获取服务器公钥版本号
+     */
+    public int getServerKeyVersion() {
+        return serverKeyVersion;
+    }
+
+    /**
      * 密钥轮换（简化版）
      */
     public void rotateKeys() {
         File keysFile = new File(configDir, KEYS_FILE);
         generateAndSaveKeys(keysFile);
         System.out.println("[EncryptionContext] 密钥轮换完成");
+    }
+
+    /**
+     * 检查密钥是否需要轮换，超过30天则自动轮换并重新注册
+     * 需求：10.1、10.2
+     *
+     * @return true 表示发生了轮换
+     */
+    public boolean checkAndRotateIfNeeded() {
+        long ageDays = getKeyAgeDays();
+        if (ageDays < 30) {
+            return false;
+        }
+
+        System.out.println("[EncryptionContext] 密钥已使用 " + ageDays + " 天，触发自动轮换...");
+
+        // 生成新密钥对并持久化（需求 10.1、10.2）
+        rotateKeys();
+
+        // 重新向服务器注册新公钥
+        registerPublicKeyToServer();
+
+        System.out.println("[EncryptionContext] 密钥自动轮换完成，新密钥已持久化并注册");
+        return true;
     }
     
     /**

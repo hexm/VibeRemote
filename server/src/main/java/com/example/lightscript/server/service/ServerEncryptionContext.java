@@ -33,10 +33,18 @@ public class ServerEncryptionContext {
     private static final String SERVER_PRIVATE_KEY = "server.private.key";
     private static final String SERVER_PUBLIC_KEY = "server.public.key";
     private static final String KEY_GENERATION_TIME = "key.generation.time";
+    private static final String KEY_VERSION = "key.version";
+    private static final String KEY_CREATED_AT = "key.created.at";
     
     private String serverPrivateKey;
     private String serverPublicKey;
     private long keyGenerationTime;
+    
+    /** 公钥版本号，每次轮换时递增 */
+    private int keyVersion;
+    
+    /** 公钥创建时间（毫秒时间戳），与 keyGenerationTime 保持一致 */
+    private long keyCreatedAt;
     
     // Agent公钥存储
     private final ConcurrentHashMap<String, String> agentPublicKeys = new ConcurrentHashMap<>();
@@ -124,6 +132,8 @@ public class ServerEncryptionContext {
             this.serverPrivateKey = props.getProperty(SERVER_PRIVATE_KEY);
             this.serverPublicKey = props.getProperty(SERVER_PUBLIC_KEY);
             this.keyGenerationTime = Long.parseLong(props.getProperty(KEY_GENERATION_TIME, "0"));
+            this.keyVersion = Integer.parseInt(props.getProperty(KEY_VERSION, "1"));
+            this.keyCreatedAt = Long.parseLong(props.getProperty(KEY_CREATED_AT, String.valueOf(this.keyGenerationTime)));
             
         } catch (Exception e) {
             log.error("[ServerEncryption] 加载服务器密钥失败，将重新生成: {}", e.getMessage());
@@ -141,11 +151,13 @@ public class ServerEncryptionContext {
             this.serverPrivateKey = encryptionService.privateKeyToPem(serverKeyPair.getPrivate());
             this.serverPublicKey = encryptionService.publicKeyToPem(serverKeyPair.getPublic());
             this.keyGenerationTime = System.currentTimeMillis();
+            this.keyVersion = this.keyVersion + 1;  // 每次生成新密钥时版本号递增
+            this.keyCreatedAt = this.keyGenerationTime;
             
             // 保存到文件
             saveServerKeysToFile(keysFile);
             
-            log.info("[ServerEncryption] 新服务器密钥对已生成并保存");
+            log.info("[ServerEncryption] 新服务器密钥对已生成并保存，版本号: {}", this.keyVersion);
             
         } catch (Exception e) {
             throw new RuntimeException("生成服务器密钥对失败", e);
@@ -162,6 +174,8 @@ public class ServerEncryptionContext {
             props.setProperty(SERVER_PRIVATE_KEY, serverPrivateKey);
             props.setProperty(SERVER_PUBLIC_KEY, serverPublicKey);
             props.setProperty(KEY_GENERATION_TIME, String.valueOf(keyGenerationTime));
+            props.setProperty(KEY_VERSION, String.valueOf(keyVersion));
+            props.setProperty(KEY_CREATED_AT, String.valueOf(keyCreatedAt));
             
             props.store(fos, "LightScript Server Encryption Keys - Generated at " + 
                 new java.util.Date(keyGenerationTime));
@@ -385,5 +399,30 @@ public class ServerEncryptionContext {
     
     public int getRegisteredAgentCount() {
         return agentPublicKeys.size();
+    }
+    
+    /**
+     * 获取公钥版本号
+     */
+    public int getKeyVersion() {
+        return keyVersion;
+    }
+    
+    /**
+     * 获取公钥创建时间（毫秒时间戳）
+     */
+    public long getKeyCreatedAt() {
+        return keyCreatedAt;
+    }
+    
+    /**
+     * 判断当前公钥是否已过期（超过30天轮换周期）
+     */
+    public boolean isKeyExpired() {
+        if (keyCreatedAt == 0) {
+            return true;
+        }
+        long keyAge = System.currentTimeMillis() - keyCreatedAt;
+        return keyAge > KEY_ROTATION_INTERVAL_MS;
     }
 }

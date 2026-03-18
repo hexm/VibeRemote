@@ -547,74 +547,61 @@ public ResponseEntity<Void> receiveEncryptedBatchLog(
 
 ## 正确性属性
 
-### 第一阶段：性能优化属性
+*属性是在系统所有有效执行中都应成立的特征或行为，是连接人类可读规范与机器可验证正确性保证的桥梁。*
 
-**属性1: 批量传输完整性**
-```
-∀ logBatch ∈ List<LogEntry>, executionId ∈ Long:
-  batchSendLogs(logBatch, executionId).isSuccess() ⟹ 
-  服务器接收到的日志条目数 = logBatch.size()
-```
+### 属性 1：批量传输完整性
 
-**属性2: 压缩效率保证**
-```
-∀ logData ∈ String:
-  compressedSize = gzipCompress(logData).length ⟹
-  compressedSize ≤ 0.5 × logData.getBytes().length  // 至少50%压缩率
-```
+*对于任意* 日志批次和有效的 ExecutionId，当批量发送成功时，服务器接收到的日志条目数量应等于发送批次中的条目数量。
 
-**属性3: 异步非阻塞性**
-```
-∀ taskExecution ∈ TaskExecution, logUpload ∈ LogUploadOperation:
-  taskExecution.startTime ≤ logUpload.startTime ∧
-  logUpload.isAsync() ⟹
-  taskExecution.duration 不受 logUpload.duration 影响
-```
+**验证需求：需求 1.2、1.4**
 
-**属性4: 重试可靠性**
-```
-∀ failedBatch ∈ BatchLogRequest, maxRetries = 3:
-  failedBatch.attemptCount ≤ maxRetries ⟹
-  retryQueue.contains(failedBatch) = true
-```
+### 属性 2：GZIP 压缩往返正确性
 
-### 第二阶段：加密安全属性
+*对于任意* 有效的日志批次数据，将其序列化后进行 GZIP 压缩，再解压缩，应得到与原始序列化数据完全相同的内容。
 
-**属性5: 加密完整性**
-```
-∀ data ∈ 敏感数据, endpoint ∈ 敏感端点:
-  shouldEncryptEndpoint(endpoint) = true ⟹ 
-  isEncrypted(encryptBatchData(data, serverPublicKey)) = true
-```
+**验证需求：需求 2.4**
 
-**属性6: 解密正确性**
-```
-∀ compressedData ∈ byte[], serverPublicKey ∈ 有效公钥, serverPrivateKey ∈ 有效私钥:
-  keyPairMatches(serverPublicKey, serverPrivateKey) ⟹
-  decryptBatchData(encryptBatchData(compressedData, serverPublicKey), serverPrivateKey) = compressedData
-```
+### 属性 3：失败批次进入重试队列
 
-**属性7: 批量加密签名完整性**
-```
-∀ payload ∈ EncryptedBatchLogRequest, agentPrivateKey ∈ 有效私钥, agentPublicKey ∈ 有效公钥:
-  keyPairMatches(agentPublicKey, agentPrivateKey) ∧ 
-  payload.signature = sign(payload.data, agentPrivateKey) ⟹
-  verifySignature(payload.data, payload.signature, agentPublicKey) = true
-```
+*对于任意* 发送失败的日志批次，只要其重试次数未超过最大值（3次），该批次应出现在 RetryQueue 中等待重试。
 
-**属性8: 批量重放攻击防护**
-```
-∀ payload ∈ EncryptedBatchLogRequest, currentTime ∈ 时间戳:
-  |currentTime - payload.timestamp| > MAX_TIME_SKEW ⟹
-  decryptBatchData(payload) throws SecurityException
-```
+**验证需求：需求 4.1、4.2**
 
-**属性9: 性能与安全平衡**
-```
-∀ logBatch ∈ List<LogEntry>:
-  encryptionTime(encryptBatchData(compress(logBatch))) ≤ 
-  10 × encryptionTime(encrypt(singleLogEntry))  // 批量加密效率至少10倍提升
-```
+### 属性 4：AES-256-GCM 加密往返正确性
+
+*对于任意* 有效的压缩日志数据和匹配的 RSA-2048 密钥对，对数据进行 AES-256-GCM 加密后再解密，应得到与原始压缩数据完全相同的内容。
+
+**验证需求：需求 5.4**
+
+### 属性 5：RSA 密钥交换往返正确性
+
+*对于任意* 有效的 RSA-2048 密钥对，使用公钥加密任意 AES SessionKey 后，再用对应私钥解密，应还原原始 SessionKey。
+
+**验证需求：需求 6.3**
+
+### 属性 6：数字签名验证一致性
+
+*对于任意* 有效的 RSA-2048 密钥对和任意数据，使用私钥签名后用对应公钥验证应返回 true；对签名后的数据进行任意修改，验证应返回 false。
+
+**验证需求：需求 7.4**
+
+### 属性 7：重放攻击防护边界
+
+*对于任意* 时间戳超出当前时间 5 分钟窗口的 EncryptedPayload，服务器解密处理应抛出 SecurityException 并拒绝请求。
+
+**验证需求：需求 8.2、8.3**
+
+### 属性 8：压缩加密组合往返正确性
+
+*对于任意* 有效的日志批次，经过序列化→GZIP 压缩→AES-256-GCM 加密→RSA 密钥加密的完整流程，再经过 RSA 密钥解密→AES-256-GCM 解密→GZIP 解压缩→反序列化，应还原与原始日志批次等价的内容。
+
+**验证需求：需求 5.4、6.3、2.4**
+
+### 属性 9：加密开关路由正确性
+
+*对于任意* Agent 配置，当 `encryption.enabled=false` 时所有日志批次应通过非加密端点发送；当 `encryption.enabled=true` 时所有日志批次应通过加密端点发送。
+
+**验证需求：需求 11.1、11.2**
 
 ## 错误处理
 

@@ -103,17 +103,30 @@ public class EncryptedBatchLogCollector {
      * 发送加密批量日志
      */
     private void sendEncryptedBatch(Long executionId, List<LogEntry> logs) throws Exception {
+        sendEncryptedBatch(executionId, logs, false);
+    }
+
+    /**
+     * 发送加密批量日志（支持重试标志）
+     * 需求：10.2、10.3、12.3
+     */
+    private void sendEncryptedBatch(Long executionId, List<LogEntry> logs, boolean isRetry) throws Exception {
         if (!isEncryptionConfigured()) {
             throw new IllegalStateException("加密未正确配置");
         }
-        
+
+        // 每次发送前检查密钥是否需要轮换（需求 10.2）
+        if (!isRetry) {
+            encryptionContextInstance.checkAndRotateIfNeeded();
+        }
+
         // 1. 序列化日志批次
         String jsonData = objectMapper.writeValueAsString(logs);
         
         // 2. GZIP压缩
         byte[] compressedData = gzipCompress(jsonData.getBytes("UTF-8"));
         
-        // 3. 加密压缩数据
+        // 3. 加密压缩数据（轮换后使用新密钥，需求 10.3）
         EncryptionService.EncryptedPayload payload = encryptionService.encrypt(
             compressedData, 
             encryptionContextInstance.getServerPublicKey(),
@@ -136,9 +149,16 @@ public class EncryptedBatchLogCollector {
         try (CloseableHttpResponse response = httpClient.execute(post)) {
             int statusCode = response.getStatusLine().getStatusCode();
             if (statusCode == 403) {
-                // 可能是密钥问题，触发密钥轮换
-                System.err.println("加密认证失败，可能需要密钥轮换");
-                throw new SecurityException("加密认证失败: " + statusCode);
+                if (isRetry) {
+                    // 重试后仍然403，不再重试
+                    throw new SecurityException("加密认证失败（重试后仍失败）: " + statusCode);
+                }
+                // 收到403：重新生成密钥对并注册，然后重试（需求 12.3）
+                System.err.println("[EncryptedBatchLogCollector] 收到403，重新生成密钥对并注册...");
+                encryptionContextInstance.rotateKeys();
+                encryptionContextInstance.registerPublicKey();
+                System.out.println("[EncryptedBatchLogCollector] 密钥重新注册完成，重试当前批次...");
+                sendEncryptedBatch(executionId, logs, true);
             } else if (statusCode != 200) {
                 throw new RuntimeException("服务器返回错误状态: " + statusCode);
             }

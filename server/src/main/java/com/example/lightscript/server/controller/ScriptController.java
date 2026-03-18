@@ -3,6 +3,7 @@ package com.example.lightscript.server.controller;
 import com.example.lightscript.server.model.ScriptModels.*;
 import com.example.lightscript.server.security.RequirePermission;
 import com.example.lightscript.server.service.ScriptService;
+import com.example.lightscript.server.service.WebEncryptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -15,6 +16,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.Valid;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @Slf4j
 @RestController
@@ -23,6 +26,7 @@ import java.util.List;
 public class ScriptController {
     
     private final ScriptService scriptService;
+    private final WebEncryptionService webEncryptionService;
     
     /**
      * 分页查询脚本列表
@@ -45,12 +49,27 @@ public class ScriptController {
     }
     
     /**
-     * 获取脚本列表（用于任务创建）
+     * 获取脚本列表（用于任务创建），脚本内容加密返回
      */
     @GetMapping("/for-task")
     @RequirePermission("script:list")
-    public List<ScriptForTaskDTO> getScriptsForTask() {
-        return scriptService.getScriptsForTask();
+    public List<ScriptForTaskDTO> getScriptsForTask(Authentication authentication) {
+        List<ScriptForTaskDTO> scripts = scriptService.getScriptsForTask();
+        if (authentication != null) {
+            String username = authentication.getName();
+            if (webEncryptionService.hasSessionKey(username)) {
+                scripts.forEach(dto -> {
+                    if (dto.getContent() != null && !dto.getContent().isEmpty()) {
+                        try {
+                            dto.setContent(webEncryptionService.encrypt(username, dto.getContent()));
+                        } catch (Exception e) {
+                            log.warn("[WebEncryption] for-task 脚本内容加密失败: {}", e.getMessage());
+                        }
+                    }
+                });
+            }
+        }
+        return scripts;
     }
     
     /**
@@ -63,13 +82,20 @@ public class ScriptController {
     }
     
     /**
-     * 创建脚本（手动录入）
+     * 创建脚本（手动录入），解密 content 字段
      */
     @PostMapping
     @RequirePermission("script:create")
     public ScriptDTO createScript(@Valid @RequestBody CreateScriptRequest request,
                                  Authentication authentication) {
         String username = authentication.getName();
+        if (request.getContent() != null && webEncryptionService.hasSessionKey(username)) {
+            try {
+                request.setContent(webEncryptionService.decrypt(username, request.getContent()));
+            } catch (Exception e) {
+                log.warn("[WebEncryption] createScript content 解密失败，使用原始内容: {}", e.getMessage());
+            }
+        }
         return scriptService.createScript(request, username);
     }
     
@@ -94,12 +120,21 @@ public class ScriptController {
     }
     
     /**
-     * 更新脚本
+     * 更新脚本，解密 content 字段
      */
     @PutMapping("/{scriptId}")
     @RequirePermission("script:edit")
     public ScriptDTO updateScript(@PathVariable String scriptId,
-                                 @Valid @RequestBody UpdateScriptRequest request) {
+                                 @Valid @RequestBody UpdateScriptRequest request,
+                                 Authentication authentication) {
+        if (request.getContent() != null && authentication != null
+                && webEncryptionService.hasSessionKey(authentication.getName())) {
+            try {
+                request.setContent(webEncryptionService.decrypt(authentication.getName(), request.getContent()));
+            } catch (Exception e) {
+                log.warn("[WebEncryption] updateScript content 解密失败，使用原始内容: {}", e.getMessage());
+            }
+        }
         return scriptService.updateScript(scriptId, request);
     }
     
@@ -133,15 +168,28 @@ public class ScriptController {
     }
     
     /**
-     * 获取脚本内容（用于查看）
+     * 获取脚本内容（用于查看），加密返回
      */
     @GetMapping("/{scriptId}/content")
     @RequirePermission("script:view")
-    public ResponseEntity<String> getScriptContent(@PathVariable String scriptId) {
+    public ResponseEntity<Map<String, Object>> getScriptContent(@PathVariable String scriptId,
+                                                                 Authentication authentication) {
         String content = scriptService.getScriptContent(scriptId);
-        return ResponseEntity.ok()
-            .contentType(MediaType.TEXT_PLAIN)
-            .body(content);
+        Map<String, Object> result = new HashMap<>();
+        if (authentication != null && webEncryptionService.hasSessionKey(authentication.getName())) {
+            try {
+                result.put("content", webEncryptionService.encrypt(authentication.getName(), content));
+                result.put("encrypted", true);
+            } catch (Exception e) {
+                log.warn("[WebEncryption] getScriptContent 加密失败，返回明文: {}", e.getMessage());
+                result.put("content", content);
+                result.put("encrypted", false);
+            }
+        } else {
+            result.put("content", content);
+            result.put("encrypted", false);
+        }
+        return ResponseEntity.ok(result);
     }
     
     /**

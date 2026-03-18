@@ -139,11 +139,11 @@ class ScriptService {
     }
   }
 
-  // 获取脚本内容
+  // 获取脚本内容（响应为 { content, encrypted } 格式）
   async getScriptContent(scriptId) {
     try {
       const response = await api.get(`/web/scripts/${scriptId}/content`)
-      return response
+      return response  // 返回完整对象，由调用方处理解密
     } catch (error) {
       console.error('获取脚本内容失败:', error)
       throw error

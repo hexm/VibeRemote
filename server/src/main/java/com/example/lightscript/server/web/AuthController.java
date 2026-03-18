@@ -3,6 +3,7 @@ package com.example.lightscript.server.web;
 import com.example.lightscript.server.entity.User;
 import com.example.lightscript.server.security.JwtUtil;
 import com.example.lightscript.server.service.UserService;
+import com.example.lightscript.server.service.WebEncryptionService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ public class AuthController {
     
     private final UserService userService;
     private final JwtUtil jwtUtil;
+    private final WebEncryptionService webEncryptionService;
     
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
@@ -43,6 +45,8 @@ public class AuthController {
                 response.put("email", user.getEmail());
                 response.put("realName", user.getRealName());
                 response.put("permissions", user.getPermissions());
+                // 生成前端通信加密密钥，随登录响应下发
+                response.put("encryptionKey", webEncryptionService.generateSessionKey(user.getUsername()));
                 
                 return ResponseEntity.ok(response);
             }

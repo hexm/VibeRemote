@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { setSessionKey, clearSessionKey } from '../utils/crypto'
 
 // 根据环境变量自动选择API地址
 // 生产环境使用相对路径 /api（通过Nginx代理）
@@ -68,6 +69,10 @@ export const authService = {
   async login(credentials) {
     try {
       const response = await api.post('/auth/login', credentials)
+      // 存储前端通信加密密钥
+      if (response.encryptionKey) {
+        setSessionKey(response.encryptionKey)
+      }
       return {
         token: response.token,
         user: {
@@ -101,10 +106,11 @@ export const authService = {
   // 退出登录
   async logout() {
     try {
-      // 清理本地存储
+      // 清理本地存储和会话密钥
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       localStorage.removeItem('userInfo')
+      clearSessionKey()
     } catch (error) {
       // 忽略退出登录的错误
     }

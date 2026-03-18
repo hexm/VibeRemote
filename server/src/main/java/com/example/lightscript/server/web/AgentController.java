@@ -391,8 +391,12 @@ public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterReq
 			response.put("success", true);
 			response.put("message", "Agent公钥注册成功");
 			response.put("agentId", agentId);
+			// 返回服务器公钥和版本号，供Agent存储
+			response.put("serverPublicKey", serverEncryptionContext.getServerPublicKey());
+			response.put("keyVersion", serverEncryptionContext.getKeyVersion());
+			response.put("keyCreatedAt", serverEncryptionContext.getKeyCreatedAt());
 
-			log.info("[Agent] 公钥注册成功: agentId={}", agentId);
+			log.info("[Agent] 公钥注册成功: agentId={}, serverKeyVersion={}", agentId, serverEncryptionContext.getKeyVersion());
 			return ResponseEntity.ok(response);
 
 		} catch (Exception e) {

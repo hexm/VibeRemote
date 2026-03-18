@@ -14,6 +14,7 @@ import {
   DownloadOutlined,
 } from '@ant-design/icons'
 import scriptService from '../services/scriptService'
+import { encryptText, decryptText, getSessionKey } from '../utils/crypto'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
@@ -231,13 +232,18 @@ const Scripts = () => {
 
   const handleCreateScript = async (values) => {
     try {
+      let content = values.content
+      const encKey = getSessionKey()
+      if (encKey && content) {
+        try { content = await encryptText(content, encKey) } catch (e) { console.warn('[crypto] 加密失败:', e) }
+      }
       const scriptData = {
         name: values.name,
         filename: values.filename,
         type: values.type,
         description: values.description,
         encoding: values.encoding || 'UTF-8',
-        content: values.content,
+        content,
       }
       
       await scriptService.addScript(scriptData)
@@ -253,8 +259,14 @@ const Scripts = () => {
     setSelectedScript(script)
     
     try {
-      // 获取脚本内容
-      const content = await scriptService.getScriptContent(script.scriptId)
+      const response = await scriptService.getScriptContent(script.scriptId)
+      let content = response.content || ''
+      if (response.encrypted && content) {
+        const encKey = getSessionKey()
+        if (encKey) {
+          try { content = await decryptText(content, encKey) } catch (e) { console.warn('[crypto] 解密失败:', e) }
+        }
+      }
       script.content = content
       setViewModalVisible(true)
     } catch (error) {
@@ -307,13 +319,18 @@ const Scripts = () => {
 
   const handleUpdateScript = async (values) => {
     try {
+      let content = values.content
+      const encKey = getSessionKey()
+      if (encKey && content) {
+        try { content = await encryptText(content, encKey) } catch (e) { console.warn('[crypto] 加密失败:', e) }
+      }
       const updates = {
         name: values.name,
         filename: values.filename,
         type: values.type,
         description: values.description,
         encoding: values.encoding,
-        content: values.content,
+        content,
       }
       
       await scriptService.updateScript(selectedScript.scriptId, updates)

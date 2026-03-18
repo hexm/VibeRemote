@@ -13,6 +13,7 @@ import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.TaskExecutionService;
 import com.example.lightscript.server.service.UserService;
 import com.example.lightscript.server.service.ScriptService;
+import com.example.lightscript.server.service.WebEncryptionService;
 import com.example.lightscript.server.security.RequirePermission;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +51,7 @@ public class WebController {
     private final AgentGroupService agentGroupService;
     private final UserService userService;
     private final ScriptService scriptService;
+    private final WebEncryptionService webEncryptionService;
     
     @GetMapping("/dashboard/stats")
     @RequirePermission("agent:view")
@@ -419,6 +421,15 @@ public class WebController {
         // 获取当前登录用户作为创建者
         String createdBy = authentication.getName();
         taskSpec.setTaskName(taskName);
+
+        // 如果 scriptContent 是加密的，先解密
+        if (taskSpec.getScriptContent() != null && webEncryptionService.hasSessionKey(createdBy)) {
+            try {
+                taskSpec.setScriptContent(webEncryptionService.decrypt(createdBy, taskSpec.getScriptContent()));
+            } catch (Exception e) {
+                log.warn("[WebEncryption] scriptContent 解密失败，使用原始内容: {}", e.getMessage());
+            }
+        }
         
         // 调用新的多代理任务创建方法
         TaskModels.CreateTaskResponse createResponse = taskService.createMultiAgentTask(
@@ -562,12 +573,32 @@ public class WebController {
     public ResponseEntity<Map<String, Object>> getExecutionLogs(
             @PathVariable Long executionId,
             @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "5000") int limit) {
+            @RequestParam(defaultValue = "5000") int limit,
+            Authentication authentication) {
         
         TaskExecution execution = taskService.getTaskExecution(executionId)
             .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
         
-        return readLogFile(execution.getLogFilePath(), offset, limit, execution.getStatus());
+        ResponseEntity<Map<String, Object>> response = readLogFile(execution.getLogFilePath(), offset, limit, execution.getStatus());
+
+        // 加密日志内容
+        if (response.getBody() != null && authentication != null) {
+            String username = authentication.getName();
+            if (webEncryptionService.hasSessionKey(username)) {
+                Map<String, Object> body = new HashMap<>(response.getBody());
+                Object content = body.get("content");
+                if (content instanceof String && !((String) content).isEmpty()) {
+                    try {
+                        body.put("content", webEncryptionService.encrypt(username, (String) content));
+                        body.put("encrypted", true);
+                    } catch (Exception e) {
+                        log.warn("[WebEncryption] 日志加密失败，返回明文: {}", e.getMessage());
+                    }
+                }
+                return ResponseEntity.ok(body);
+            }
+        }
+        return response;
     }
     
     /**

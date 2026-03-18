@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons'
 import api from '../services/auth'
 import scriptService from '../services/scriptService'
+import { encryptText, decryptText, getSessionKey } from '../utils/crypto'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
@@ -94,13 +95,18 @@ const Tasks = () => {
     }
   }
 
-  // 处理脚本选择
-  const handleScriptSelect = (scriptId) => {
+  // 处理脚本选择（for-task 返回的 content 可能是加密的）
+  const handleScriptSelect = async (scriptId) => {
     const script = availableScripts.find(s => s.scriptId === scriptId)
     if (script) {
+      let content = script.content || ''
+      const encKey = getSessionKey()
+      if (encKey && content) {
+        try { content = await decryptText(content, encKey) } catch (e) { console.warn('[crypto] 脚本内容解密失败:', e) }
+      }
       form.setFieldsValue({
         scriptLang: script.type,
-        scriptContent: script.content
+        scriptContent: content
       })
     }
   }
@@ -359,6 +365,16 @@ const Tasks = () => {
           timeoutSec: formValues.timeoutSec || 300
         }
         
+        // 如果有会话密钥，加密脚本内容
+        const encKey = getSessionKey()
+        if (encKey && taskSpec.scriptContent) {
+          try {
+            taskSpec.scriptContent = await encryptText(taskSpec.scriptContent, encKey)
+          } catch (e) {
+            console.warn('[crypto] 脚本加密失败，使用明文:', e)
+          }
+        }
+        
         const params = new URLSearchParams()
         formValues.selectedAgents.forEach(id => params.append('agentIds', id))
         params.append('taskName', formValues.taskName)
@@ -420,7 +436,21 @@ const Tasks = () => {
           limit: 5000
         }
       })
-      setLogContent(response.content || '')
+      
+      let content = response.content || ''
+      // 如果服务器返回加密内容，解密
+      if (response.encrypted && content) {
+        const encKey = getSessionKey()
+        if (encKey) {
+          try {
+            content = await decryptText(content, encKey)
+          } catch (e) {
+            console.warn('[crypto] 日志解密失败，显示原始内容:', e)
+          }
+        }
+      }
+      
+      setLogContent(content)
       setLogTotalLines(response.totalLines || 0)
     } catch (error) {
       console.error('获取日志失败:', error)

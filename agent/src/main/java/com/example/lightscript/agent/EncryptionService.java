@@ -166,7 +166,13 @@ public class EncryptionService {
             signature.initVerify(serverPublicKey);
             signature.update(signatureData.getBytes());
             
-            if (!signature.verify(Base64.getDecoder().decode(payload.getSignature()))) {
+            boolean signatureValid;
+            try {
+                signatureValid = signature.verify(Base64.getDecoder().decode(payload.getSignature()));
+            } catch (SignatureException e) {
+                throw new SecurityException("签名验证失败，数据可能被篡改: " + e.getMessage());
+            }
+            if (!signatureValid) {
                 throw new SecurityException("签名验证失败，数据可能被篡改");
             }
             
