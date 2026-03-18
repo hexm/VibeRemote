@@ -246,7 +246,7 @@ if exist "agent.properties" (
 ) else (
     REM 创建基本配置文件
     echo server.url=%SERVER_URL% > agent.properties
-    echo server.register.token=dev-register-token >> agent.properties
+    echo register.token=917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83 >> agent.properties
 )
 echo ✅ 服务器地址已配置: %SERVER_URL%
 
@@ -282,8 +282,10 @@ if defined MANUAL_MODE (
         timeout /t 2 /nobreak >nul
     )
     
-    REM 创建新服务
-    sc create "%SERVICE_NAME%" binPath= "cmd.exe /c \"%INSTALL_DIR%\start-agent.bat\" --service" DisplayName= "LightScript Agent" start= auto depend= Tcpip >nul 2>&1
+    REM 创建新服务（直接用 jre\bin\java.exe 启动，避免 cmd 包装不稳定）
+    set "JAVA_EXE=%INSTALL_DIR%\jre\bin\java.exe"
+    if not exist "!JAVA_EXE!" set "JAVA_EXE=java"
+    sc create "%SERVICE_NAME%" binPath= "\"!JAVA_EXE!\" -Xmx512m -Xms128m -jar \"%INSTALL_DIR%\agent.jar\"" DisplayName= "LightScript Agent" start= auto depend= Tcpip >nul 2>&1
     if !errorlevel! equ 0 (
         echo ✅ 服务创建成功
         
