@@ -73,7 +73,7 @@ mkdir -p ${DEPLOY_DIR}
 # 复制后端文件
 mkdir -p ${DEPLOY_DIR}/backend
 cp target/server-*.jar ${DEPLOY_DIR}/backend/server.jar
-cp -r src/main/resources/application*.yml ${DEPLOY_DIR}/backend/ 2>/dev/null || true
+# 注意：不上传 application*.yml，敏感配置通过服务器上的 .env 文件注入
 
 # 复制前端构建文件
 mkdir -p ${DEPLOY_DIR}/frontend

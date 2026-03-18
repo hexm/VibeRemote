@@ -1,3 +1,8 @@
+# ============================================================
+# 通用基础配置 - 所有环境共享，不含任何敏感信息
+# 环境特定配置请看 application-dev.yml / application-prod.yml
+# ============================================================
+
 server:
   port: 8080
   servlet:
@@ -8,6 +13,7 @@ server:
   tomcat:
     max-swallow-size: 50MB
     max-http-form-post-size: 50MB
+
 spring:
   application:
     name: lightscript-server
@@ -15,64 +21,28 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
-  datasource:
-    # MySQL数据库配置
-    url: jdbc:mysql://8.138.114.34:3306/lightscript?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf8&autoReconnect=true&failOverReadOnly=false&maxReconnects=10
-    username: lightscript
-    password: lightscript123
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      connection-timeout: 20000
-      idle-timeout: 300000
-      max-lifetime: 1200000
-      leak-detection-threshold: 60000
   jpa:
-    hibernate:
-      ddl-auto: update  # 使用update模式，保持数据
-    show-sql: true  # 显示SQL用于调试
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQL8Dialect  # 使用MySQL方言
-        format_sql: true
-  security:
-    user:
-      name: admin
-      password: admin123
-      roles: ADMIN
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
 logging:
-  level:
-    root: INFO
-    com.example.lightscript.server: INFO
-    org.hibernate.SQL: WARN
-    org.hibernate.type.descriptor.sql.BasicBinder: WARN
-    org.springframework.web: WARN
-  file:
-    name: server/logs/server.log
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 lightscript:
   jwt:
-    secret: lightscript-jwt-secret-key-2024
     expiration: 86400000  # 24 hours
-  register:
-    token: dev-register-token
   log:
-    storage:
-      path: logs/tasks  # 日志文件存储根目录
-    retention:
-      days: 90  # 日志保留天数
     batch:
-      enabled: true  # 启用批量日志处理
-      max-size: 1000  # 最大批次大小
-      max-request-size: 10MB  # 最大请求大小
+      enabled: true
+      max-size: 1000
+      max-request-size: 10MB
     compression:
-      enabled: false  # 暂时禁用压缩 (Week 2启用)
+      enabled: false
       types: [gzip]
   encryption:
-    enabled: true  # 第二阶段加密功能
+    enabled: true
     key-rotation-days: 30
     max-time-skew: 300000  # 5分钟时间窗口

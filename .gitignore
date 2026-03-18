@@ -89,5 +89,10 @@ test-*.jar
 # Agent credentials (should be configured per deployment)
 .agent-credentials
 
+# Dev environment config (contains credentials, use application-dev.yml.example as template)
+server/src/main/resources/application-dev.yml
+# Prod environment config (contains credentials, use application-prod.yml.example as template)
+server/src/main/resources/application-prod.yml
+
 # Agent release packages (too large for git)
 agent/release/

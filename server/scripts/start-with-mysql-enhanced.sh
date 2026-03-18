@@ -25,21 +25,27 @@ pkill -f "ServerApplication" 2>/dev/null || true
 sleep 2
 
 echo "启动服务器..."
-echo "数据库: MySQL (8.138.114.34:3306/lightscript)"
+echo "数据库: MySQL (${DB_HOST:-8.138.114.34}:${DB_PORT:-3306}/${DB_NAME:-lightscript_dev})"
 echo "端口: 8080"
 echo "批量日志: 启用"
 echo "工作目录: $SERVER_DIR"
 echo ""
+echo "提示: 可通过环境变量覆盖数据库配置，例如:"
+echo "  export DB_HOST=xxx DB_NAME=xxx DB_USERNAME=xxx DB_PASSWORD=xxx"
+echo ""
 
 # 启动服务器
 mvn spring-boot:run \
+    -Dspring-boot.run.profiles=dev \
     -Dspring-boot.run.jvmArguments="-Xmx1g -Xms512m" \
     2>&1 | tee logs/server-startup.log &
 
-# 等待服务器启动
+# 等待服务器启动（使用 /actuator/health 更可靠）
 echo "等待服务器启动..."
 for i in {1..30}; do
-    if curl -s http://localhost:8080/ >/dev/null 2>&1; then
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null)
+    if [ "$STATUS" = "200" ]; then
+        echo ""
         echo "✅ 服务器启动成功!"
         echo "访问地址: http://localhost:8080"
         echo "管理员账号: admin / admin123"
