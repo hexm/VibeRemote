@@ -10,7 +10,7 @@ SERVER_URL="http://8.138.114.34:8080"
 INSTALL_DIR="/usr/local/lightscript-agent"
 SERVICE_NAME="com.lightscript.agent"
 MANUAL_MODE=""
-REGISTER_TOKEN="dev-register-token-2024"
+REGISTER_TOKEN="917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83"
 
 # 颜色输出
 RED='\033[0;31m'
