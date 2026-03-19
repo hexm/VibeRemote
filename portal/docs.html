@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文档 - LightScript</title>
+    <title>文档 - VibeRemote</title>
     <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -146,8 +146,8 @@
     <nav class="navbar">
         <div class="container">
             <a href="index.html" class="nav-brand">
-                <img src="assets/logo.svg" alt="LightScript" class="logo">
-                LightScript
+                <img src="assets/logo.svg" alt="VibeRemote" class="logo">
+                VibeRemote
             </a>
             <div class="nav-menu">
                 <a href="index.html" class="nav-link">首页</a>
@@ -217,12 +217,12 @@
         <!-- 概述 -->
         <div id="overview" class="docs-section active">
             <div class="docs-header">
-                <h1 class="docs-title">LightScript 文档</h1>
+                <h1 class="docs-title">VibeRemote 文档</h1>
                 <p class="docs-subtitle">现代化的分布式脚本执行平台</p>
             </div>
             
-            <h2>什么是 LightScript？</h2>
-            <p>LightScript 是一个现代化的分布式脚本执行平台，专为运维团队和开发者设计。它提供了强大的多节点管理、智能任务调度和实时监控功能，让您的脚本执行更加高效、可靠和可视化。</p>
+            <h2>什么是 VibeRemote？</h2>
+            <p>VibeRemote 是一个现代化的分布式脚本执行平台，专为运维团队和开发者设计。它提供了强大的多节点管理、智能任务调度和实时监控功能，让您的脚本执行更加高效、可靠和可视化。</p>
             
             <h3>核心特性</h3>
             <ul>
@@ -235,7 +235,7 @@
             </ul>
             
             <h3>架构概览</h3>
-            <p>LightScript 采用客户端-服务端架构：</p>
+            <p>VibeRemote 采用客户端-服务端架构：</p>
             <ul>
                 <li><strong>服务端</strong>：提供 Web 管理界面、API 接口和任务调度功能</li>
                 <li><strong>客户端</strong>：部署在目标服务器上，负责接收和执行脚本任务</li>
@@ -247,7 +247,7 @@
         <div id="installation" class="docs-section">
             <div class="docs-header">
                 <h1 class="docs-title">安装指南</h1>
-                <p class="docs-subtitle">快速部署 LightScript 服务端和客户端</p>
+                <p class="docs-subtitle">快速部署 VibeRemote 服务端和客户端</p>
             </div>
             
             <h2>服务端安装</h2>
@@ -255,7 +255,7 @@
             <div class="code-block">
                 <button class="copy-btn" onclick="copyToClipboard('docker-install')">复制</button>
                 <pre id="docker-install"># 下载 docker-compose.yml
-curl -O https://raw.githubusercontent.com/lightscript/lightscript/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/viberemote/viberemote/main/docker-compose.yml
 
 # 启动服务
 docker-compose up -d</pre>
@@ -265,10 +265,10 @@ docker-compose up -d</pre>
             <div class="code-block">
                 <button class="copy-btn" onclick="copyToClipboard('manual-install')">复制</button>
                 <pre id="manual-install"># 下载服务端
-wget https://github.com/lightscript/lightscript/releases/latest/download/lightscript-server.jar
+wget https://github.com/viberemote/viberemote/releases/latest/download/viberemote-server.jar
 
 # 启动服务端
-java -jar lightscript-server.jar</pre>
+java -jar viberemote-server.jar</pre>
             </div>
             
             <h2>客户端安装</h2>
@@ -310,7 +310,7 @@ iex ((New-Object System.Net.WebClient).DownloadString('http://your-server/script
             <div class="code-block">
                 <button class="copy-btn" onclick="copyToClipboard('example-script')">复制</button>
                 <pre id="example-script">#!/bin/bash
-echo "Hello, LightScript!"
+echo "Hello, VibeRemote!"
 echo "当前时间: $(date)"
 echo "系统信息: $(uname -a)"</pre>
             </div>
@@ -469,7 +469,7 @@ echo "备份路径: $BACKUP_PATH"</pre>
         <div id="api-auth" class="docs-section">
             <div class="docs-header">
                 <h1 class="docs-title">API 认证</h1>
-                <p class="docs-subtitle">了解如何使用 LightScript API</p>
+                <p class="docs-subtitle">了解如何使用 VibeRemote API</p>
             </div>
             
             <h2>获取 API Token</h2>

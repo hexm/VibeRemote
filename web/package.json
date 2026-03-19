@@ -1,8 +1,8 @@
 {
-  "name": "lightscript-modern-web",
+  "name": "viberemote-modern-web",
   "version": "1.0.0",
   "type": "module",
-  "description": "LightScript 现代化Web管理界面",
+  "description": "VibeRemote 现代化Web管理界面",
   "private": true,
   "scripts": {
     "dev": "vite",

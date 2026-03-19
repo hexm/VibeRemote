@@ -11,7 +11,7 @@ const PERMISSION_TEMPLATES = {
     name: '管理员',
     permissions: [
       'user:create', 'user:edit', 'user:delete', 'user:view',
-      'task:create', 'task:execute', 'task:delete', 'task:view',
+      'task:create', 'task:execute', 'task:delete', 'task:view', 'task:custom-script',
       'script:create', 'script:edit', 'script:delete', 'script:view',
       'agent:view', 'agent:group',
       'log:view', 'system:settings'
@@ -20,7 +20,7 @@ const PERMISSION_TEMPLATES = {
   OPERATOR: {
     name: '操作员',
     permissions: [
-      'task:create', 'task:execute', 'task:delete', 'task:view',
+      'task:create', 'task:execute', 'task:delete', 'task:view', 'task:custom-script',
       'script:create', 'script:edit', 'script:delete', 'script:view',
       'agent:view', 'agent:group',
       'log:view'

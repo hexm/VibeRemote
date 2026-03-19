@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider, Dropdown } from 'antd'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider } from 'antd'
 import {
   DesktopOutlined,
   SearchOutlined,
@@ -538,23 +538,13 @@ env | sort
           </Text>
         </div>
         <Space>
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'client-install',
-                  icon: <DownloadOutlined />,
-                  label: '安装客户端',
-                  onClick: () => window.open('http://8.138.114.34/client-install.html', '_blank')
-                }
-              ]
-            }}
-            placement="bottomRight"
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => window.open('http://8.138.114.34/client-install.html', '_blank')}
           >
-            <Button type="primary" icon={<PlusOutlined />}>
-              安装客户端
-            </Button>
-          </Dropdown>
+            安装客户端
+          </Button>
           <Button
             icon={<ReloadOutlined />}
             loading={loading}

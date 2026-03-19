@@ -395,7 +395,7 @@ const AgentVersions = () => {
             <Text type="secondary" className="text-sm">
               💡 <strong>文件命名规范：</strong>
               <br />
-              • 文件名应包含版本号，如：<code>agent-1.2.3.jar</code>、<code>lightscript-agent-2.0.0.jar</code>
+              • 文件名应包含版本号，如：<code>agent-1.2.3.jar</code>、<code>viberemote-agent-2.0.0.jar</code>
               <br />
               • 系统会自动从文件名解析版本号
               <br />

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>安装客户端 - LightScript</title>
+    <title>安装客户端 - VibeRemote</title>
     <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -323,8 +323,8 @@
     <nav class="navbar">
         <div class="container">
             <a href="index.html" class="nav-brand">
-                <img src="assets/logo.svg" alt="LightScript" class="logo">
-                LightScript
+                <img src="assets/logo.svg" alt="VibeRemote" class="logo">
+                VibeRemote
             </a>
             <div class="nav-menu">
                 <a href="index.html" class="nav-link">首页</a>
@@ -341,7 +341,7 @@
         <section class="hero-section">
             <div class="container">
                 <div class="hero-content">
-                    <h1 class="hero-title">安装 LightScript 客户端</h1>
+                    <h1 class="hero-title">安装 VibeRemote 客户端</h1>
                 </div>
             </div>
         </section>
@@ -386,7 +386,7 @@
                     <div id="linux-script" class="tab-content active">
                         <div class="download-card">
                             <h3 class="text-xl font-semibold mb-4">Linux 一键安装</h3>
-                            <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 LightScript 客户端：</p>
+                            <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 VibeRemote 客户端：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('linux-install-cmd')">复制</button>
                                 <pre id="linux-install-cmd">curl -fsSL http://8.138.114.34/scripts/install-linux.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
@@ -396,17 +396,17 @@
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('linux-manual')">复制</button>
                                 <pre id="linux-manual"># 下载客户端
-wget http://8.138.114.34/agent/release/lightscript-agent-0.4.0-linux-x64.tar.gz
-tar -xzf lightscript-agent-0.4.0-linux-x64.tar.gz
-cd lightscript-agent
+wget http://8.138.114.34/agent/release/viberemote-agent-0.4.0-linux-x64.tar.gz
+tar -xzf viberemote-agent-0.4.0-linux-x64.tar.gz
+cd viberemote-agent
 
 # 配置服务器地址
 echo "server.url=http://8.138.114.34:8080" > agent.properties
 
 # 安装并启动服务
 sudo ./install-service.sh
-sudo systemctl start lightscript-agent
-sudo systemctl enable lightscript-agent</pre>
+sudo systemctl start viberemote-agent
+sudo systemctl enable viberemote-agent</pre>
                             </div>
                         </div>
                     </div>
@@ -424,7 +424,7 @@ sudo systemctl enable lightscript-agent</pre>
                                     <pre id="macos-user-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
                                 </div>
                                 <div class="text-xs text-blue-600 mt-2">
-                                    ✓ 安装到: ~/.lightscript-agent<br>
+                                    ✓ 安装到: ~/.viberemote-agent<br>
                                     ✓ 无需sudo权限<br>
                                     ✓ 用户级LaunchAgent
                                 </div>
@@ -438,7 +438,7 @@ sudo systemctl enable lightscript-agent</pre>
                                     <pre id="macos-system-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | sudo bash -s -- --system --server=http://8.138.114.34:8080</pre>
                                 </div>
                                 <div class="text-xs text-orange-600 mt-2">
-                                    ✓ 安装到: /usr/local/lightscript-agent<br>
+                                    ✓ 安装到: /usr/local/viberemote-agent<br>
                                     ✓ 需要sudo权限<br>
                                     ✓ 系统级LaunchDaemon
                                 </div>
@@ -477,18 +477,18 @@ install-windows-pure.bat</pre>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
                                 <pre id="windows-manual"># PowerShell方式
-Invoke-WebRequest -Uri "http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip" -OutFile "lightscript-agent.zip"
-Expand-Archive -Path "lightscript-agent.zip" -DestinationPath "C:\Program Files\LightScript"
+Invoke-WebRequest -Uri "http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip" -OutFile "viberemote-agent.zip"
+Expand-Archive -Path "viberemote-agent.zip" -DestinationPath "C:\Program Files\VibeRemote"
 
 # 或使用curl和tar（Windows 10 1903+）
-curl -o lightscript-agent.zip http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip
-mkdir "C:\Program Files\LightScript"
-tar -xf lightscript-agent.zip -C "C:\Program Files\LightScript"
+curl -o viberemote-agent.zip http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip
+mkdir "C:\Program Files\VibeRemote"
+tar -xf viberemote-agent.zip -C "C:\Program Files\VibeRemote"
 
 # 安装服务
-cd "C:\Program Files\LightScript"
+cd "C:\Program Files\VibeRemote"
 .\install-service.bat
-net start LightScriptAgent</pre>
+net start VibeRemoteAgent</pre>
                             </div>
                         </div>
                     </div>
@@ -652,10 +652,10 @@ net start LightScriptAgent</pre>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('check-status')">复制</button>
                                 <pre id="check-status"># Linux/macOS
-sudo systemctl status lightscript-agent
+sudo systemctl status viberemote-agent
 
 # Windows
-sc query LightScriptAgent</pre>
+sc query VibeRemoteAgent</pre>
                             </div>
                         </div>
                         <div>
@@ -677,8 +677,8 @@ sc query LightScriptAgent</pre>
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <img src="assets/logo.svg" alt="LightScript" class="logo">
-                    <span>LightScript</span>
+                    <img src="assets/logo.svg" alt="VibeRemote" class="logo">
+                    <span>VibeRemote</span>
                 </div>
                 <p class="footer-text">
                     强大的分布式脚本执行平台
@@ -841,25 +841,25 @@ sc query LightScriptAgent</pre>
                 'windows-x64': {
                     name: 'Windows x64',
                     emoji: '🪟',
-                    filename: 'lightscript-agent-0.4.0-windows-x64.zip',
+                    filename: 'viberemote-agent-0.4.0-windows-x64.zip',
                     color: 'linear-gradient(135deg, #0078d4, #106ebe)'
                 },
                 'linux-x64': {
                     name: 'Linux x64', 
                     emoji: '🐧',
-                    filename: 'lightscript-agent-0.4.0-linux-x64.tar.gz',
+                    filename: 'viberemote-agent-0.4.0-linux-x64.tar.gz',
                     color: 'linear-gradient(135deg, #fcc624, #f57c00)'
                 },
                 'macos-x64': {
                     name: 'macOS Intel',
                     emoji: '🍎', 
-                    filename: 'lightscript-agent-0.4.0-macos-x64.tar.gz',
+                    filename: 'viberemote-agent-0.4.0-macos-x64.tar.gz',
                     color: 'linear-gradient(135deg, #007aff, #5856d6)'
                 },
                 'macos-arm64': {
                     name: 'macOS Apple Silicon',
                     emoji: '🍎',
-                    filename: 'lightscript-agent-0.4.0-macos-arm64.tar.gz', 
+                    filename: 'viberemote-agent-0.4.0-macos-arm64.tar.gz', 
                     color: 'linear-gradient(135deg, #007aff, #5856d6)'
                 }
             };

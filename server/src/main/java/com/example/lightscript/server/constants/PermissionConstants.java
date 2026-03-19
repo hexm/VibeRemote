@@ -18,6 +18,7 @@ public class PermissionConstants {
     public static final String TASK_EXECUTE = "task:execute";
     public static final String TASK_DELETE = "task:delete";
     public static final String TASK_VIEW = "task:view";
+    public static final String TASK_CUSTOM_SCRIPT = "task:custom-script";
     
     // 脚本管理权限
     public static final String SCRIPT_CREATE = "script:create";
@@ -79,6 +80,7 @@ public class PermissionConstants {
         new PermissionInfo(TASK_EXECUTE, "执行任务", "TASK", "可以启动/停止任务"),
         new PermissionInfo(TASK_DELETE, "删除任务", "TASK", "可以删除任务"),
         new PermissionInfo(TASK_VIEW, "查看任务", "TASK", "可以查看任务列表和详情"),
+        new PermissionInfo(TASK_CUSTOM_SCRIPT, "自定义脚本", "TASK", "可以在创建任务时输入自定义脚本"),
         
         // 脚本管理
         new PermissionInfo(SCRIPT_CREATE, "创建脚本", "SCRIPT", "可以创建新脚本"),

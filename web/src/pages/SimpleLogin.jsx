@@ -78,7 +78,7 @@ const SimpleLogin = ({ onLogin }) => {
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         width: '400px'
       }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>LightScript 登录</h2>
+        <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>VibeRemote 登录</h2>
         
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '20px' }}>

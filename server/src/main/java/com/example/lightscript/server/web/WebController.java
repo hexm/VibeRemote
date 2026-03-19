@@ -430,6 +430,16 @@ public class WebController {
                 log.warn("[WebEncryption] scriptContent 解密失败，使用原始内容: {}", e.getMessage());
             }
         }
+
+        // 如果是自定义脚本（没有 scriptId），检查是否有自定义脚本权限
+        if (taskSpec.getScriptId() == null || taskSpec.getScriptId().trim().isEmpty()) {
+            com.example.lightscript.server.entity.User currentUser = userService.getUserByUsername(createdBy)
+                .orElseThrow(() -> new com.example.lightscript.server.exception.BusinessException(
+                    com.example.lightscript.server.exception.ErrorCode.UNAUTHORIZED));
+            if (!currentUser.getPermissions().contains("task:custom-script")) {
+                throw new SecurityException("无权限使用自定义脚本，请选择已有脚本");
+            }
+        }
         
         // 调用新的多代理任务创建方法
         TaskModels.CreateTaskResponse createResponse = taskService.createMultiAgentTask(

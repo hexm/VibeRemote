@@ -25,6 +25,7 @@ import AgentSelectorModal from '../components/AgentSelectorModal'
 import api from '../services/auth'
 import scriptService from '../services/scriptService'
 import { encryptText, decryptText, getSessionKey } from '../utils/crypto'
+import { hasPermission } from '../utils/permission'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
@@ -74,7 +75,9 @@ const Tasks = () => {
   
   // 脚本相关状态
   const [scriptSource, setScriptSource] = useState('custom') // custom or existing
+  const canCustomScript = hasPermission('task:custom-script')
   const [availableScripts, setAvailableScripts] = useState([])
+  const [selectedScriptId, setSelectedScriptId] = useState(null)
   
   // 任务类型和文件传输相关状态
   const [taskType, setTaskType] = useState('SCRIPT')
@@ -110,9 +113,10 @@ const Tasks = () => {
       if (encKey && content) {
         try { content = await decryptText(content, encKey) } catch (e) { console.warn('[crypto] 脚本内容解密失败:', e) }
       }
+      setSelectedScriptId(scriptId)
       form.setFieldsValue({
         scriptLang: script.type,
-        scriptContent: content
+        scriptContent: content,
       })
     }
   }
@@ -363,8 +367,10 @@ const Tasks = () => {
       }
       
       if (!formValues.selectedAgents || formValues.selectedAgents.length === 0) {
-        message.error('请选择至少一个客户端')
-        return
+        if (selectedAgentIds.length === 0) {
+          message.error('请选择至少一个客户端')
+          return
+        }
       }
       
       // 优先使用 selectedAgentIds（来自 AgentSelectorModal），兼容 form 字段
@@ -393,6 +399,7 @@ const Tasks = () => {
         const taskSpec = {
           scriptLang: formValues.scriptLang || 'shell',
           scriptContent: formValues.scriptContent,
+          scriptId: scriptSource === 'existing' ? (selectedScriptId || null) : null,
           timeoutSec: formValues.timeoutSec || 300
         }
         
@@ -420,6 +427,7 @@ const Tasks = () => {
       form.resetFields()
       fileTransferForm.resetFields()
       setSelectedAgentIds([])
+      setSelectedScriptId(null)
       setActiveTaskTab('script')
       fetchTasks()
     } catch (error) {
@@ -850,9 +858,10 @@ const Tasks = () => {
             icon={<PlusOutlined />}
             onClick={() => {
               fetchOnlineAgents()
-              setScriptSource('custom')
+              setScriptSource(canCustomScript ? 'custom' : 'existing')
               setActiveTaskTab('script')
               setSelectedAgentIds([])
+      setSelectedScriptId(null)
               form.resetFields()
               fileTransferForm.resetFields()
               setCreateModalVisible(true)
@@ -967,6 +976,7 @@ const Tasks = () => {
           form.resetFields()
           fileTransferForm.resetFields()
           setSelectedAgentIds([])
+      setSelectedScriptId(null)
           setActiveTaskTab('script')
         }}
         footer={[
@@ -975,6 +985,7 @@ const Tasks = () => {
             form.resetFields()
             fileTransferForm.resetFields()
             setSelectedAgentIds([])
+      setSelectedScriptId(null)
             setActiveTaskTab('script')
           }}>
             取消
@@ -1073,7 +1084,9 @@ const Tasks = () => {
                     value={scriptSource}
                     onChange={(e) => setScriptSource(e.target.value)}
                   >
-                    <Radio value="custom">自定义</Radio>
+                    <Tooltip title={!canCustomScript ? '当前账号无自定义脚本权限' : ''}>
+                      <Radio value="custom" disabled={!canCustomScript}>自定义</Radio>
+                    </Tooltip>
                     <Radio value="existing">已有脚本</Radio>
                   </Radio.Group>
 

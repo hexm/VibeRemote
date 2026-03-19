@@ -57,6 +57,7 @@ public class AgentModels {
 		private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER
 		private String scriptLang; // bash | powershell | cmd
 		private String scriptContent;
+		private String scriptId; // 来自脚本库的脚本ID，非空表示使用已有脚本
 		private Integer timeoutSec;
 		private Map<String, String> env;
 		

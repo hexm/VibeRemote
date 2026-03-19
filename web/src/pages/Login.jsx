@@ -40,7 +40,7 @@ const Login = ({ onLogin }) => {
               <RocketOutlined className="text-2xl text-white" />
             </div>
             <Title level={2} className="mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              LightScript
+              VibeRemote
             </Title>
             <Text type="secondary" className="text-base">
               分布式脚本管理平台
@@ -107,35 +107,31 @@ const Login = ({ onLogin }) => {
 
           <Divider className="my-6">
             <Text type="secondary" className="text-sm">
-              默认账号
+              快捷登录
             </Text>
           </Divider>
 
           <div className="space-y-3">
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+            <Button
+              block
+              onClick={() => {
+                form.setFieldsValue({ username: 'demo', password: 'demo123456' })
+                form.submit()
+              }}
+              disabled={loading}
+              style={{ height: 44, borderRadius: 8 }}
+            >
               <Space>
-                <Text strong className="text-blue-600">管理员</Text>
-                <Text type="secondary">admin</Text>
+                <Text strong style={{ color: '#52c41a' }}>体验账号</Text>
+                <Text type="secondary">demo / demo123456</Text>
               </Space>
-              <Text code className="bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                admin123
-              </Text>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-              <Space>
-                <Text strong className="text-green-600">普通用户</Text>
-                <Text type="secondary">user</Text>
-              </Space>
-              <Text code className="bg-green-100 text-green-700 px-2 py-1 rounded">
-                user123
-              </Text>
-            </div>
+            </Button>
           </div>
         </Card>
 
         <div className="text-center mt-8">
           <Text type="secondary" className="text-sm">
-            © 2024 LightScript. 现代化分布式脚本管理平台
+            © 2024 VibeRemote. 现代化分布式脚本管理平台
           </Text>
         </div>
       </div>

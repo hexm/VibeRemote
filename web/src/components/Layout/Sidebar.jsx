@@ -99,11 +99,11 @@ const Sidebar = ({ collapsed }) => {
         <div className="flex items-center space-x-2">
           <img 
             src="/logo.svg" 
-            alt="LightScript" 
+            alt="VibeRemote" 
             className="w-6 h-6"
           />
           {!collapsed && (
-            <span className="text-lg font-semibold text-white">LightScript</span>
+            <span className="text-lg font-semibold text-white">VibeRemote</span>
           )}
         </div>
       </div>

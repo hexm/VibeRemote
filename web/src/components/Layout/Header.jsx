@@ -58,7 +58,7 @@ const Header = ({ collapsed, onToggle, userInfo, onLogout }) => {
           
           <div className="hidden md:block">
             <Text className="text-gray-600">
-              欢迎使用 LightScript 分布式脚本管理平台
+              欢迎使用 VibeRemote 分布式脚本管理平台
             </Text>
           </div>
         </div>
