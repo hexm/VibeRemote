@@ -19,7 +19,9 @@ import {
   PlayCircleOutlined,
   CodeOutlined,
   CloudDownloadOutlined,
+  DesktopOutlined,
 } from '@ant-design/icons'
+import AgentSelectorModal from '../components/AgentSelectorModal'
 import api from '../services/auth'
 import scriptService from '../services/scriptService'
 import { encryptText, decryptText, getSessionKey } from '../utils/crypto'
@@ -65,6 +67,10 @@ const Tasks = () => {
   const [onlineAgents, setOnlineAgents] = useState([])
   const [agentGroups, setAgentGroups] = useState([])
   const [selectionMode, setSelectionMode] = useState('manual') // manual or group
+
+  // Agent 选择器弹窗
+  const [agentSelectorOpen, setAgentSelectorOpen] = useState(false)
+  const [selectedAgentIds, setSelectedAgentIds] = useState([])
   
   // 脚本相关状态
   const [scriptSource, setScriptSource] = useState('custom') // custom or existing
@@ -133,7 +139,7 @@ const Tasks = () => {
     }
   }
 
-  // 当选择分组时，自动填充Agent列表
+  // 当选择分组时，自动填充Agent列表（保留兼容，AgentSelectorModal 内部处理）
   const handleGroupChange = async (groupId) => {
     if (!groupId) {
       form.setFieldsValue({ selectedAgents: [] })
@@ -149,6 +155,24 @@ const Tasks = () => {
     } catch (error) {
       message.error('获取分组成员失败')
     }
+  }
+
+  // 确认 agent 选择
+  const handleAgentSelectorConfirm = (agentIds) => {
+    setSelectedAgentIds(agentIds)
+    form.setFieldsValue({ selectedAgents: agentIds })
+    fileTransferForm.setFieldsValue({ selectedAgents: agentIds })
+    setAgentSelectorOpen(false)
+  }
+
+  // 获取已选 agent 的预览文本
+  const getSelectedAgentsPreview = () => {
+    if (selectedAgentIds.length === 0) return null
+    const names = selectedAgentIds
+      .slice(0, 3)
+      .map(id => onlineAgents.find(a => a.agentId === id)?.hostname || id.substring(0, 8))
+    const suffix = selectedAgentIds.length > 3 ? ` 等 ${selectedAgentIds.length} 台` : ` 共 ${selectedAgentIds.length} 台`
+    return names.join('、') + suffix
   }
 
   // 获取任务列表
@@ -343,11 +367,18 @@ const Tasks = () => {
         return
       }
       
+      // 优先使用 selectedAgentIds（来自 AgentSelectorModal），兼容 form 字段
+      const agentIds = selectedAgentIds.length > 0 ? selectedAgentIds : (formValues.selectedAgents || [])
+      if (agentIds.length === 0) {
+        message.error('请选择至少一个执行节点')
+        return
+      }
+      
       const currentTaskType = activeTaskTab === 'file-transfer' ? 'FILE_TRANSFER' : 'SCRIPT'
       
       if (currentTaskType === 'FILE_TRANSFER') {
         const fileTransferRequest = {
-          agentIds: formValues.selectedAgents,
+          agentIds,
           taskName: formValues.taskName,
           fileId: formValues.fileId,
           targetPath: formValues.targetPath,
@@ -376,7 +407,7 @@ const Tasks = () => {
         }
         
         const params = new URLSearchParams()
-        formValues.selectedAgents.forEach(id => params.append('agentIds', id))
+        agentIds.forEach(id => params.append('agentIds', id))
         params.append('taskName', formValues.taskName)
         const autoStart = formValues.autoStart === undefined ? true : formValues.autoStart
         params.append('autoStart', autoStart)
@@ -388,6 +419,7 @@ const Tasks = () => {
       setCreateModalVisible(false)
       form.resetFields()
       fileTransferForm.resetFields()
+      setSelectedAgentIds([])
       setActiveTaskTab('script')
       fetchTasks()
     } catch (error) {
@@ -820,6 +852,7 @@ const Tasks = () => {
               fetchOnlineAgents()
               setScriptSource('custom')
               setActiveTaskTab('script')
+              setSelectedAgentIds([])
               form.resetFields()
               fileTransferForm.resetFields()
               setCreateModalVisible(true)
@@ -933,6 +966,7 @@ const Tasks = () => {
           setCreateModalVisible(false)
           form.resetFields()
           fileTransferForm.resetFields()
+          setSelectedAgentIds([])
           setActiveTaskTab('script')
         }}
         footer={[
@@ -940,6 +974,7 @@ const Tasks = () => {
             setCreateModalVisible(false)
             form.resetFields()
             fileTransferForm.resetFields()
+            setSelectedAgentIds([])
             setActiveTaskTab('script')
           }}>
             取消
@@ -984,150 +1019,112 @@ const Tasks = () => {
                     }).replace(/\//g, '').replace(/:/g, '').replace(/\s/g, '_')}`
                   }}
                 >
-              <div className="grid grid-cols-2 gap-4">
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
                 <Form.Item
                   name="taskName"
                   label="任务名称"
                   rules={[{ required: true, message: '请输入任务名称' }]}
+                  style={{ flex: 1, marginBottom: 0 }}
                 >
                   <Input placeholder="输入任务名称" />
                 </Form.Item>
-                
+
                 <Form.Item
                   name="timeoutSec"
-                  label="超时时间（秒）"
+                  label="超时（秒）"
+                  style={{ width: 110, marginBottom: 0 }}
                 >
-                  <Input type="number" min={1} placeholder="默认300秒" />
+                  <Input type="number" min={1} placeholder="300" />
+                </Form.Item>
+
+                <Form.Item
+                  name="autoStart"
+                  label="启动"
+                  valuePropName="checked"
+                  style={{ marginBottom: 0 }}
+                >
+                  <Switch checkedChildren="立即" unCheckedChildren="草稿" />
                 </Form.Item>
               </div>
 
-              <Form.Item label="选择方式">
-                <Radio.Group 
-                  value={selectionMode} 
-                  onChange={(e) => setSelectionMode(e.target.value)}
-                >
-                  <Radio value="manual">手动选择</Radio>
-                  <Radio value="group">按分组选择</Radio>
-                </Radio.Group>
-              </Form.Item>
-
-              {selectionMode === 'group' && (
-                <Form.Item name="groupId" label="选择分组">
-                  <Select
-                    placeholder="选择客户端分组"
-                    onChange={handleGroupChange}
-                    allowClear
+              {/* 目标节点选择入口 */}
+              <Form.Item label="目标节点" required>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Button
+                    icon={<DesktopOutlined />}
+                    onClick={() => setAgentSelectorOpen(true)}
                   >
-                    {agentGroups.map(group => (
-                      <Option key={group.id} value={group.id}>
-                        <Space>
-                          <TeamOutlined />
-                          {group.name}
-                          <Tag color="blue">{group.agentCount}个客户端</Tag>
-                        </Space>
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              )}
-              
-              <Form.Item
-                name="selectedAgents"
-                label="目标节点（可多选）"
-                rules={[{ required: true, message: '请选择至少一个执行节点' }]}
-              >
-                <Select
-                  mode="multiple"
-                  placeholder={onlineAgents.length === 0 ? '正在加载节点列表...' : '选择执行节点（可多选）'}
-                  notFoundContent={onlineAgents.length === 0 ? '暂无可用节点' : '未找到匹配节点'}
-                  disabled={selectionMode === 'group'}
-                  maxTagCount="responsive"
-                >
-                  {onlineAgents.map(agent => (
-                    <Option key={agent.agentId} value={agent.agentId}>
-                      <Space>
-                        <Tag color={agent.status === 'ONLINE' ? 'green' : 'gray'} size="small">
-                          {agent.status === 'ONLINE' ? '在线' : '离线'}
-                        </Tag>
-                        {agent.hostname}
-                        {agent.ip && <Text type="secondary" style={{fontSize: 12}}>{agent.ip}</Text>}
-                      </Space>
-                    </Option>
-                  ))}
-                </Select>
+                    选择节点
+                  </Button>
+                  {selectedAgentIds.length > 0 ? (
+                    <span style={{ color: '#52c41a', fontSize: 13 }}>
+                      已选 <strong>{selectedAgentIds.length}</strong> 台：{getSelectedAgentsPreview()}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#999', fontSize: 13 }}>未选择节点</span>
+                  )}
+                </div>
               </Form.Item>
 
-              <Form.Item label="脚本来源">
-                <Radio.Group 
-                  value={scriptSource} 
-                  onChange={(e) => setScriptSource(e.target.value)}
-                >
-                  <Radio value="custom">自定义输入</Radio>
-                  <Radio value="existing">选择已有脚本</Radio>
-                </Radio.Group>
-              </Form.Item>
-
-              {scriptSource === 'existing' && (
-                <Form.Item label="选择脚本">
-                  <Select
-                    placeholder="从脚本管理中选择"
-                    onChange={handleScriptSelect}
-                    allowClear
-                    onClear={() => {
-                      form.setFieldsValue({
-                        scriptLang: 'shell',
-                        scriptContent: ''
-                      })
-                    }}
+              {/* 脚本来源 + 类型/脚本名称同行 */}
+              <Form.Item label="脚本来源" style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <Radio.Group
+                    value={scriptSource}
+                    onChange={(e) => setScriptSource(e.target.value)}
                   >
-                    {availableScripts.map(script => (
-                      <Option key={script.scriptId} value={script.scriptId}>
-                        <Space>
-                          <Tag color="purple">{script.type}</Tag>
-                          {script.name}
-                          {script.filename && <Text type="secondary" style={{fontSize: 12}}>{script.filename}</Text>}
-                        </Space>
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              )}
-              
-              <Form.Item
-                name="scriptLang"
-                label="脚本类型"
-                rules={[{ required: true, message: '请选择脚本类型' }]}
-              >
-                <Select placeholder="选择脚本类型" disabled={scriptSource === 'existing'}>
-                  <Option value="shell">Shell</Option>
-                  <Option value="python">Python</Option>
-                  <Option value="javascript">JavaScript</Option>
-                </Select>
+                    <Radio value="custom">自定义</Radio>
+                    <Radio value="existing">已有脚本</Radio>
+                  </Radio.Group>
+
+                  {scriptSource === 'existing' ? (
+                    <Select
+                      placeholder="选择脚本"
+                      onChange={handleScriptSelect}
+                      allowClear
+                      style={{ flex: 1, minWidth: 200 }}
+                      onClear={() => form.setFieldsValue({ scriptLang: 'shell', scriptContent: '' })}
+                    >
+                      {availableScripts.map(script => (
+                        <Option key={script.scriptId} value={script.scriptId}>
+                          <Space size={4}>
+                            <Tag color="purple" style={{ fontSize: 11 }}>{script.type}</Tag>
+                            {script.name}
+                            {script.filename && <Text type="secondary" style={{ fontSize: 11 }}>{script.filename}</Text>}
+                          </Space>
+                        </Option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Form.Item
+                      name="scriptLang"
+                      rules={[{ required: true, message: '请选择脚本类型' }]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Select placeholder="脚本类型" style={{ width: 140 }}>
+                        <Option value="shell">Shell</Option>
+                        <Option value="python">Python</Option>
+                        <Option value="javascript">JavaScript</Option>
+                      </Select>
+                    </Form.Item>
+                  )}
+                </div>
               </Form.Item>
-              
+
               <Form.Item
                 name="scriptContent"
                 label="脚本内容"
                 rules={[{ required: true, message: '请输入脚本内容' }]}
               >
-                <TextArea 
-                  rows={6} 
+                <TextArea
+                  rows={6}
                   placeholder="输入要执行的脚本内容..."
                   className="font-mono"
                   disabled={scriptSource === 'existing'}
+                  style={{ resize: 'vertical' }}
                 />
               </Form.Item>
 
-              <Form.Item
-                name="autoStart"
-                label="启动选项"
-                valuePropName="checked"
-              >
-                <Switch 
-                  checkedChildren="立即启动" 
-                  unCheckedChildren="保存为草稿"
-                />
-              </Form.Item>
                 </Form>
               )
             },
@@ -1171,60 +1168,23 @@ const Tasks = () => {
                 </Form.Item>
               </div>
 
-              <Form.Item label="选择方式">
-                <Radio.Group 
-                  value={selectionMode} 
-                  onChange={(e) => setSelectionMode(e.target.value)}
-                >
-                  <Radio value="manual">手动选择</Radio>
-                  <Radio value="group">按分组选择</Radio>
-                </Radio.Group>
-              </Form.Item>
-
-              {selectionMode === 'group' && (
-                <Form.Item name="groupId" label="选择分组">
-                  <Select
-                    placeholder="选择客户端分组"
-                    onChange={handleGroupChange}
-                    allowClear
+              {/* 目标节点选择入口 */}
+              <Form.Item label="目标节点" required>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Button
+                    icon={<DesktopOutlined />}
+                    onClick={() => setAgentSelectorOpen(true)}
                   >
-                    {agentGroups.map(group => (
-                      <Option key={group.id} value={group.id}>
-                        <Space>
-                          <TeamOutlined />
-                          {group.name}
-                          <Tag color="blue">{group.agentCount}个客户端</Tag>
-                        </Space>
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              )}
-              
-              <Form.Item
-                name="selectedAgents"
-                label="目标节点（可多选）"
-                rules={[{ required: true, message: '请选择至少一个执行节点' }]}
-              >
-                <Select
-                  mode="multiple"
-                  placeholder={onlineAgents.length === 0 ? '正在加载节点列表...' : '选择执行节点（可多选）'}
-                  notFoundContent={onlineAgents.length === 0 ? '暂无可用节点' : '未找到匹配节点'}
-                  disabled={selectionMode === 'group'}
-                  maxTagCount="responsive"
-                >
-                  {onlineAgents.map(agent => (
-                    <Option key={agent.agentId} value={agent.agentId}>
-                      <Space>
-                        <Tag color={agent.status === 'ONLINE' ? 'green' : 'gray'} size="small">
-                          {agent.status === 'ONLINE' ? '在线' : '离线'}
-                        </Tag>
-                        {agent.hostname}
-                        {agent.ip && <Text type="secondary" style={{fontSize: 12}}>{agent.ip}</Text>}
-                      </Space>
-                    </Option>
-                  ))}
-                </Select>
+                    选择节点
+                  </Button>
+                  {selectedAgentIds.length > 0 ? (
+                    <span style={{ color: '#52c41a', fontSize: 13 }}>
+                      已选 <strong>{selectedAgentIds.length}</strong> 台：{getSelectedAgentsPreview()}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#999', fontSize: 13 }}>未选择节点</span>
+                  )}
+                </div>
               </Form.Item>
               <div className="grid grid-cols-2 gap-4">
                 <Form.Item
@@ -1277,6 +1237,17 @@ const Tasks = () => {
           ]}
         />
       </Modal>
+
+      {/* Agent 选择器弹窗 */}
+      <AgentSelectorModal
+        open={agentSelectorOpen}
+        onConfirm={handleAgentSelectorConfirm}
+        onCancel={() => setAgentSelectorOpen(false)}
+        agents={onlineAgents}
+        groups={agentGroups}
+        initialSelected={selectedAgentIds}
+      />
+
       {/* 任务详情模态框 */}
       <Modal
         title={`任务详情 - ${selectedTask?.taskName || selectedTask?.taskId}`}
