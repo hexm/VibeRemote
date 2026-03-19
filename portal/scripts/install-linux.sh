@@ -90,9 +90,11 @@ fi
 # 检测系统类型
 detect_os() {
     if [[ -f /etc/os-release ]]; then
+        local _SAVED_VERSION="$VERSION"
         . /etc/os-release
         OS=$ID
         VER=$VERSION_ID
+        VERSION="$_SAVED_VERSION"  # 恢复被 os-release 覆盖的 VERSION
     elif type lsb_release >/dev/null 2>&1; then
         OS=$(lsb_release -si | tr '[:upper:]' '[:lower:]')
         VER=$(lsb_release -sr)
@@ -163,12 +165,17 @@ stop_existing_service() {
         echo -e "${GREEN}✅ 服务已停止${NC}"
     fi
     
-    # 检查进程
-    if pgrep -f "viberemote.*agent\|java.*agent.jar" > /dev/null; then
+    # 强制停止所有 agent.jar 进程（包括非 systemd 启动的）
+    if pgrep -f "java.*agent.jar" > /dev/null 2>&1; then
         echo -e "${BLUE}终止现有Agent进程...${NC}"
-        pkill -f "viberemote.*agent\|java.*agent.jar" || true
-        sleep 2
+        pkill -f "java.*agent.jar" || true
+        sleep 3
+        # 如果还在，强制杀
+        pkill -9 -f "java.*agent.jar" 2>/dev/null || true
     fi
+    
+    # 清理锁文件
+    rm -f /tmp/.viberemote-agent.lock /tmp/.lightscript-agent.lock 2>/dev/null || true
 }
 
 # 下载和安装
