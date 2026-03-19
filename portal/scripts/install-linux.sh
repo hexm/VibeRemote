@@ -1,16 +1,17 @@
 #!/bin/bash
 
-# LightScript Agent Linux 一键安装脚本
+# VibeRemote Agent Linux 一键安装脚本
 # 支持 Ubuntu/Debian/CentOS/RHEL/Rocky Linux
 
 set -e
 
 # 默认配置
 SERVER_URL="http://8.138.114.34:8080"
-INSTALL_DIR="/opt/lightscript-agent"
-SERVICE_NAME="lightscript-agent"
+INSTALL_DIR="/opt/viberemote-agent"
+SERVICE_NAME="viberemote-agent"
 MANUAL_MODE=""
 REGISTER_TOKEN="917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83"
+VERSION="0.4.0"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -20,7 +21,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}=========================================="
-echo "  LightScript Agent Linux 安装程序"
+echo "  VibeRemote Agent Linux 安装程序"
 echo -e "==========================================${NC}"
 echo ""
 
@@ -60,7 +61,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "选项:"
             echo "  --server URL        指定服务器地址 (默认: http://8.138.114.34:8080)"
-            echo "  --install-dir DIR   指定安装目录 (默认: /opt/lightscript-agent)"
+            echo "  --install-dir DIR   指定安装目录 (默认: /opt/viberemote-agent)"
             echo "  --token TOKEN       指定注册令牌 (默认: dev-register-token-2024)"
             echo "  --manual           手动模式，不自动启动服务"
             echo "  --help             显示此帮助信息"
@@ -163,9 +164,9 @@ stop_existing_service() {
     fi
     
     # 检查进程
-    if pgrep -f "lightscript.*agent" > /dev/null; then
+    if pgrep -f "viberemote.*agent\|java.*agent.jar" > /dev/null; then
         echo -e "${BLUE}终止现有Agent进程...${NC}"
-        pkill -f "lightscript.*agent" || true
+        pkill -f "viberemote.*agent\|java.*agent.jar" || true
         sleep 2
     fi
 }
@@ -178,20 +179,18 @@ download_and_install() {
     ARCH=$(uname -m)
     case $ARCH in
         x86_64)
-            PACKAGE_NAME="lightscript-agent-0.4.0-linux-x64.tar.gz"
+            PACKAGE_NAME="viberemote-agent-${VERSION}-linux-x64.tar.gz"
             ;;
         aarch64|arm64)
-            # 如果有ARM版本的话
-            PACKAGE_NAME="lightscript-agent-0.4.0-linux-arm64.tar.gz"
-            # 如果没有ARM版本，使用x64版本
-            if ! curl -s --head "${SERVER_URL%:*}:80/agent/release/$PACKAGE_NAME" | head -n1 | grep -q "200 OK"; then
+            PACKAGE_NAME="viberemote-agent-${VERSION}-linux-arm64.tar.gz"
+            if ! curl -s --head "${SERVER_URL%:*}/agent/release/$PACKAGE_NAME" | head -n1 | grep -q "200"; then
                 echo -e "${YELLOW}⚠️  ARM64版本不可用，使用x64版本${NC}"
-                PACKAGE_NAME="lightscript-agent-0.4.0-linux-x64.tar.gz"
+                PACKAGE_NAME="viberemote-agent-${VERSION}-linux-x64.tar.gz"
             fi
             ;;
         *)
             echo -e "${YELLOW}⚠️  未知架构 $ARCH，使用x64版本${NC}"
-            PACKAGE_NAME="lightscript-agent-0.4.0-linux-x64.tar.gz"
+            PACKAGE_NAME="viberemote-agent-${VERSION}-linux-x64.tar.gz"
             ;;
     esac
     
@@ -238,7 +237,7 @@ configure_agent() {
     
     # 创建配置文件
     cat > "$INSTALL_DIR/agent.properties" << EOF
-# LightScript Agent 配置文件
+# VibeRemote Agent 配置文件
 # 自动生成于 $(date)
 
 # 服务器配置
@@ -280,7 +279,7 @@ create_service() {
     
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
-Description=LightScript Agent
+Description=VibeRemote Agent
 After=network.target
 Wants=network.target
 
@@ -294,7 +293,7 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=lightscript-agent
+SyslogIdentifier=viberemote-agent
 
 # 环境变量
 Environment=JAVA_OPTS="-Xmx512m -Xms256m"
@@ -335,7 +334,7 @@ start_service() {
 show_result() {
     echo ""
     echo -e "${GREEN}=========================================="
-    echo "✅ LightScript Agent 安装完成！"
+    echo "✅ VibeRemote Agent 安装完成！"
     echo -e "==========================================${NC}"
     echo ""
     echo -e "${BLUE}安装信息：${NC}"

@@ -389,7 +389,7 @@
                             <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 VibeRemote 客户端：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('linux-install-cmd')">复制</button>
-                                <pre id="linux-install-cmd">curl -fsSL http://8.138.114.34/scripts/install-linux.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                                <pre id="linux-install-cmd">curl -fsSL http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-linux.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
                             </div>
                             
                             <h4 class="font-semibold mb-2 mt-4">手动安装步骤</h4>
@@ -403,9 +403,10 @@ cd viberemote-agent
 # 配置服务器地址
 echo "server.url=http://8.138.114.34:8080" > agent.properties
 
-# 安装并启动服务
-sudo ./install-service.sh
-sudo systemctl start viberemote-agent
+# 启动
+./start-agent.sh
+
+# 设置开机自启（systemd）
 sudo systemctl enable viberemote-agent</pre>
                             </div>
                         </div>
@@ -421,7 +422,7 @@ sudo systemctl enable viberemote-agent</pre>
                                 <p class="text-blue-700 text-sm mb-3">安装到用户目录，无需sudo权限，仅当前用户可用</p>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyToClipboard('macos-user-install')">复制</button>
-                                    <pre id="macos-user-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                                    <pre id="macos-user-install">curl -fsSL http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
                                 </div>
                                 <div class="text-xs text-blue-600 mt-2">
                                     ✓ 安装到: ~/.viberemote-agent<br>
@@ -431,17 +432,8 @@ sudo systemctl enable viberemote-agent</pre>
                             </div>
                             
                             <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                                <h4 class="font-semibold text-orange-800 mb-2">🖥️ 系统安装</h4>
-                                <p class="text-orange-700 text-sm mb-3">安装到系统目录，需要sudo权限，所有用户可用</p>
-                                <div class="code-block">
-                                    <button class="copy-btn" onclick="copyToClipboard('macos-system-install')">复制</button>
-                                    <pre id="macos-system-install">curl -fsSL http://8.138.114.34/scripts/install-macos.sh | sudo bash -s -- --system --server=http://8.138.114.34:8080</pre>
-                                </div>
-                                <div class="text-xs text-orange-600 mt-2">
-                                    ✓ 安装到: /usr/local/viberemote-agent<br>
-                                    ✓ 需要sudo权限<br>
-                                    ✓ 系统级LaunchDaemon
-                                </div>
+                                <h4 class="font-semibold text-orange-800 mb-2">ℹ️ 说明</h4>
+                                <p class="text-orange-700 text-sm">安装到用户目录 <code>~/.viberemote-agent</code>，无需 sudo，开机自动启动。</p>
                             </div>
                         </div>
                     </div>
@@ -449,46 +441,27 @@ sudo systemctl enable viberemote-agent</pre>
                     <!-- Windows 脚本安装 -->
                     <div id="windows-script" class="tab-content">
                         <div class="download-card">
-                            <h3 class="text-xl font-semibold mb-4">Windows PowerShell 安装（推荐）</h3>
-                            <p class="text-gray-600 mb-4">以管理员身份运行 PowerShell，执行以下命令：</p>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('windows-install-cmd')">复制</button>
-                                <pre id="windows-install-cmd">Set-ExecutionPolicy Bypass -Scope Process -Force
-iex ((New-Object System.Net.WebClient).DownloadString('http://8.138.114.34/scripts/install-windows.ps1'))</pre>
-                            </div>
-                            
-                            <h3 class="text-xl font-semibold mb-4 mt-6">Windows 批处理安装（纯BAT）</h3>
-                            <p class="text-gray-600 mb-4">不依赖PowerShell，适用于受限环境。需要Windows 10 1903+或Windows 11：</p>
+                            <h3 class="text-xl font-semibold mb-4">Windows 一键安装（推荐）</h3>
+                            <p class="text-gray-600 mb-4">在命令提示符或 PowerShell 中运行，安装到用户目录，无需管理员权限：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-bat-install')">复制</button>
-                                <pre id="windows-bat-install"># 下载并运行安装脚本
-curl -o install-windows-pure.bat http://8.138.114.34/scripts/install-windows-pure.bat
-install-windows-pure.bat</pre>
+                                <pre id="windows-bat-install">curl -o viberemote-install.bat http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-windows.bat && viberemote-install.bat</pre>
                             </div>
-                            
                             <div class="text-xs text-blue-600 mt-2">
-                                ✓ 不依赖PowerShell<br>
-                                ✓ 使用系统内置curl和tar<br>
-                                ✓ 支持服务模式和手动模式<br>
-                                ✓ 适用于Windows 10 1903+
+                                ✓ 安装到: %USERPROFILE%\VibeRemote-Agent<br>
+                                ✓ 无需管理员权限<br>
+                                ✓ 注册表开机自启（用户级）<br>
+                                ✓ 适用于 Windows 10 1903+
                             </div>
                             
-                            <h4 class="font-semibold mb-2 mt-4">手动安装步骤</h4>
+                            <h4 class="font-semibold mb-2 mt-6">手动安装步骤</h4>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
-                                <pre id="windows-manual"># PowerShell方式
-Invoke-WebRequest -Uri "http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip" -OutFile "viberemote-agent.zip"
-Expand-Archive -Path "viberemote-agent.zip" -DestinationPath "C:\Program Files\VibeRemote"
-
-# 或使用curl和tar（Windows 10 1903+）
-curl -o viberemote-agent.zip http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip
-mkdir "C:\Program Files\VibeRemote"
-tar -xf viberemote-agent.zip -C "C:\Program Files\VibeRemote"
-
-# 安装服务
-cd "C:\Program Files\VibeRemote"
-.\install-service.bat
-net start VibeRemoteAgent</pre>
+                                <pre id="windows-manual">curl -o viberemote-agent.zip http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip
+tar -xf viberemote-agent.zip -C "%USERPROFILE%\VibeRemote-Agent"
+cd /d "%USERPROFILE%\VibeRemote-Agent"
+start-agent.bat
+install-autostart.bat</pre>
                             </div>
                         </div>
                     </div>
@@ -652,10 +625,12 @@ net start VibeRemoteAgent</pre>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('check-status')">复制</button>
                                 <pre id="check-status"># Linux/macOS
-sudo systemctl status viberemote-agent
+~/.viberemote-agent/check-status.sh
+# 或
+/opt/viberemote-agent/check-status.sh
 
 # Windows
-sc query VibeRemoteAgent</pre>
+%USERPROFILE%\VibeRemote-Agent\check-status.bat</pre>
                             </div>
                         </div>
                         <div>
@@ -885,8 +860,22 @@ sc query VibeRemoteAgent</pre>
             link.click();
             document.body.removeChild(link);
             
-            // 显示下载提示
-            alert(`正在下载 ${osInfo.name} 版本的安装包...`);
+            // 显示 toast 提示（自动消失）
+            showToast(`正在下载 ${osInfo.name} 版本...`);
+        }
+        
+        function showToast(msg) {
+            let toast = document.getElementById('download-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'download-toast';
+                toast.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:0.75rem 1.5rem;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = msg;
+            toast.style.opacity = '1';
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
         }
         
         // 页面加载时设置推荐下载

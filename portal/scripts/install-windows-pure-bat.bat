@@ -6,11 +6,11 @@ REM LightScript Agent Windows 安装脚本
 REM 支持 Windows 10 1903+ (内置 curl 和 tar)
 
 set SERVER_URL=http://8.138.114.34:8080
-set INSTALL_DIR=C:\LightScript-Agent
+set INSTALL_DIR=%USERPROFILE%\VibeRemote-Agent
 
 echo.
 echo ========================================
-echo   LightScript Agent Windows 安装程序
+echo   VibeRemote Agent Windows 安装程序
 echo ========================================
 echo.
 
@@ -85,7 +85,7 @@ if !errorlevel! neq 0 (
 
 echo [3/4] 下载安装包...
 set ZIP_FILE=%INSTALL_DIR%\agent.zip
-set DOWNLOAD_URL=http://8.138.114.34/agent/release/lightscript-agent-0.4.0-windows-x64.zip
+set DOWNLOAD_URL=http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip
 curl -L --fail --progress-bar --connect-timeout 30 --max-time 300 -o "%ZIP_FILE%" "%DOWNLOAD_URL%"
 if !errorlevel! neq 0 (
     echo [错误] 下载失败，请检查网络或手动下载: %DOWNLOAD_URL%
@@ -124,13 +124,15 @@ echo 安装目录: %INSTALL_DIR%
 echo.
 echo 启动 Agent:
 echo   双击 %INSTALL_DIR%\start-agent.bat
-echo   或在命令行运行: cd /d "%INSTALL_DIR%" ^&^& start-agent.bat
 echo.
 echo 停止 Agent:
 echo   运行 %INSTALL_DIR%\stop-agent.bat
 echo.
-echo 卸载:
-echo   运行 %INSTALL_DIR%\uninstall.bat
+echo 设置开机自启:
+echo   运行 %INSTALL_DIR%\install-autostart.bat
+echo.
+echo 查看状态:
+echo   运行 %INSTALL_DIR%\check-status.bat
 echo.
 echo 查看日志: %INSTALL_DIR%\logs\agent.log
 echo.
@@ -142,7 +144,7 @@ if /i "!START_NOW!"=="N" goto :done
 echo.
 echo 启动 Agent...
 cd /d "%INSTALL_DIR%"
-start "LightScript Agent" cmd /k start-agent.bat
+start "VibeRemote Agent" cmd /k start-agent.bat
 
 :done
 echo.

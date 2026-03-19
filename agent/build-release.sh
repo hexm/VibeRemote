@@ -78,6 +78,8 @@ prepare_jre_files
 
 # 清理发布目录（保留JRE文件）
 echo "🧹 清理旧的安装包..."
+rm -f "$RELEASE_DIR"/viberemote-agent-*.tar.gz
+rm -f "$RELEASE_DIR"/viberemote-agent-*.zip
 rm -f "$RELEASE_DIR"/lightscript-agent-*.tar.gz
 rm -f "$RELEASE_DIR"/lightscript-agent-*.zip
 mkdir -p "$RELEASE_DIR"
@@ -239,24 +241,24 @@ if exist "jre\bin\java.exe" (
 )
 
 REM 后台启动，stdout 和 stderr 全部写入日志文件
-echo 启动 LightScript Agent...
+echo 启动 VibeRemote Agent...
 echo 日志文件: %~dp0logs\agent.log
 start /b "" "%JAVA_CMD%" -Xmx512m -Xms128m -Dfile.encoding=UTF-8 -jar "%~dp0agent.jar" >>"%~dp0logs\agent.log" 2>&1
 echo Agent 已在后台启动，窗口将自动关闭
 timeout /t 2 /nobreak >nul
 EOF
 
-        # Windows 停止脚本 - 先通知 server 离线，再杀进程
+        # Windows 停止脚本
         cat > "$target_dir/stop-agent.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
-set ID_FILE=%USERPROFILE%\.lightscript\.agent_id
+set ID_FILE=%USERPROFILE%\.viberemote\.agent_id
 set PROPS_FILE=%SCRIPT_DIR%agent.properties
 
-echo 停止 LightScript Agent...
+echo 停止 VibeRemote Agent...
 
 REM 读取 server.url 和凭证，主动通知服务器离线
 set SERVER_URL=
@@ -274,13 +276,6 @@ if exist "%ID_FILE%" (
 if defined SERVER_URL if defined AGENT_ID if defined AGENT_TOKEN (
     echo 通知服务器离线...
     curl -s -X POST "%SERVER_URL%/api/agent/offline" -d "agentId=!AGENT_ID!&agentToken=!AGENT_TOKEN!" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo 服务器已收到离线通知
-    ) else (
-        echo 警告: 离线通知发送失败，继续停止进程
-    )
-) else (
-    echo 未找到凭证，跳过离线通知
 )
 
 REM 通过 wmic 精确查找并停止 agent.jar 进程
@@ -295,119 +290,119 @@ echo Agent 已停止
 pause
 EOF
 
-        # Windows 服务安装脚本 - 修复乱码
-        cat > "$target_dir/install-service.bat" << 'EOF'
+        # Windows 状态检查脚本
+        cat > "$target_dir/check-status.bat" << 'EOF'
+@echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+
+echo ========================================
+echo   VibeRemote Agent 状态检查
+echo ========================================
+echo.
+
+REM 检查进程是否运行
+set RUNNING=false
+for /f "skip=1 tokens=1,2" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid,commandline 2^>nul') do (
+    if "%%i" neq "" (
+        set RUNNING=true
+        echo [状态] 运行中 (PID: %%i)
+    )
+)
+
+if "!RUNNING!"=="false" (
+    echo [状态] 未运行
+)
+
+echo.
+
+REM 检查开机启动
+reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "VibeRemoteAgent" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [开机启动] 已启用
+) else (
+    echo [开机启动] 未启用
+)
+
+echo.
+
+REM 显示最近日志
+set LOG_FILE=%~dp0logs\agent.log
+if exist "%LOG_FILE%" (
+    echo [最近日志] (最后10行)
+    echo ----------------------------------------
+    powershell -Command "Get-Content '%LOG_FILE%' -Tail 10" 2>nul
+) else (
+    echo [日志] 暂无日志文件
+)
+
+echo.
+pause
+EOF
+
+        # Windows 开机启动注册脚本（注册表方式，无需管理员权限）
+        cat > "$target_dir/install-autostart.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
-set SERVICE_NAME=LightScriptAgent
-set SERVICE_DISPLAY_NAME=LightScript Agent
-set SERVICE_DESCRIPTION=LightScript 分布式脚本执行代理
+set REG_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+set REG_NAME=VibeRemoteAgent
 
-echo 安装 LightScript Agent Windows 服务...
+echo 设置 VibeRemote Agent 开机自启...
 
-REM 检查管理员权限
-net session >nul 2>&1
-if !errorlevel! neq 0 (
-    echo ❌ 需要管理员权限安装服务
-    echo 请以管理员身份运行此脚本
-    pause
-    exit /b 1
-)
-
-REM 检查服务是否已存在
-sc query "%SERVICE_NAME%" >nul 2>&1
+REM 写入注册表（用户级，无需管理员权限）
+reg add "%REG_KEY%" /v "%REG_NAME%" /t REG_SZ /d "\"%SCRIPT_DIR%start-agent.bat\"" /f >nul 2>&1
 if !errorlevel! equ 0 (
-    echo 服务已存在，正在删除旧服务...
-    net stop "%SERVICE_NAME%" >nul 2>&1
-    sc delete "%SERVICE_NAME%" >nul 2>&1
-    timeout /t 2 /nobreak >nul
-)
-
-REM 创建服务（直接用内置 jre\bin\java.exe 启动 jar，避免 cmd 包装不稳定）
-echo 创建Windows服务...
-set "JAVA_EXE=%SCRIPT_DIR%jre\bin\java.exe"
-if not exist "!JAVA_EXE!" set "JAVA_EXE=java"
-sc create "%SERVICE_NAME%" ^
-    binPath= "\"!JAVA_EXE!\" -Xmx512m -Xms128m -jar \"%SCRIPT_DIR%agent.jar\"" ^
-    DisplayName= "%SERVICE_DISPLAY_NAME%" ^
-    start= auto ^
-    depend= Tcpip
-
-if !errorlevel! equ 0 (
-    echo ✅ 服务创建成功
-    
-    REM 设置服务描述
-    sc description "%SERVICE_NAME%" "%SERVICE_DESCRIPTION%"
-    
-    REM 设置服务恢复选项（失败时自动重启）
-    sc failure "%SERVICE_NAME%" reset= 86400 actions= restart/30000/restart/60000/restart/120000
-    
-    REM 启动服务
-    echo 启动服务...
-    net start "%SERVICE_NAME%"
-    
-    if !errorlevel! equ 0 (
-        echo ✅ 服务启动成功
-        echo.
-        echo 使用以下命令管理服务:
-        echo   查看状态: sc query "%SERVICE_NAME%"
-        echo   启动服务: net start "%SERVICE_NAME%"
-        echo   停止服务: net stop "%SERVICE_NAME%"
-        echo   卸载服务: uninstall.bat
-    ) else (
-        echo ❌ 服务启动失败
-        echo 请检查日志文件: %SCRIPT_DIR%logs\agent.log
-    )
+    echo [成功] 已设置开机自启
+    echo 路径: %SCRIPT_DIR%start-agent.bat
 ) else (
-    echo ❌ 服务创建失败
+    echo [失败] 设置开机自启失败
 )
 
+echo.
 pause
 EOF
 
-        # Windows 服务卸载脚本 - 修复乱码
+        # Windows 取消开机启动脚本
+        cat > "$target_dir/uninstall-autostart.bat" << 'EOF'
+@echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+
+set REG_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+set REG_NAME=VibeRemoteAgent
+
+echo 取消 VibeRemote Agent 开机自启...
+
+reg delete "%REG_KEY%" /v "%REG_NAME%" /f >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [成功] 已取消开机自启
+) else (
+    echo [提示] 未找到开机自启项，可能未设置
+)
+
+echo.
+pause
+EOF
+
+        # Windows 卸载脚本
         cat > "$target_dir/uninstall.bat" << 'EOF'
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
-set SERVICE_NAME=LightScriptAgent
+set REG_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+set REG_NAME=VibeRemoteAgent
 
-echo 卸载 LightScript Agent...
+echo 卸载 VibeRemote Agent...
 echo.
 
-REM 检查管理员权限（卸载服务需要）
-net session >nul 2>&1
-if !errorlevel! neq 0 (
-    echo 警告: 未检测到管理员权限，将跳过服务卸载步骤
-    echo 如需卸载 Windows 服务，请以管理员身份重新运行
-    echo.
-)
-
-REM 停止并删除 Windows 服务（如果存在）
-sc query "%SERVICE_NAME%" >nul 2>&1
-if !errorlevel! equ 0 (
-    echo 停止 Windows 服务...
-    net stop "%SERVICE_NAME%" >nul 2>&1
-    timeout /t 3 /nobreak >nul
-    echo 删除 Windows 服务...
-    sc delete "%SERVICE_NAME%" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo Windows 服务已卸载
-    ) else (
-        echo 警告: 服务删除失败，请手动执行: sc delete %SERVICE_NAME%
-    )
-) else (
-    echo 未检测到 Windows 服务，跳过
-)
-
-REM 通过 wmic 精确查找并停止 agent.jar 进程
+REM 停止进程
 echo 停止 Agent 进程...
-set ID_FILE=%USERPROFILE%\.lightscript\.agent_id
+set ID_FILE=%USERPROFILE%\.viberemote\.agent_id
 set PROPS_FILE=%SCRIPT_DIR%agent.properties
 set SERVER_URL=
 set AGENT_ID=
@@ -422,39 +417,25 @@ if exist "%ID_FILE%" (
 if defined SERVER_URL if defined AGENT_ID if defined AGENT_TOKEN (
     curl -s -X POST "!SERVER_URL!/api/agent/offline" -d "agentId=!AGENT_ID!&agentToken=!AGENT_TOKEN!" >nul 2>&1
 )
-set STOPPED=false
 for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
-    set "WPID=%%i"
-    if defined WPID (
-        if "!WPID!" neq "" (
-            echo 停止进程 (PID: !WPID!)...
-            taskkill /PID !WPID! /F >nul 2>&1
-            set STOPPED=true
-        )
+    if "%%i" neq "" (
+        taskkill /PID %%i /F >nul 2>&1
     )
 )
-if "!STOPPED!"=="false" (
-    echo 未找到运行中的 Agent 进程
-)
 
-REM 清理 PID 文件和锁文件
-if exist "%SCRIPT_DIR%agent.pid" del /f /q "%SCRIPT_DIR%agent.pid" >nul 2>&1
-if exist "%USERPROFILE%\.lightscript\.agent.lock" del /f /q "%USERPROFILE%\.lightscript\.agent.lock" >nul 2>&1
+REM 取消开机自启
+reg delete "%REG_KEY%" /v "%REG_NAME%" /f >nul 2>&1
+echo 已取消开机自启
 
 REM 询问是否删除安装目录
 echo.
 set /p DELETE_DIR="是否删除安装目录 %SCRIPT_DIR%? (y/N): "
 if /i "!DELETE_DIR!"=="y" (
-    echo 删除安装目录...
     cd /d "%TEMP%"
     rmdir /s /q "%SCRIPT_DIR%" 2>nul
-    if !errorlevel! equ 0 (
-        echo ✅ LightScript Agent 已完全卸载
-    ) else (
-        echo ⚠️  部分文件仍在使用中，请手动删除: %SCRIPT_DIR%
-    )
+    echo VibeRemote Agent 已完全卸载
 ) else (
-    echo ✅ LightScript Agent 已卸载，文件保留
+    echo VibeRemote Agent 已卸载，文件保留
 )
 
 pause
@@ -653,10 +634,10 @@ EOF
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ID_FILE="$HOME/.lightscript/.agent_id"
+ID_FILE="$HOME/.viberemote/.agent_id"
 PROPS_FILE="$SCRIPT_DIR/agent.properties"
 
-echo "停止 LightScript Agent..."
+echo "停止 VibeRemote Agent..."
 
 # 读取 server.url 和凭证，主动通知服务器离线
 SERVER_URL=$(grep -m1 "^server\.url=" "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
@@ -691,6 +672,64 @@ fi
 
 echo "Agent 已停止"
 EOF
+
+        # Unix 状态检查脚本
+        cat > "$target_dir/check-status.sh" << 'EOF'
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/logs/agent.log"
+
+echo "========================================"
+echo "  VibeRemote Agent 状态检查"
+echo "========================================"
+echo ""
+
+# 检查进程
+PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
+if [ -n "$PIDS" ]; then
+    echo "[状态] 运行中 (PID: $PIDS)"
+else
+    echo "[状态] 未运行"
+fi
+
+echo ""
+
+# 检查开机启动（macOS）
+if [[ "$(uname)" == "Darwin" ]]; then
+    PLIST="$HOME/Library/LaunchAgents/com.viberemote.agent.plist"
+    if [ -f "$PLIST" ]; then
+        echo "[开机启动] 已启用 (LaunchAgent)"
+    else
+        echo "[开机启动] 未启用"
+    fi
+fi
+
+# 检查开机启动（Linux）
+if [[ "$(uname)" == "Linux" ]]; then
+    if systemctl is-enabled viberemote-agent >/dev/null 2>&1; then
+        echo "[开机启动] 已启用 (systemd)"
+    elif [ -f "$HOME/.config/autostart/viberemote-agent.desktop" ]; then
+        echo "[开机启动] 已启用 (autostart)"
+    else
+        echo "[开机启动] 未启用"
+    fi
+fi
+
+echo ""
+
+# 显示最近日志
+if [ -f "$LOG_FILE" ]; then
+    echo "[最近日志] (最后10行)"
+    echo "----------------------------------------"
+    tail -10 "$LOG_FILE"
+else
+    echo "[日志] 暂无日志文件"
+fi
+
+echo ""
+EOF
+        chmod +x "$target_dir/check-status.sh"
 
         # 设置执行权限
         chmod +x "$target_dir"/*.sh
@@ -791,7 +830,7 @@ build_package() {
     local os=$1
     local arch=$2
     local jre_filename=$3
-    local package_name="lightscript-agent-${VERSION}-${os}-${arch}"
+    local package_name="viberemote-agent-${VERSION}-${os}-${arch}"
     local temp_dir="$RELEASE_DIR/temp_${os}_${arch}"
     
     echo "📦 构建 ${os}-${arch} 安装包..."
@@ -886,9 +925,9 @@ ls -la "$RELEASE_DIR"/*.{zip,tar.gz} 2>/dev/null || echo "  (无安装包文件)
 
 echo ""
 echo "📋 安装包说明:"
-echo "  • Windows: lightscript-agent-${VERSION}-windows-x64.zip"
-echo "  • Linux:   lightscript-agent-${VERSION}-linux-x64.tar.gz" 
-echo "  • macOS:   lightscript-agent-${VERSION}-macos-x64.tar.gz"
-echo "  • macOS:   lightscript-agent-${VERSION}-macos-arm64.tar.gz"
+echo "  • Windows: viberemote-agent-${VERSION}-windows-x64.zip"
+echo "  • Linux:   viberemote-agent-${VERSION}-linux-x64.tar.gz" 
+echo "  • macOS:   viberemote-agent-${VERSION}-macos-x64.tar.gz"
+echo "  • macOS:   viberemote-agent-${VERSION}-macos-arm64.tar.gz"
 echo ""
 echo "✅ 构建完成! 安装包已保存到: $RELEASE_DIR"
