@@ -461,7 +461,7 @@ if ($Manual) {
 EOF
 
 # Windows 批处理安装脚本（纯BAT版本，不依赖PowerShell）
-cp "$SCRIPT_DIR/install-windows-pure-bat.bat" "$TEMP_DIR/scripts/install-windows-pure.bat"
+cp "$SCRIPT_DIR/../../agent/scripts/windows/install-agent.bat" "$TEMP_DIR/scripts/install-windows-pure.bat"
 
 # Windows 批处理安装脚本（原版本，保持兼容性）
 cat > "$TEMP_DIR/scripts/install-windows.bat" << 'EOF'
