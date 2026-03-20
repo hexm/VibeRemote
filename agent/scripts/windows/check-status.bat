@@ -7,23 +7,16 @@ echo ========================================
 echo.
 
 set RUNNING=0
-for /f "tokens=2" %%i in ('tasklist /fi "imagename eq javaw.exe" /fo csv /nh 2^>nul') do (
-    set PID=%%~i
-    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo [Status] Running (PID: !PID!)
-        set RUNNING=1
-    )
+tasklist /fi "imagename eq javaw.exe" 2>nul | findstr /i "javaw.exe" >nul 2>&1
+if !errorlevel! equ 0 set RUNNING=1
+tasklist /fi "imagename eq java.exe" 2>nul | findstr /i "java.exe" >nul 2>&1
+if !errorlevel! equ 0 set RUNNING=1
+
+if "!RUNNING!"=="1" (
+    echo [Status] Running
+) else (
+    echo [Status] Not running
 )
-for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
-    set PID=%%~i
-    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo [Status] Running (PID: !PID!)
-        set RUNNING=1
-    )
-)
-if "!RUNNING!"=="0" echo [Status] Not running
 
 echo.
 
