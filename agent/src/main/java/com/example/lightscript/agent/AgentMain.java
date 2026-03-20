@@ -122,9 +122,9 @@ public class AgentMain {
                 try {
                     Thread.sleep(retryDelay);
                 } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    releaseLock();
-                    return;
+                    // 清除中断标志，继续重试，不因系统信号而放弃注册
+                    Thread.interrupted();
+                    logger.warn("Sleep interrupted during registration retry, continuing...");
                 }
                 if (retryDelay < 2000) retryDelay = 2000;
                 else if (retryDelay < 5000) retryDelay = 5000;
