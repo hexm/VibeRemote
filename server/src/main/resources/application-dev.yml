@@ -42,6 +42,9 @@ lightscript:
     secret: lightscript-dev-secret-key-for-testing-only-not-for-production
   register:
     token: dev-register-token
+  web:
+    encryption:
+      key: EvOdqWpqwLFWjqOSGA/HxFtJK/ZF2X4gA1e2u8IXAHQ=
   log:
     storage:
       path: logs/tasks

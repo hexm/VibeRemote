@@ -61,15 +61,15 @@ function App() {
       const userInfo = localStorage.getItem('userInfo')
       
       if (token && userInfo) {
-        // 直接使用本地存储的用户信息，不调用API
-        setUserInfo(JSON.parse(userInfo))
-        setIsAuthenticated(true)
-        
         // 如果 sessionStorage 里没有加密密钥（页面刷新后丢失），自动重新获取
-        // 必须 await，确保密钥就绪后再渲染页面组件
+        // 必须在 setIsAuthenticated(true) 之前完成，否则组件渲染时密钥还没就绪
         if (!getSessionKey()) {
           await authService.refreshEncryptionKey()
         }
+
+        // 密钥就绪后再渲染页面组件
+        setUserInfo(JSON.parse(userInfo))
+        setIsAuthenticated(true)
       }
     } catch (error) {
       console.error('Auth check failed:', error)

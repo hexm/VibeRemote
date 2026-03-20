@@ -86,7 +86,8 @@ public class AuthController {
     }
     
     /**
-     * 刷新前端通信加密密钥（页面刷新后 sessionStorage 丢失时调用）
+     * 获取前端通信加密密钥（页面刷新后 sessionStorage 丢失时调用）
+     * 返回全局固定密钥
      */
     @PostMapping("/refresh-key")
     public ResponseEntity<Map<String, Object>> refreshKey(
@@ -94,7 +95,7 @@ public class AuthController {
         try {
             String token = authHeader.substring(7);
             String username = jwtUtil.extractUsername(token);
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("encryptionKey", webEncryptionService.generateSessionKey(username));
             return ResponseEntity.ok(response);

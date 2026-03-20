@@ -43,6 +43,9 @@ lightscript:
     secret: 89Q/I3nwBah0Sdte2+rqJbkVerfeaO83TAgJzQvRQK54IcalU9UGDJaokWyMIExEbGT7wbOjflh+vNHi7rYLJg==
   register:
     token: 917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83
+  web:
+    encryption:
+      key: EvOdqWpqwLFWjqOSGA/HxFtJK/ZF2X4gA1e2u8IXAHQ=
   log:
     storage:
       path: /opt/lightscript/logs/tasks

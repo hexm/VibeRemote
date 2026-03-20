@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons'
 import scriptService from '../services/scriptService'
 import { encryptText, decryptText, getSessionKey } from '../utils/crypto'
+import { authService } from '../services/auth'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
@@ -263,9 +264,29 @@ const Scripts = () => {
       const response = await scriptService.getScriptContent(script.scriptId)
       let content = response.content || ''
       if (response.encrypted && content) {
-        const encKey = getSessionKey()
-        if (encKey) {
-          try { content = await decryptText(content, encKey) } catch (e) { console.warn('[crypto] 解密失败:', e) }
+        // 确保密钥存在，没有则重新获取
+        let encKey = getSessionKey()
+        if (!encKey) {
+          await authService.refreshEncryptionKey()
+          encKey = getSessionKey()
+        }
+        if (!encKey) {
+          message.error('解密失败：无法获取密钥，请重新登录')
+          return
+        }
+        try {
+          content = await decryptText(content, encKey)
+        } catch (e) {
+          console.warn('[crypto] 解密失败，尝试重新获取密钥:', e)
+          await authService.refreshEncryptionKey()
+          encKey = getSessionKey()
+          try {
+            content = await decryptText(content, encKey)
+          } catch (e2) {
+            console.error('[crypto] 二次解密失败:', e2)
+            message.error('脚本内容解密失败，请重新登录后查看')
+            return
+          }
         }
       }
       script.content = content
