@@ -7,6 +7,21 @@ PLIST="$HOME/Library/LaunchAgents/${SERVICE_NAME}.plist"
 
 echo "Stopping VibeRemote Agent..."
 
+# 读取配置
+SERVER_URL=$(grep -m1 "^server.url=" "$SCRIPT_DIR/agent.properties" 2>/dev/null | cut -d= -f2- | tr -d ' ')
+AGENT_TOKEN=$(grep -m1 "^register.token=" "$SCRIPT_DIR/agent.properties" 2>/dev/null | cut -d= -f2- | tr -d ' ')
+AGENT_ID=$(grep -m1 "^agentId=" "$HOME/.viberemote/.agent_id" 2>/dev/null | cut -d= -f2- | tr -d ' ')
+
+# 通知服务器离线
+if [ -n "$SERVER_URL" ] && [ -n "$AGENT_ID" ] && [ -n "$AGENT_TOKEN" ]; then
+    echo "Notifying server of offline status..."
+    curl -s -X POST "$SERVER_URL/api/agent/offline" -d "agentId=$AGENT_ID&agentToken=$AGENT_TOKEN" >/dev/null 2>&1 \
+        && echo "  Server notified successfully." \
+        || echo "  Failed to notify server (server may be unreachable)."
+else
+    echo "  Skipping server notification (missing config)."
+fi
+
 # 先卸载 launchd 服务，防止 kill 后自动重启
 if [ -f "$PLIST" ]; then
     echo "Unloading launchd service..."
