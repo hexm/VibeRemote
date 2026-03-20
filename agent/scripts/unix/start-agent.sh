@@ -37,11 +37,11 @@ echo "Log: $LOG_FILE"
 
 if [ -n "$LAUNCHED_BY_LAUNCHD" ] || [ "$1" = "--launchd" ]; then
     exec "$JAVA_CMD" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m \
-        -Dfile.encoding=UTF-8 -Djava.awt.headless=true \
+        -Dfile.encoding=UTF-8 \
         -jar "$SCRIPT_DIR/agent.jar"
 else
     nohup "$JAVA_CMD" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m \
-        -Dfile.encoding=UTF-8 -Djava.awt.headless=true \
+        -Dfile.encoding=UTF-8 \
         -jar "$SCRIPT_DIR/agent.jar" > /dev/null 2>&1 &
     AGENT_PID=$!
     echo $AGENT_PID > "$PID_FILE"
