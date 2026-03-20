@@ -486,7 +486,11 @@ const Tasks = () => {
             content = await decryptText(content, encKey)
           } catch (e) {
             console.warn('[crypto] 日志解密失败，显示原始内容:', e)
+            content = '[日志解密失败，请重新登录后查看]'
           }
+        } else {
+          // 没有 session key，提示用户重新登录
+          content = '[日志已加密，session 密钥已过期，请重新登录后查看]'
         }
       }
       
@@ -1099,11 +1103,14 @@ const Tasks = () => {
                       onClear={() => form.setFieldsValue({ scriptLang: 'shell', scriptContent: '' })}
                     >
                       {availableScripts.map(script => (
-                        <Option key={script.scriptId} value={script.scriptId}>
+                        <Option key={script.scriptId} value={script.scriptId} disabled={script.isUploaded && script.fileExists === false}>
                           <Space size={4}>
                             <Tag color="purple" style={{ fontSize: 11 }}>{script.type}</Tag>
                             {script.name}
                             {script.filename && <Text type="secondary" style={{ fontSize: 11 }}>{script.filename}</Text>}
+                            {script.isUploaded && script.fileExists === false && (
+                              <Tag color="red" style={{ fontSize: 11 }}>文件缺失</Tag>
+                            )}
                           </Space>
                         </Option>
                       ))}

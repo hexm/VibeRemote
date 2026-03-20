@@ -79,16 +79,9 @@ public class AgentService {
                 agent.setLabels(request.getLabels());
                 agent.setLastHeartbeat(LocalDateTime.now());
                 agent.setStatus("ONLINE");
-                // 生成新的token，确保服务器重启后agent可以重新建立连接
-                String oldToken = agent.getAgentToken();
-                agent.setAgentToken(UUID.randomUUID().toString());
+                // 直接使用 registerToken 作为 agentToken，保持不变
+                agent.setAgentToken(request.getRegisterToken());
                 agent = agentRepository.save(agent);
-                
-                log.info("✓ Agent re-registered successfully");
-                log.info("Agent ID: {}", agent.getAgentId());
-                log.info("Old token: {}", oldToken.substring(0, Math.min(10, oldToken.length())) + "...");
-                log.info("New token: {}", agent.getAgentToken().substring(0, Math.min(10, agent.getAgentToken().length())) + "...");
-                log.info("Status: {} -> ONLINE", wasOffline ? "OFFLINE" : "ONLINE");
                 
                 // 注意：不在这里立即重置任务！
                 // 原因：agent离线不代表进程崩溃，可能只是网络中断，任务还在执行
@@ -100,7 +93,7 @@ public class AgentService {
                 try {
                     agent = new Agent();
                     agent.setAgentId(UUID.randomUUID().toString());
-                    agent.setAgentToken(UUID.randomUUID().toString());
+                    agent.setAgentToken(request.getRegisterToken());
                     agent.setHostname(request.getHostname());
                     agent.setOsType(request.getOsType());
                     agent.setIp(request.getIp());
@@ -133,13 +126,12 @@ public class AgentService {
                         agent.setLabels(request.getLabels());
                         agent.setLastHeartbeat(LocalDateTime.now());
                         agent.setStatus("ONLINE");
-                        // 生成新的token
-                        agent.setAgentToken(UUID.randomUUID().toString());
+                        // 直接使用 registerToken 作为 agentToken
+                        agent.setAgentToken(request.getRegisterToken());
                         agent = agentRepository.save(agent);
                         
                         log.info("✓ Agent re-registered after concurrent conflict");
                         log.info("Agent ID: {}", agent.getAgentId());
-                        log.info("New token generated");
                         
                         // 不立即重置任务，避免重复执行
                     } else {

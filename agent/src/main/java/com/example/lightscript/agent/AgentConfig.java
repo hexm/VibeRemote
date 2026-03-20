@@ -131,6 +131,11 @@ public class AgentConfig {
     }
     
     public String getRegisterToken() {
+        // 兼容两种 key 名：server.register.token（内置默认）和 register.token（安装脚本写入）
+        String token = properties.getProperty("register.token");
+        if (token != null && !token.trim().isEmpty()) {
+            return token.trim();
+        }
         return properties.getProperty("server.register.token");
     }
     

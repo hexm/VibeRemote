@@ -12,6 +12,7 @@ import {
   UploadOutlined,
   InboxOutlined,
   DownloadOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import scriptService from '../services/scriptService'
 import { encryptText, decryptText, getSessionKey } from '../utils/crypto'
@@ -464,6 +465,11 @@ const Scripts = () => {
             <Text strong>{record.name}</Text>
             {record.isUploaded && (
               <Tag color="blue" size="small">上传</Tag>
+            )}
+            {record.isUploaded && record.fileExists === false && (
+              <Tooltip title={`文件已丢失: ${record.filePath || '路径未知'}`}>
+                <Tag color="red" icon={<WarningOutlined />} size="small">文件缺失</Tag>
+              </Tooltip>
             )}
           </div>
           <Text code className="text-sm">{record.filename}</Text>

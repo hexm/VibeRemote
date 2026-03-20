@@ -226,114 +226,101 @@ cd /d "%~dp0"
 if not exist "logs" mkdir "logs"
 
 if not exist "agent.jar" (
-    echo [错误] 未找到 agent.jar
+    echo [ERROR] agent.jar not found
     pause
     exit /b 1
 )
 
-REM 优先使用内置JRE，其次系统 Java
-if exist "jre\bin\java.exe" (
+REM Use javaw.exe (no console window) so this window can close
+if exist "jre\bin\javaw.exe" (
+    set "JAVA_CMD=%~dp0jre\bin\javaw.exe"
+) else if exist "jre\bin\java.exe" (
     set "JAVA_CMD=%~dp0jre\bin\java.exe"
 ) else if defined JAVA_HOME (
-    set "JAVA_CMD=%JAVA_HOME%\bin\java.exe"
+    set "JAVA_CMD=%JAVA_HOME%\bin\javaw.exe"
 ) else (
-    set "JAVA_CMD=java"
+    set "JAVA_CMD=javaw"
 )
 
-REM 后台启动，stdout 和 stderr 全部写入日志文件
-echo 启动 VibeRemote Agent...
-echo 日志文件: %~dp0logs\agent.log
-start /b "" "%JAVA_CMD%" -Xmx512m -Xms128m -Dfile.encoding=UTF-8 -jar "%~dp0agent.jar" >>"%~dp0logs\agent.log" 2>&1
-echo Agent 已在后台启动，窗口将自动关闭
+REM javaw runs detached from console; logback writes to file via -Dlog.home
+echo Starting VibeRemote Agent...
+echo Log: %~dp0logs\agent.log
+start "" "%JAVA_CMD%" -Xmx512m -Xms128m -Dfile.encoding=UTF-8 "-Dlog.home=%~dp0logs" -jar "%~dp0agent.jar"
+echo Agent started. This window will close.
 timeout /t 2 /nobreak >nul
 EOF
 
         # Windows 停止脚本
         cat > "$target_dir/stop-agent.bat" << 'EOF'
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-set SCRIPT_DIR=%~dp0
-set ID_FILE=%USERPROFILE%\.viberemote\.agent_id
-set PROPS_FILE=%SCRIPT_DIR%agent.properties
+echo Stopping VibeRemote Agent...
 
-echo 停止 VibeRemote Agent...
-
-REM 读取 server.url 和凭证，主动通知服务器离线
-set SERVER_URL=
-set AGENT_ID=
-set AGENT_TOKEN=
-
-if exist "%PROPS_FILE%" (
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "server.url" "%PROPS_FILE%"') do set SERVER_URL=%%b
+set KILLED=0
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq javaw.exe" /fo csv /nh 2^>nul') do (
+    set PID=%%~i
+    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
+    if !errorlevel! equ 0 (
+        taskkill /PID !PID! /F >nul 2>&1
+        set KILLED=1
+    )
 )
-if exist "%ID_FILE%" (
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentId" "%ID_FILE%"') do set AGENT_ID=%%b
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentToken" "%ID_FILE%"') do set AGENT_TOKEN=%%b
-)
-
-if defined SERVER_URL if defined AGENT_ID if defined AGENT_TOKEN (
-    echo 通知服务器离线...
-    curl -s -X POST "%SERVER_URL%/api/agent/offline" -d "agentId=!AGENT_ID!&agentToken=!AGENT_TOKEN!" >nul 2>&1
-)
-
-REM 通过 wmic 精确查找并停止 agent.jar 进程
-for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
-    if "%%i" neq "" (
-        echo 停止进程 (PID: %%i)...
-        taskkill /PID %%i /F >nul 2>&1
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
+    set PID=%%~i
+    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
+    if !errorlevel! equ 0 (
+        taskkill /PID !PID! /F >nul 2>&1
+        set KILLED=1
     )
 )
 
-echo Agent 已停止
+if "!KILLED!"=="1" (
+    echo Agent stopped.
+) else (
+    echo Agent is not running.
+)
 pause
 EOF
 
         # Windows 状态检查脚本
         cat > "$target_dir/check-status.bat" << 'EOF'
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo   VibeRemote Agent 状态检查
+echo   VibeRemote Agent Status
 echo ========================================
 echo.
 
-REM 检查进程是否运行
-set RUNNING=false
-for /f "skip=1 tokens=1,2" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid,commandline 2^>nul') do (
-    if "%%i" neq "" (
-        set RUNNING=true
-        echo [状态] 运行中 (PID: %%i)
+set RUNNING=0
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq javaw.exe" /fo csv /nh 2^>nul') do (
+    set PID=%%~i
+    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo [Status] Running (PID: !PID!)
+        set RUNNING=1
     )
 )
-
-if "!RUNNING!"=="false" (
-    echo [状态] 未运行
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
+    set PID=%%~i
+    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo [Status] Running (PID: !PID!)
+        set RUNNING=1
+    )
 )
+if "!RUNNING!"=="0" echo [Status] Not running
 
 echo.
 
-REM 检查开机启动
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "VibeRemoteAgent" >nul 2>&1
-if !errorlevel! equ 0 (
-    echo [开机启动] 已启用
-) else (
-    echo [开机启动] 未启用
-)
-
-echo.
-
-REM 显示最近日志
 set LOG_FILE=%~dp0logs\agent.log
 if exist "%LOG_FILE%" (
-    echo [最近日志] (最后10行)
+    echo [Last 10 log lines]
     echo ----------------------------------------
     powershell -Command "Get-Content '%LOG_FILE%' -Tail 10" 2>nul
 ) else (
-    echo [日志] 暂无日志文件
+    echo [Log] No log file found
 )
 
 echo.
@@ -390,55 +377,57 @@ EOF
         # Windows 卸载脚本
         cat > "$target_dir/uninstall.bat" << 'EOF'
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-set SCRIPT_DIR=%~dp0
-set REG_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-set REG_NAME=VibeRemoteAgent
+set INSTALL_DIR=%~dp0
 
-echo 卸载 VibeRemote Agent...
+echo Uninstalling VibeRemote Agent...
 echo.
 
-REM 停止进程
-echo 停止 Agent 进程...
-set ID_FILE=%USERPROFILE%\.viberemote\.agent_id
-set PROPS_FILE=%SCRIPT_DIR%agent.properties
-set SERVER_URL=
-set AGENT_ID=
-set AGENT_TOKEN=
-if exist "%PROPS_FILE%" (
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "server.url" "%PROPS_FILE%"') do set SERVER_URL=%%b
+REM Step 1: Remove autostart registry entry
+echo [1/3] Removing autostart...
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "VibeRemoteAgent" /f >nul 2>&1
+if !errorlevel! equ 0 (
+    echo Autostart removed.
+) else (
+    echo Autostart not set, skipping.
 )
-if exist "%ID_FILE%" (
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentId" "%ID_FILE%"') do set AGENT_ID=%%b
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "agentToken" "%ID_FILE%"') do set AGENT_TOKEN=%%b
-)
-if defined SERVER_URL if defined AGENT_ID if defined AGENT_TOKEN (
-    curl -s -X POST "!SERVER_URL!/api/agent/offline" -d "agentId=!AGENT_ID!&agentToken=!AGENT_TOKEN!" >nul 2>&1
-)
-for /f "skip=1 tokens=1" %%i in ('wmic process where "name='java.exe' and commandline like '%%agent.jar%%'" get processid 2^>nul') do (
-    if "%%i" neq "" (
-        taskkill /PID %%i /F >nul 2>&1
+
+REM Step 2: Stop process
+echo [2/3] Stopping agent process...
+set KILLED=0
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq javaw.exe" /fo csv /nh 2^>nul') do (
+    set PID=%%~i
+    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
+    if !errorlevel! equ 0 (
+        taskkill /PID !PID! /F >nul 2>&1
+        set KILLED=1
     )
 )
-
-REM 取消开机自启
-reg delete "%REG_KEY%" /v "%REG_NAME%" /f >nul 2>&1
-echo 已取消开机自启
-
-REM 询问是否删除安装目录
-echo.
-set /p DELETE_DIR="是否删除安装目录 %SCRIPT_DIR%? (y/N): "
-if /i "!DELETE_DIR!"=="y" (
-    cd /d "%TEMP%"
-    rmdir /s /q "%SCRIPT_DIR%" 2>nul
-    echo VibeRemote Agent 已完全卸载
+for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
+    set PID=%%~i
+    wmic process where "processid='!PID!'" get commandline 2>nul | findstr /i "agent.jar" >nul 2>&1
+    if !errorlevel! equ 0 (
+        taskkill /PID !PID! /F >nul 2>&1
+        set KILLED=1
+    )
+)
+if "!KILLED!"=="1" (
+    echo Agent stopped.
+    timeout /t 2 /nobreak >nul
 ) else (
-    echo VibeRemote Agent 已卸载，文件保留
+    echo Agent was not running.
 )
 
-pause
+REM Step 3: Delete files
+echo [3/3] Deleting files...
+if exist "%USERPROFILE%\.viberemote\.agent_id" del /f /q "%USERPROFILE%\.viberemote\.agent_id" >nul 2>&1
+cd /d "%TEMP%"
+start "" cmd /c "timeout /t 1 /nobreak >nul & rd /s /q ""%INSTALL_DIR%"""
+
+echo.
+echo VibeRemote Agent uninstalled.
+exit /b 0
 EOF
 
         # 转换Windows批处理文件的换行符为CRLF

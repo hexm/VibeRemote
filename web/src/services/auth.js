@@ -114,6 +114,20 @@ export const authService = {
     } catch (error) {
       // 忽略退出登录的错误
     }
+  },
+
+  // 刷新加密密钥（页面刷新后 sessionStorage 丢失时调用）
+  async refreshEncryptionKey() {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const response = await api.post('/auth/refresh-key')
+      if (response.encryptionKey) {
+        setSessionKey(response.encryptionKey)
+      }
+    } catch (error) {
+      console.warn('[auth] 刷新加密密钥失败:', error)
+    }
   }
 }
 

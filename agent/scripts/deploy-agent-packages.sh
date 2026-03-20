@@ -91,24 +91,24 @@ fi
 
 # 根据平台选择要上传的安装包
 ALL_PACKAGES=(
-    "lightscript-agent-0.4.0-windows-x64.zip"
-    "lightscript-agent-0.4.0-linux-x64.tar.gz"
-    "lightscript-agent-0.4.0-macos-x64.tar.gz"
-    "lightscript-agent-0.4.0-macos-arm64.tar.gz"
+    "viberemote-agent-0.4.0-windows-x64.zip"
+    "viberemote-agent-0.4.0-linux-x64.tar.gz"
+    "viberemote-agent-0.4.0-macos-x64.tar.gz"
+    "viberemote-agent-0.4.0-macos-arm64.tar.gz"
 )
 
 case "$PLATFORM" in
     "windows")
-        PACKAGES=("lightscript-agent-0.4.0-windows-x64.zip")
+        PACKAGES=("viberemote-agent-0.4.0-windows-x64.zip")
         ;;
     "linux")
-        PACKAGES=("lightscript-agent-0.4.0-linux-x64.tar.gz")
+        PACKAGES=("viberemote-agent-0.4.0-linux-x64.tar.gz")
         ;;
     "macos-x64")
-        PACKAGES=("lightscript-agent-0.4.0-macos-x64.tar.gz")
+        PACKAGES=("viberemote-agent-0.4.0-macos-x64.tar.gz")
         ;;
     "macos-arm64")
-        PACKAGES=("lightscript-agent-0.4.0-macos-arm64.tar.gz")
+        PACKAGES=("viberemote-agent-0.4.0-macos-arm64.tar.gz")
         ;;
     "all")
         PACKAGES=("${ALL_PACKAGES[@]}")

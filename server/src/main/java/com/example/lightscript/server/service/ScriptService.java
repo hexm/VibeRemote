@@ -318,6 +318,16 @@ public class ScriptService {
             dto.setSizeDisplay(formatFileSize(script.getFileSize()));
         }
         
+        // 检查上传脚本的文件是否存在
+        if (Boolean.TRUE.equals(script.getIsUploaded())) {
+            String filePath = script.getFilePath();
+            if (filePath != null && !filePath.trim().isEmpty()) {
+                dto.setFileExists(Files.exists(Paths.get(filePath)));
+            } else {
+                dto.setFileExists(false);
+            }
+        }
+        
         return dto;
     }
     

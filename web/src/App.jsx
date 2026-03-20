@@ -14,6 +14,7 @@ import SystemSettings from './pages/SystemSettings'
 import AgentVersions from './pages/AgentVersions'
 import Login from './pages/Login'
 import { authService } from './services/auth'
+import { getSessionKey } from './utils/crypto'
 
 const { Content } = Layout
 
@@ -63,6 +64,12 @@ function App() {
         // 直接使用本地存储的用户信息，不调用API
         setUserInfo(JSON.parse(userInfo))
         setIsAuthenticated(true)
+        
+        // 如果 sessionStorage 里没有加密密钥（页面刷新后丢失），自动重新获取
+        // 必须 await，确保密钥就绪后再渲染页面组件
+        if (!getSessionKey()) {
+          await authService.refreshEncryptionKey()
+        }
       }
     } catch (error) {
       console.error('Auth check failed:', error)

@@ -87,8 +87,12 @@ scp -r "$PROJECT_ROOT/web/dist/." ${SERVER_USER}@${SERVER_IP}:${REMOTE_DIR}/fron
 
 # 上传门户（Nginx 80 端口 root = /var/www/html）
 echo "上传门户..."
-ssh ${SERVER_USER}@${SERVER_IP} "find /var/www/html -maxdepth 1 -not -name 'agent' -not -name '.' | xargs rm -rf"
-scp -r "$PROJECT_ROOT/portal/." ${SERVER_USER}@${SERVER_IP}:/var/www/html/
+ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p /var/www/html && find /var/www/html -maxdepth 1 -not -name 'agent' -not -name '.' | xargs rm -rf 2>/dev/null || true"
+rsync -az --delete --exclude='agent/' "$PROJECT_ROOT/portal/" ${SERVER_USER}@${SERVER_IP}:/var/www/html/
+
+# 修复 bat 文件换行符（rsync 会把 CRLF 覆盖为 LF，Windows cmd 要求 CRLF）
+echo "修复 bat 文件换行符..."
+ssh ${SERVER_USER}@${SERVER_IP} "find /var/www/html/scripts -name '*.bat' -exec sed -i 's/\r//' {} \; -exec sed -i 's/$/\r/' {} \;"
 
 # 启动后端
 echo "启动后端服务..."

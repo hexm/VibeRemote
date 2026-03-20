@@ -85,8 +85,25 @@ public class AuthController {
         }
     }
     
-    @PostMapping("/change-password")
-    public ResponseEntity<Map<String, String>> changePassword(
+    /**
+     * 刷新前端通信加密密钥（页面刷新后 sessionStorage 丢失时调用）
+     */
+    @PostMapping("/refresh-key")
+    public ResponseEntity<Map<String, Object>> refreshKey(
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.substring(7);
+            String username = jwtUtil.extractUsername(token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("encryptionKey", webEncryptionService.generateSessionKey(username));
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(java.util.Collections.singletonMap("error", "Invalid token"));
+        }
+    }
+
+    @PostMapping("/change-password")    public ResponseEntity<Map<String, String>> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,
             @RequestHeader("Authorization") String authHeader) {
         

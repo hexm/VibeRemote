@@ -3,7 +3,11 @@ package com.example.lightscript.agent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -230,19 +234,25 @@ class SimpleTaskRunner {
             sendLog(executionId, "system", "Task started (lang: " + scriptLang + ")", taskBuffer);
 
             ProcessBuilder pb;
+            File tempScriptFile = null;
             if (isWindows()) {
                 if ("powershell".equalsIgnoreCase(scriptLang)) {
-                    pb = new ProcessBuilder("powershell", "-Command", scriptContent);
-                    logger.info("[TASK-{}] Using PowerShell executor", executionId);
+                    tempScriptFile = File.createTempFile("vr_task_", ".ps1");
+                    writeScriptFile(tempScriptFile, scriptContent, "UTF-8");
+                    pb = new ProcessBuilder("powershell", "-ExecutionPolicy", "Bypass", "-File", tempScriptFile.getAbsolutePath());
+                    logger.info("[TASK-{}] Using PowerShell executor (temp file: {})", executionId, tempScriptFile.getAbsolutePath());
                 } else {
-                    pb = new ProcessBuilder("cmd", "/c", scriptContent);
-                    logger.info("[TASK-{}] Using CMD executor", executionId);
+                    tempScriptFile = File.createTempFile("vr_task_", ".bat");
+                    writeScriptFile(tempScriptFile, scriptContent, "GBK");
+                    pb = new ProcessBuilder("cmd", "/c", tempScriptFile.getAbsolutePath());
+                    logger.info("[TASK-{}] Using CMD executor (temp file: {})", executionId, tempScriptFile.getAbsolutePath());
                 }
             } else {
                 pb = new ProcessBuilder("bash", "-c", scriptContent);
                 logger.info("[TASK-{}] Using Bash executor", executionId);
             }
 
+            final File tempFileToDelete = tempScriptFile;
             pb.redirectErrorStream(true);
             logger.info("[TASK-{}] Starting process with timeout: {} seconds", executionId, timeoutSec);
             Process p = pb.start();
@@ -284,6 +294,9 @@ class SimpleTaskRunner {
             }
 
             logReaderThread.join(2000);
+            if (tempFileToDelete != null) {
+                tempFileToDelete.delete();
+            }
 
         } catch (Exception e) {
             logger.error("[TASK-{}] ✗ Exception during script execution: {}", executionId, e.getMessage(), e);
@@ -313,5 +326,14 @@ class SimpleTaskRunner {
 
     private boolean isWindows() {
         return System.getProperty("os.name").toLowerCase().contains("win");
+    }
+
+    private void writeScriptFile(File file, String content, String charset) throws IOException {
+        OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(file), Charset.forName(charset));
+        try {
+            writer.write(content);
+        } finally {
+            writer.close();
+        }
     }
 }

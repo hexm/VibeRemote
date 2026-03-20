@@ -29,6 +29,7 @@ public class ScriptModels {
         
         // 计算属性
         private String sizeDisplay; // 格式化的文件大小显示
+        private Boolean fileExists; // 上传脚本的文件是否存在（null表示非上传脚本）
     }
     
     @Data

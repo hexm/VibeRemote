@@ -82,90 +82,57 @@ public class AgentMain {
         // 在注册完成后用 finalAgentId/finalAgentToken 重新初始化，此处先置 null
         final boolean[] screenCapableOs = {osName.contains("win") || osName.contains("mac")};
 
-        // 尝试加载已保存的Agent凭证
+        // ===== 注册（幂等）=====
+        // token 永远使用配置文件中的 register.token，不动态生成，不本地保存 token。
+        // agentId 由服务端分配，保存到本地文件复用，避免重复创建记录。
         AgentIdStore idStore = new AgentIdStore();
-        AgentIdStore.AgentCredentials savedCredentials = idStore.load();
-        
+
+        // 兼容旧版本：迁移 .lightscript/.agent_id -> .viberemote/.agent_id
+        if (idStore.load() == null) {
+            String legacyId = AgentIdStore.loadLegacy();
+            if (legacyId != null) {
+                logger.info("Migrating legacy agent ID: {}", legacyId);
+                idStore.save(legacyId);
+            }
+        }
+
         String agentId = null;
-        String agentToken = null;
-        
-        // 如果有已保存的凭证，先尝试验证
-        if (savedCredentials != null) {
-            logger.info("========================================");
-            logger.info("CREDENTIAL VALIDATION");
-            logger.info("========================================");
-            logger.info("Found saved agent credentials, validating...");
-            logger.info("Saved Agent ID: {}", savedCredentials.getAgentId());
+        // token 固定为 register.token
+        final String agentToken = registerToken;
+
+        logger.info("========================================");
+        logger.info("AGENT REGISTRATION (idempotent)");
+        logger.info("========================================");
+        logger.info("Hostname: {}, OS Type: {}", hostname, osType);
+
+        int retryDelay = 1000;
+        int retryCount = 0;
+        while (agentId == null) {
             try {
-                // 尝试发送心跳验证凭证是否有效
-                api.heartbeat(savedCredentials.getAgentId(), savedCredentials.getAgentToken(), false);
-                agentId = savedCredentials.getAgentId();
-                agentToken = savedCredentials.getAgentToken();
-                logger.info("✓ Saved credentials are valid, reusing Agent ID: {}", agentId);
+                // 每次启动都调用 register，服务端幂等处理（hostname+osType 已存在则更新）
+                Map<String, Object> reg = api.register(registerToken, hostname, osType);
+                agentId = String.valueOf(reg.get("agentId"));
+                idStore.save(agentId);
+                logger.info("✓ Agent registered. Agent ID: {}", agentId);
                 logger.info("========================================");
             } catch (Exception e) {
-                logger.warn("✗ Saved credentials are invalid: {}", e.getMessage());
-                logger.info("Deleting invalid credentials and will re-register");
-                logger.info("========================================");
-                idStore.delete(); // 删除无效的凭证
-            }
-        } else {
-            logger.info("========================================");
-            logger.info("NO SAVED CREDENTIALS FOUND");
-            logger.info("========================================");
-            logger.info("No saved credentials found, will register new agent");
-        }
-        
-        // 如果没有有效凭证，进行注册
-        if (agentId == null) {
-            logger.info("========================================");
-            logger.info("AGENT REGISTRATION");
-            logger.info("========================================");
-            int retryCount = 0;
-            int retryDelay = 1000; // 初始延迟1秒
-            
-            while (agentId == null) {
+                retryCount++;
+                logger.error("✗ Registration attempt {} failed: {}", retryCount, e.getMessage());
+                logger.info("Retrying in {} seconds...", retryDelay / 1000);
                 try {
-                    logger.info("Registering agent" + (retryCount > 0 ? " (attempt " + (retryCount + 1) + ")..." : "..."));
-                    logger.info("Hostname: {}, OS Type: {}", hostname, osType);
-                    Map<String, Object> reg = api.register(registerToken, hostname, osType);
-                    agentId = String.valueOf(reg.get("agentId"));
-                    agentToken = String.valueOf(reg.get("agentToken"));
-                    
-                    // 保存新的凭证
-                    idStore.save(agentId, agentToken);
-                    
-                    logger.info("✓ Agent registered successfully!");
-                    logger.info("Agent ID: {}", agentId);
-                    logger.info("Agent Token: {}", agentToken.substring(0, Math.min(10, agentToken.length())) + "...");
-                    logger.info("========================================");
-                } catch (Exception e) {
-                    retryCount++;
-                    logger.error("✗ Failed to register agent (attempt {}): {}", retryCount, e.getMessage());
-                    logger.info("Retrying in {} seconds...", (retryDelay / 1000));
-                    
-                    try {
-                        Thread.sleep(retryDelay);
-                    } catch (InterruptedException ie) {
-                        logger.info("Registration cancelled by user");
-                        releaseLock();
-                        return;
-                    }
-                    
-                    // 指数退避：1s -> 2s -> 5s -> 10s -> 30s (max)
-                    if (retryDelay < 2000) {
-                        retryDelay = 2000;
-                    } else if (retryDelay < 5000) {
-                        retryDelay = 5000;
-                    } else if (retryDelay < 10000) {
-                        retryDelay = 10000;
-                    } else {
-                        retryDelay = 30000; // 最大30秒
-                    }
+                    Thread.sleep(retryDelay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    releaseLock();
+                    return;
                 }
+                if (retryDelay < 2000) retryDelay = 2000;
+                else if (retryDelay < 5000) retryDelay = 5000;
+                else if (retryDelay < 10000) retryDelay = 10000;
+                else retryDelay = 30000;
             }
         }
-        
+
         // 使用final变量以便在lambda中使用
         final String finalAgentId = agentId;
         final String finalAgentToken = agentToken;
@@ -291,8 +258,8 @@ public class AgentMain {
         long lastHeartbeat = 0L;
         final long[] lastSystemInfoHeartbeat = {0L}; // 上次发送系统信息心跳的时间
         int heartbeatFailures = 0;
-        final int MAX_HEARTBEAT_FAILURES = config.getMaxHeartbeatFailures(); // 从配置读取
-        boolean reRegistered = false; // 是否刚刚重新注册
+        final int MAX_HEARTBEAT_FAILURES = config.getMaxHeartbeatFailures();
+        boolean reRegistered = false;
         
         while (!Thread.currentThread().isInterrupted()) {
             long now = System.currentTimeMillis();
@@ -301,66 +268,42 @@ public class AgentMain {
                 // 检查是否需要重新注册
                 if (needReRegister[0]) {
                     logger.error("========================================");
-                    logger.error("CONNECTION LOST - RE-REGISTRATION REQUIRED");
+                    logger.error("CONNECTION LOST - RE-REGISTERING");
                     logger.error("========================================");
-                    logger.error("Heartbeat failures: {}/{}", heartbeatFailures, MAX_HEARTBEAT_FAILURES);
-                    logger.info("Starting re-registration process...");
                     
-                    int retryCount = 0;
-                    int retryDelay = 1000;
+                    int reRegRetryCount = 0;
+                    int reRegRetryDelay = 1000;
+                    boolean reRegDone = false;
                     
-                    while (!reRegistered && !Thread.currentThread().isInterrupted()) {
+                    while (!reRegDone && !Thread.currentThread().isInterrupted()) {
                         try {
-                            retryCount++;
-                            logger.info("Re-registration attempt {}...", retryCount);
-                            logger.info("Hostname: {}, OS Type: {}", hostname, osType);
+                            reRegRetryCount++;
+                            logger.info("Re-registration attempt {}...", reRegRetryCount);
                             Map<String, Object> reg = api.register(registerToken, hostname, osType);
                             currentAgentId[0] = String.valueOf(reg.get("agentId"));
-                            currentAgentToken[0] = String.valueOf(reg.get("agentToken"));
+                            // token 不变，仍是 registerToken
+                            idStore.save(currentAgentId[0]);
                             
-                            // 保存新的凭证
-                            idStore.save(currentAgentId[0], currentAgentToken[0]);
-                            
-                            // 更新任务执行器的凭证
                             taskRunner.updateCredentials(currentAgentId[0], currentAgentToken[0]);
-                            
-                            // 更新加密上下文的凭证
                             if (currentEncryptionContext[0] != null) {
                                 currentEncryptionContext[0].updateCredentials(currentAgentId[0], currentAgentToken[0]);
-                                logger.info("✓ Encryption context credentials updated");
                             }
-                            
-                            // 更新升级报告器的凭证
                             upgradeReporter = new UpgradeStatusReporter(server, client, MAPPER, currentAgentId[0], currentAgentToken[0]);
                             upgradeExecutor = new UpgradeExecutor(upgradeReporter, taskStatusMonitor, upgradeScheduler, server, currentAgentId[0], currentAgentToken[0]);
                             
-                            logger.info("✓ Agent re-registered successfully!");
-                            logger.info("New Agent ID: {}", currentAgentId[0]);
-                            logger.info("New Agent Token: {}", currentAgentToken[0].substring(0, Math.min(10, currentAgentToken[0].length())) + "...");
-                            logger.info("✓ All components updated with new credentials");
+                            logger.info("✓ Re-registered. Agent ID: {}", currentAgentId[0]);
                             logger.info("========================================");
-                            
                             needReRegister[0] = false;
                             heartbeatFailures = 0;
-                            lastHeartbeat = 0; // 立即发送心跳
-                            reRegistered = true;
-                            
+                            lastHeartbeat = 0;
+                            reRegDone = true;
                         } catch (Exception e) {
-                            logger.error("✗ Re-registration attempt {} failed: {}", retryCount, e.getMessage());
-                            logger.info("Retrying in {} seconds...", (retryDelay / 1000));
-                            
-                            Thread.sleep(retryDelay);
-                            
-                            // 指数退避
-                            if (retryDelay < 2000) {
-                                retryDelay = 2000;
-                            } else if (retryDelay < 5000) {
-                                retryDelay = 5000;
-                            } else if (retryDelay < 10000) {
-                                retryDelay = 10000;
-                            } else {
-                                retryDelay = 30000;
-                            }
+                            logger.error("✗ Re-registration attempt {} failed: {}", reRegRetryCount, e.getMessage());
+                            Thread.sleep(reRegRetryDelay);
+                            if (reRegRetryDelay < 2000) reRegRetryDelay = 2000;
+                            else if (reRegRetryDelay < 5000) reRegRetryDelay = 5000;
+                            else if (reRegRetryDelay < 10000) reRegRetryDelay = 10000;
+                            else reRegRetryDelay = 30000;
                         }
                     }
                 }
@@ -370,7 +313,7 @@ public class AgentMain {
                     try {
                         logger.debug("Sending heartbeat... (failures: {}/{})", heartbeatFailures, MAX_HEARTBEAT_FAILURES);
                         // 使用配置的系统信息间隔时间
-                        boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > config.getSystemInfoInterval()) || reRegistered;
+                        boolean includeSystemInfo = (now - lastSystemInfoHeartbeat[0] > config.getSystemInfoInterval());
                         
                         Map<String, Object> heartbeatResponse;
                         if (includeSystemInfo) {
@@ -389,14 +332,22 @@ public class AgentMain {
                         if (heartbeatFailures > 0) {
                             logger.info("✓ Connection restored after {} failures", heartbeatFailures);
                         }
-                        heartbeatFailures = 0; // 重置失败计数
-                        reRegistered = false; // 重置重新注册标志
+                        heartbeatFailures = 0;
                     } catch (Exception e) {
                         heartbeatFailures++;
                         logger.warn("✗ Heartbeat failed ({}/{}): {}", heartbeatFailures, MAX_HEARTBEAT_FAILURES, e.getMessage());
-                        
-                        if (heartbeatFailures >= MAX_HEARTBEAT_FAILURES) {
-                            logger.error("✗ Max heartbeat failures reached. Triggering re-registration...");
+
+                        String errMsg = e.getMessage() != null ? e.getMessage() : "";
+                        boolean isAuthError = errMsg.contains("401") || errMsg.contains("403") || errMsg.contains("token invalid");
+
+                        if (isAuthError) {
+                            // 明确的认证失败，立即触发重注册
+                            logger.error("✗ Auth error on heartbeat, triggering re-registration immediately");
+                            needReRegister[0] = true;
+                            heartbeatFailures = 0;
+                        } else if (heartbeatFailures >= MAX_HEARTBEAT_FAILURES) {
+                            // 连续多次网络失败，也触发重注册（服务端可能重启了）
+                            logger.error("✗ Max heartbeat failures reached (network issue). Triggering re-registration...");
                             needReRegister[0] = true;
                             heartbeatFailures = 0;
                         } else {

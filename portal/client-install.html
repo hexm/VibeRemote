@@ -442,15 +442,15 @@ sudo systemctl enable viberemote-agent</pre>
                     <div id="windows-script" class="tab-content">
                         <div class="download-card">
                             <h3 class="text-xl font-semibold mb-4">Windows 一键安装（推荐）</h3>
-                            <p class="text-gray-600 mb-4">在命令提示符或 PowerShell 中运行，安装到用户目录，无需管理员权限：</p>
+                            <p class="text-gray-600 mb-4">在命令提示符（cmd）中运行以下两条命令：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-bat-install')">复制</button>
-                                <pre id="windows-bat-install">curl -o viberemote-install.bat http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-windows.bat && viberemote-install.bat</pre>
+                                <pre id="windows-bat-install">curl -o viberemote-install.bat http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-windows.bat
+viberemote-install.bat</pre>
                             </div>
                             <div class="text-xs text-blue-600 mt-2">
                                 ✓ 安装到: %USERPROFILE%\VibeRemote-Agent<br>
                                 ✓ 无需管理员权限<br>
-                                ✓ 注册表开机自启（用户级）<br>
                                 ✓ 适用于 Windows 10 1903+
                             </div>
                             
@@ -458,10 +458,9 @@ sudo systemctl enable viberemote-agent</pre>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
                                 <pre id="windows-manual">curl -o viberemote-agent.zip http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip
-tar -xf viberemote-agent.zip -C "%USERPROFILE%\VibeRemote-Agent"
+powershell -Command "Expand-Archive -Path viberemote-agent.zip -DestinationPath '%USERPROFILE%\VibeRemote-Agent' -Force"
 cd /d "%USERPROFILE%\VibeRemote-Agent"
-start-agent.bat
-install-autostart.bat</pre>
+start-agent.bat</pre>
                             </div>
                         </div>
                     </div>
