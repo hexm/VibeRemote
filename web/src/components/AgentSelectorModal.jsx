@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Modal, Button, Input, Select, Tag, Checkbox, Space, Typography, Badge, Empty } from 'antd'
 import { SearchOutlined, TeamOutlined, DesktopOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons'
 
@@ -14,8 +14,18 @@ const { Option } = Select
  *   agents: Agent[]        — 全量 agent 列表
  *   groups: Group[]        — 分组列表
  *   initialSelected: string[]  — 打开时的初始已选
+ *   selectedAgentDetails: Agent[] — 当前分组已选 agent 详情，兜底用于回显
  */
-const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [], initialSelected = [] }) => {
+const AgentSelectorModal = ({
+  open,
+  onConfirm,
+  onCancel,
+  agents = [],
+  groups = [],
+  initialSelected = [],
+  selectedAgentDetails = [],
+  confirmLoading = false
+}) => {
   // 左侧筛选条件
   const [groupFilter, setGroupFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -26,17 +36,39 @@ const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [
 
   // 当前已选（Modal 内部临时状态，确认后才回传）
   const [selected, setSelected] = useState([])
+  const wasOpenRef = useRef(false)
 
-  // 打开时同步初始值，重置筛选
+  // 合并当前列表和已选详情，确保弹窗始终能回显已选节点
+  const mergedAgents = useMemo(() => {
+    const merged = new Map()
+
+    agents.forEach(agent => {
+      if (agent?.agentId) {
+        merged.set(agent.agentId, agent)
+      }
+    })
+
+    selectedAgentDetails.forEach(agent => {
+      if (agent?.agentId && !merged.has(agent.agentId)) {
+        merged.set(agent.agentId, agent)
+      }
+    })
+
+    return Array.from(merged.values())
+  }, [agents, selectedAgentDetails])
+
+  // 仅在弹窗从关闭切到打开时同步初始值，避免父组件重渲染把用户当前选择覆盖掉
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       setSelected([...initialSelected])
       setGroupFilter('all')
       setStatusFilter('all')
       setLeftSearch('')
       setRightSearch('')
     }
-  }, [open])
+
+    wasOpenRef.current = open
+  }, [open, initialSelected])
 
   // 构建 groupId -> agentId[] 映射
   const groupAgentMap = useMemo(() => {
@@ -49,7 +81,7 @@ const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [
 
   // 左侧候选列表（应用所有筛选）
   const leftCandidates = useMemo(() => {
-    return agents.filter(agent => {
+    return mergedAgents.filter(agent => {
       // 分组过滤
       if (groupFilter !== 'all') {
         if (groupFilter === 'ungrouped') {
@@ -76,16 +108,16 @@ const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [
       }
       return true
     })
-  }, [agents, groups, groupFilter, statusFilter, leftSearch, groupAgentMap])
+  }, [mergedAgents, groups, groupFilter, statusFilter, leftSearch, groupAgentMap])
 
   // 右侧已选列表（应用右侧搜索）
   const rightAgents = useMemo(() => {
-    return agents.filter(a => selected.includes(a.agentId)).filter(agent => {
+    return mergedAgents.filter(a => selected.includes(a.agentId)).filter(agent => {
       if (!rightSearch) return true
       const q = rightSearch.toLowerCase()
       return agent.hostname?.toLowerCase().includes(q) || agent.ip?.toLowerCase().includes(q)
     })
-  }, [agents, selected, rightSearch])
+  }, [mergedAgents, selected, rightSearch])
 
   // 左侧全选状态
   const leftFilteredIds = leftCandidates.map(a => a.agentId)
@@ -139,7 +171,7 @@ const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [
           type="primary"
           icon={<CheckOutlined />}
           onClick={handleConfirm}
-          disabled={selected.length === 0}
+          loading={confirmLoading}
         >
           确认选择（{selected.length} 台）
         </Button>
@@ -212,10 +244,8 @@ const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [
               leftCandidates.map(agent => (
                 <div
                   key={agent.agentId}
-                  onClick={() => toggleAgent(agent.agentId)}
                   style={{
                     padding: '7px 12px',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
@@ -224,10 +254,43 @@ const AgentSelectorModal = ({ open, onConfirm, onCancel, agents = [], groups = [
                     transition: 'background 0.15s',
                   }}
                 >
-                  <Checkbox checked={selected.includes(agent.agentId)} onChange={() => toggleAgent(agent.agentId)} onClick={e => e.stopPropagation()} />
-                  <Badge status={agent.status === 'ONLINE' ? 'success' : 'default'} />
-                  <Text style={{ flex: 1, fontSize: 13 }}>{agent.hostname || agent.agentId}</Text>
-                  {agent.ip && <Text type="secondary" style={{ fontSize: 11 }}>{agent.ip}</Text>}
+                  <div style={{ flex: 0 }}>
+                    <Checkbox 
+                      checked={selected.includes(agent.agentId)} 
+                      onChange={() => toggleAgent(agent.agentId)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </div>
+                  <div 
+                    style={{ flex: 1, cursor: 'pointer' }}
+                    onClick={() => toggleAgent(agent.agentId)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                      <Badge status={agent.status === 'ONLINE' ? 'success' : 'default'} />
+                      <Text
+                        style={{
+                          flex: 1,
+                          fontSize: 13,
+                          minWidth: 0
+                        }}
+                        ellipsis
+                      >
+                        {agent.hostname || agent.agentId}
+                      </Text>
+                      {agent.ip && (
+                        <Text
+                          type="secondary"
+                          style={{
+                            fontSize: 11,
+                            flexShrink: 0,
+                            marginLeft: 'auto'
+                          }}
+                        >
+                          {agent.ip}
+                        </Text>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))
             )}

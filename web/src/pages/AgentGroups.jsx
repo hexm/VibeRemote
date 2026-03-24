@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Table, Button, Modal, Form, Input, Select, Tag, Space, message, Popconfirm, Card } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, EyeOutlined } from '@ant-design/icons'
 import api from '../services/auth'
+import AgentSelectorModal from '../components/AgentSelectorModal'
 
 const { Option } = Select
 const { TextArea } = Input
@@ -13,6 +14,8 @@ const GROUP_TYPES = {
   CUSTOM: { label: '自定义分组', color: 'purple' }
 }
 
+const AGENT_FETCH_SIZE = 1000
+
 const AgentGroups = () => {
   const [groups, setGroups] = useState([])
   const [agents, setAgents] = useState([])
@@ -20,6 +23,8 @@ const AgentGroups = () => {
   const [detailLoading, setDetailLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
   const [detailModalVisible, setDetailModalVisible] = useState(false)
+  const [agentSelectorVisible, setAgentSelectorVisible] = useState(false)
+  const [selectedGroup, setSelectedGroup] = useState(null)
   const [modalType, setModalType] = useState('create') // create, edit
   const [currentGroup, setCurrentGroup] = useState(null)
   const [selectedAgents, setSelectedAgents] = useState([])
@@ -29,6 +34,44 @@ const AgentGroups = () => {
     fetchGroups()
     fetchAgents()
   }, [])
+
+  const mergeAgentsById = (baseAgents = [], extraAgents = []) => {
+    const agentMap = new Map()
+
+    baseAgents.forEach(agent => {
+      if (agent?.agentId) {
+        agentMap.set(agent.agentId, agent)
+      }
+    })
+
+    extraAgents.forEach(agent => {
+      if (agent?.agentId) {
+        agentMap.set(agent.agentId, {
+          ...agentMap.get(agent.agentId),
+          ...agent
+        })
+      }
+    })
+
+    return Array.from(agentMap.values())
+  }
+
+  const buildGroupAgents = (agentIds, fallbackAgents = []) => {
+    const fallbackMap = new Map((fallbackAgents || []).map(agent => [agent.agentId, agent]))
+    const agentMap = new Map(agents.map(agent => [agent.agentId, agent]))
+
+    return agentIds.map(agentId => {
+      const agent = agentMap.get(agentId) || fallbackMap.get(agentId)
+      return {
+        agentId,
+        hostname: agent?.hostname || agentId,
+        status: agent?.status || 'UNKNOWN',
+        ip: agent?.ip || '',
+        startUser: agent?.startUser || '',
+        addedAt: fallbackMap.get(agentId)?.addedAt || new Date().toISOString()
+      }
+    })
+  }
 
   const fetchGroups = async () => {
     setLoading(true)
@@ -49,7 +92,12 @@ const AgentGroups = () => {
 
   const fetchAgents = async () => {
     try {
-      const response = await api.get('/web/agents')
+      const response = await api.get('/web/agents', {
+        params: {
+          page: 0,
+          size: AGENT_FETCH_SIZE
+        }
+      })
       setAgents(response.content || [])
     } catch (error) {
       console.error('获取Agent列表失败:', error)
@@ -203,6 +251,84 @@ const AgentGroups = () => {
     }
   }
 
+  const handleAgentCountClick = async (record) => {
+    setDetailLoading(true)
+    try {
+      // 先获取最新的 Agent 列表，再获取分组详情，确保弹窗能回显已选节点
+      const agentsResponse = await api.get('/web/agents', {
+        params: {
+          page: 0,
+          size: AGENT_FETCH_SIZE
+        }
+      })
+
+      const response = await api.get(`/web/agent-groups/${record.id}`)
+      setAgents(prevAgents => mergeAgentsById(prevAgents, mergeAgentsById(agentsResponse.content || [], response.agents || [])))
+      setSelectedGroup(response)
+      setAgentSelectorVisible(true)
+    } catch (error) {
+      message.error('获取分组详情失败')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const handleAgentSelectorConfirm = async (agentIds) => {
+    if (!selectedGroup) return
+    
+    setDetailLoading(true)
+    try {
+      const currentAgentIds = selectedGroup.agents?.map(a => a.agentId) || []
+      
+      // 计算需要添加和移除的Agent
+      const agentsToAdd = agentIds.filter(id => !currentAgentIds.includes(id))
+      const agentsToRemove = currentAgentIds.filter(id => !agentIds.includes(id))
+      
+      // 批量添加新Agent
+      if (agentsToAdd.length > 0) {
+        await api.post(`/web/agent-groups/${selectedGroup.id}/agents`, {
+          agentIds: agentsToAdd
+        })
+      }
+      
+      // 批量移除Agent
+      if (agentsToRemove.length > 0) {
+        await api.delete(`/web/agent-groups/${selectedGroup.id}/agents`, {
+          data: { agentIds: agentsToRemove }
+        })
+      }
+      
+      message.success('客户端选择保存成功')
+
+      const updatedAgents = buildGroupAgents(agentIds, selectedGroup.agents || [])
+      const updatedGroup = {
+        ...selectedGroup,
+        agents: updatedAgents
+      }
+
+      setSelectedGroup(updatedGroup)
+      setGroups(prevGroups =>
+        prevGroups.map(group =>
+          group.id === selectedGroup.id
+            ? { ...group, agentCount: updatedAgents.length }
+            : group
+        )
+      )
+
+      if (currentGroup && currentGroup.id === selectedGroup.id) {
+        setCurrentGroup(updatedGroup)
+        setSelectedAgents(agentIds)
+      }
+
+      setAgentSelectorVisible(false)
+    } catch (error) {
+      message.error('保存失败，请重试')
+      setAgentSelectorVisible(false)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   const columns = [
     {
       title: '分组名称',
@@ -237,7 +363,15 @@ const AgentGroups = () => {
       dataIndex: 'agentCount',
       key: 'agentCount',
       width: 120,
-      render: (count) => <Tag color="blue">{count} 个</Tag>
+      render: (count, record) => (
+        <Tag 
+          color="blue" 
+          style={{ cursor: 'pointer' }}
+          onClick={() => handleAgentCountClick(record)}
+        >
+          {count} 个
+        </Tag>
+      )
     },
     {
       title: '创建者',
@@ -307,27 +441,23 @@ const AgentGroups = () => {
       key: 'hostname',
     },
     {
+      title: 'IP',
+      dataIndex: 'ip',
+      key: 'ip',
+      render: (ip) => ip || '-'
+    },
+    {
+      title: '启动用户',
+      dataIndex: 'startUser',
+      key: 'startUser',
+      render: (startUser) => startUser || '-'
+    },
+    {
       title: '加入时间',
       dataIndex: 'addedAt',
       key: 'addedAt',
       render: (text) => text ? new Date(text).toLocaleString() : '-'
-    },
-    {
-      title: '操作',
-      key: 'action',
-      render: (_, record) => (
-        <Popconfirm
-          title="确定要从分组中移除这个Agent吗？"
-          onConfirm={() => handleRemoveAgent(record.agentId)}
-          okText="确定"
-          cancelText="取消"
-        >
-          <Button type="link" danger size="small">
-            移除
-          </Button>
-        </Popconfirm>
-      ),
-    },
+    }
   ]
 
   return (
@@ -447,23 +577,6 @@ const AgentGroups = () => {
             <Card 
               title="分组成员" 
               size="small"
-              extra={
-                <Select
-                  mode="multiple"
-                  style={{ width: 300 }}
-                  placeholder="选择要添加的Agent"
-                  value={selectedAgents}
-                  onChange={setSelectedAgents}
-                  onBlur={handleAddAgents}
-                  disabled={detailLoading}
-                >
-                  {agents.map(agent => (
-                    <Option key={agent.agentId} value={agent.agentId}>
-                      {agent.hostname} ({agent.agentId})
-                    </Option>
-                  ))}
-                </Select>
-              }
             >
               <Table
                 columns={agentColumns}
@@ -477,6 +590,17 @@ const AgentGroups = () => {
           </div>
         )}
       </Modal>
+
+      <AgentSelectorModal
+        open={agentSelectorVisible}
+        onConfirm={handleAgentSelectorConfirm}
+        onCancel={() => setAgentSelectorVisible(false)}
+        agents={agents}
+        groups={groups}
+        initialSelected={selectedGroup?.agents?.map(a => a.agentId) || []}
+        selectedAgentDetails={selectedGroup?.agents || []}
+        confirmLoading={detailLoading}
+      />
     </div>
   )
 }
