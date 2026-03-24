@@ -72,6 +72,8 @@ public class AgentGroupModels {
         private String agentId;
         private String hostname;
         private String status;
+        private String ip;
+        private String startUser;
         private LocalDateTime addedAt;
     }
     

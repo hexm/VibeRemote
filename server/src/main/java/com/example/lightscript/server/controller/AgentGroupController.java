@@ -1,11 +1,13 @@
 package com.example.lightscript.server.controller;
 
+import com.example.lightscript.server.entity.Agent;
 import com.example.lightscript.server.entity.AgentGroup;
 import com.example.lightscript.server.entity.AgentGroupMember;
 import com.example.lightscript.server.model.AgentGroupModels.*;
 import com.example.lightscript.server.repository.AgentGroupMemberRepository;
 import com.example.lightscript.server.security.RequirePermission;
 import com.example.lightscript.server.service.AgentGroupService;
+import com.example.lightscript.server.service.AgentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ public class AgentGroupController {
     
     private final AgentGroupService agentGroupService;
     private final AgentGroupMemberRepository agentGroupMemberRepository;
+    private final AgentService agentService;
     
     /**
      * 获取分组列表
@@ -204,9 +207,28 @@ public class AgentGroupController {
     private AgentMemberDTO toAgentMemberDTO(AgentGroupMember member) {
         AgentMemberDTO dto = new AgentMemberDTO();
         dto.setAgentId(member.getAgentId());
-        // TODO: 从Agent服务获取hostname和status
-        dto.setHostname(member.getAgentId());
-        dto.setStatus("UNKNOWN");
+        
+        // 从Agent服务获取详细信息
+        try {
+            Agent agent = agentService.getAgentById(member.getAgentId());
+            if (agent != null) {
+                dto.setHostname(agent.getHostname());
+                dto.setStatus(agent.getStatus());
+                dto.setIp(agent.getIp());
+                dto.setStartUser(agent.getStartUser());
+            } else {
+                dto.setHostname(member.getAgentId());
+                dto.setStatus("UNKNOWN");
+                dto.setIp("");
+                dto.setStartUser("");
+            }
+        } catch (Exception e) {
+            dto.setHostname(member.getAgentId());
+            dto.setStatus("UNKNOWN");
+            dto.setIp("");
+            dto.setStartUser("");
+        }
+        
         dto.setAddedAt(member.getAddedAt());
         return dto;
     }
