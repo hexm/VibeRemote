@@ -12,6 +12,15 @@ const api = axios.create({
   timeout: 10000,
 })
 
+let hasDispatchedUnauthorized = false
+
+const clearAuthStorage = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  localStorage.removeItem('userInfo')
+  clearSessionKey()
+}
+
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
@@ -38,17 +47,25 @@ api.interceptors.response.use(
       const isLoginRequest = error.config?.url?.includes('/auth/login')
       
       if (!isLoginRequest) {
-        // 非登录请求的401：会话过期，清除认证信息并重新加载
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('userInfo')
-        
-        // 触发自定义事件通知App组件
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'))
-        
-        // 重新加载页面，让App.jsx重新检查认证状态
-        window.location.reload()
+        // 非登录请求的401：统一清理本地会话，并通知App层切回登录页
+        clearAuthStorage()
+
+        if (!hasDispatchedUnauthorized) {
+          hasDispatchedUnauthorized = true
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+          setTimeout(() => {
+            hasDispatchedUnauthorized = false
+          }, 0)
+        }
       }
+    }
+
+    if (error.response?.status === 403) {
+      window.dispatchEvent(new CustomEvent('auth:forbidden', {
+        detail: {
+          message: error.response?.data?.message || '您没有权限执行该操作'
+        }
+      }))
     }
     
     // 统一错误格式，确保错误对象包含有用的信息
@@ -106,11 +123,7 @@ export const authService = {
   // 退出登录
   async logout() {
     try {
-      // 清理本地存储和会话密钥
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      localStorage.removeItem('userInfo')
-      clearSessionKey()
+      clearAuthStorage()
     } catch (error) {
       // 忽略退出登录的错误
     }

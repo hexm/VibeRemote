@@ -11,6 +11,7 @@ import com.example.lightscript.server.service.AgentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -85,10 +86,11 @@ public class AgentGroupController {
      */
     @PostMapping
     @RequirePermission("agent:group")
-    public ResponseEntity<?> createGroup(@RequestBody CreateGroupRequest request) {
+    public ResponseEntity<?> createGroup(
+            @RequestBody CreateGroupRequest request,
+            Authentication authentication) {
         try {
-            // TODO: 从认证上下文获取当前用户
-            String currentUser = "admin";
+            String currentUser = authentication != null ? authentication.getName() : "system";
             
             AgentGroup group = agentGroupService.createGroup(
                 request.getName(),

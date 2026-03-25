@@ -45,15 +45,22 @@ function App() {
       setUserInfo(null)
       message.warning('会话已过期，请重新登录')
     }
+
+    const handleForbidden = (event) => {
+      const errorMessage = event.detail?.message || '您没有权限执行该操作'
+      message.error(errorMessage)
+    }
     
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener('auth:unauthorized', handleUnauthorized)
+    window.addEventListener('auth:forbidden', handleForbidden)
     
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('auth:unauthorized', handleUnauthorized)
+      window.removeEventListener('auth:forbidden', handleForbidden)
     }
-  }, [])
+  }, [message])
 
   const checkAuth = async () => {
     try {
@@ -74,6 +81,7 @@ function App() {
     } catch (error) {
       console.error('Auth check failed:', error)
       localStorage.removeItem('token')
+      localStorage.removeItem('user')
       localStorage.removeItem('userInfo')
       setIsAuthenticated(false)
     } finally {

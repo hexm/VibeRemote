@@ -1,6 +1,12 @@
 import axios from 'axios'
 import { message } from 'antd'
 
+const clearAuthStorage = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  localStorage.removeItem('userInfo')
+}
+
 // 配置axios拦截器
 axios.interceptors.request.use(
   config => {
@@ -23,16 +29,18 @@ axios.interceptors.response.use(
       
       // 权限不足
       if (status === 403) {
-        message.error(data.message || '权限不足')
-        return Promise.reject(new Error(data.message || '权限不足'))
+        const errorMessage = data.message || '权限不足'
+        message.error(errorMessage)
+        window.dispatchEvent(new CustomEvent('auth:forbidden', {
+          detail: { message: errorMessage }
+        }))
+        return Promise.reject(new Error(errorMessage))
       }
       
       // 未认证
       if (status === 401) {
-        message.error('登录已过期，请重新登录')
-        localStorage.removeItem('token')
-        localStorage.removeItem('userInfo')
-        window.location.href = '/'
+        clearAuthStorage()
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'))
         return Promise.reject(new Error('未认证'))
       }
       

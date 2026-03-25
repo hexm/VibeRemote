@@ -9,6 +9,8 @@ set -e
 SERVER_IP="8.138.114.34"
 SERVER_USER="root"
 REMOTE_DIR="/opt/lightscript"
+AGENT_VERSION="0.4.0"
+DEPLOY_AGENT_PACKAGES=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -19,10 +21,35 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+for arg in "$@"; do
+    case "$arg" in
+        --with-agent-packages)
+            DEPLOY_AGENT_PACKAGES=true
+            ;;
+        --help|-h)
+            echo "用法: $0 [--with-agent-packages]"
+            echo ""
+            echo "选项:"
+            echo "  --with-agent-packages   同时构建并上传 agent 安装包，并在服务器本机重装 agent"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}❌ 未知参数: $arg${NC}"
+            echo "用法: $0 [--with-agent-packages]"
+            exit 1
+            ;;
+    esac
+done
+
 echo -e "${BLUE}=========================================="
 echo "LightScript 阿里云全量部署"
 echo -e "==========================================${NC}"
 echo -e "服务器: ${GREEN}${SERVER_IP}${NC}"
+if [ "$DEPLOY_AGENT_PACKAGES" = true ]; then
+    echo -e "模式: ${YELLOW}前后端 + Agent安装包${NC}"
+else
+    echo -e "模式: ${GREEN}仅前后端/门户${NC}"
+fi
 echo ""
 
 # 检查SSH连接
@@ -90,6 +117,14 @@ echo "上传门户..."
 ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p /var/www/html && find /var/www/html -maxdepth 1 -not -name 'agent' -not -name '.' | xargs rm -rf 2>/dev/null || true"
 rsync -az --delete --exclude='agent/' "$PROJECT_ROOT/portal/" ${SERVER_USER}@${SERVER_IP}:/var/www/html/
 
+# 上传一键安装脚本（与当前 agent 发布包保持一致）
+echo "上传安装脚本..."
+ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p /var/www/html/scripts"
+scp "$PROJECT_ROOT/agent/scripts/unix/install-linux.sh" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh
+scp "$PROJECT_ROOT/agent/scripts/unix/install-macos.sh" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh
+scp "$PROJECT_ROOT/agent/scripts/windows/install-agent.bat" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-windows.bat
+ssh ${SERVER_USER}@${SERVER_IP} "chmod +x /var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh /var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh"
+
 # 修复 bat 文件换行符（rsync 会把 CRLF 覆盖为 LF，Windows cmd 要求 CRLF）
 echo "修复 bat 文件换行符..."
 ssh ${SERVER_USER}@${SERVER_IP} "find /var/www/html/scripts -name '*.bat' -exec sed -i 's/\r//' {} \; -exec sed -i 's/$/\r/' {} \;"
@@ -110,27 +145,29 @@ ssh ${SERVER_USER}@${SERVER_IP} "nginx -t && nginx -s reload"
 echo -e "${GREEN}✅ Nginx 配置更新完成${NC}"
 echo ""
 
-# ============================================================
-# 第五步：构建并上传 agent 安装包
-# ============================================================
-echo -e "${YELLOW}📦 [5/6] 构建 agent 安装包...${NC}"
-cd "$PROJECT_ROOT/agent"
-bash build-release.sh
-echo -e "${GREEN}✅ agent 安装包构建完成${NC}"
-echo ""
+if [ "$DEPLOY_AGENT_PACKAGES" = true ]; then
+    # ============================================================
+    # 第五步：构建并上传 agent 安装包
+    # ============================================================
+    echo -e "${YELLOW}📦 [5/6] 构建 agent 安装包...${NC}"
+    cd "$PROJECT_ROOT/agent"
+    bash build-release.sh
+    echo -e "${GREEN}✅ agent 安装包构建完成${NC}"
+    echo ""
 
-echo -e "${YELLOW}📤 上传 agent 安装包...${NC}"
-bash "$PROJECT_ROOT/agent/scripts/deploy-agent-packages.sh" --yes
-echo -e "${GREEN}✅ agent 安装包上传完成${NC}"
-echo ""
+    echo -e "${YELLOW}📤 上传 agent 安装包...${NC}"
+    bash "$PROJECT_ROOT/agent/scripts/deploy-agent-packages.sh" --yes
+    echo -e "${GREEN}✅ agent 安装包上传完成${NC}"
+    echo ""
 
-# ============================================================
-# 第六步：服务器上重装 agent
-# ============================================================
-echo -e "${YELLOW}🤖 [6/6] 服务器上重装 agent...${NC}"
-ssh ${SERVER_USER}@${SERVER_IP} "curl -fsSL http://${SERVER_IP}/scripts/install-linux.sh | bash -s -- --server=http://${SERVER_IP}:8080"
-echo -e "${GREEN}✅ agent 重装完成${NC}"
-echo ""
+    # ============================================================
+    # 第六步：服务器上重装 agent
+    # ============================================================
+    echo -e "${YELLOW}🤖 [6/6] 服务器上重装 agent...${NC}"
+    ssh ${SERVER_USER}@${SERVER_IP} "curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh | bash -s -- --server=http://${SERVER_IP}:8080"
+    echo -e "${GREEN}✅ agent 重装完成${NC}"
+    echo ""
+fi
 
 echo -e "${GREEN}=========================================="
 echo "✅ 全量部署完成！"
@@ -139,5 +176,8 @@ echo ""
 echo -e "  门户网站: ${GREEN}http://${SERVER_IP}${NC}"
 echo -e "  管理后台: ${GREEN}http://${SERVER_IP}:3000${NC}"
 echo -e "  后端API:  ${GREEN}http://${SERVER_IP}:8080${NC}"
+if [ "$DEPLOY_AGENT_PACKAGES" = false ]; then
+    echo -e "  Agent安装包: ${YELLOW}本次未上传（如需上传请加 --with-agent-packages）${NC}"
+fi
 echo ""
 echo -e "  查看后端日志: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'tail -f ${REMOTE_DIR}/backend/backend.log'${NC}"

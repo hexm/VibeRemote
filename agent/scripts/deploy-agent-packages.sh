@@ -10,6 +10,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SERVER_IP="8.138.114.34"
 SERVER_USER="root"
 REMOTE_RELEASES_DIR="/var/www/html/agent/release"
+AGENT_VERSION="0.4.0"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -267,7 +268,7 @@ echo -e "  查看远程文件: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'ls -la 
 echo -e "  清理备份: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'rm -rf ${REMOTE_RELEASES_DIR}.backup.*'${NC}"
 echo ""
 echo -e "${BLUE}一键安装命令：${NC}"
-echo -e "  Linux:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/install-linux.sh | sudo bash -s -- --server=http://${SERVER_IP}:8080${NC}"
-echo -e "  macOS:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/install-macos.sh | bash -s -- --server=http://${SERVER_IP}:8080${NC}"
+echo -e "  Linux:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh | sudo bash -s -- --server=http://${SERVER_IP}:8080${NC}"
+echo -e "  macOS:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh | bash -s -- --server=http://${SERVER_IP}:8080${NC}"
 echo -e "  Windows: ${GREEN}PowerShell 执行安装脚本${NC}"
 echo ""
