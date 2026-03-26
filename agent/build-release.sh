@@ -29,6 +29,7 @@ prepare_jre_files() {
     # JRE文件列表
     local jre_files=(
         "windows-x64:bellsoft-jre8u482+10-windows-amd64.zip"
+        "windows-x86:zulu8.92.0.21-ca-jre8.0.482-win_i686.zip"
         "linux-x64:bellsoft-jre8u482+10-linux-amd64.tar.gz"
         "macos-x64:bellsoft-jre8u482+10-macos-amd64.tar.gz"
         "macos-arm64:bellsoft-jre8u482+10-macos-aarch64.tar.gz"
@@ -371,6 +372,7 @@ echo ""
 
 # 构建各平台包
 build_package "windows" "x64" "bellsoft-jre8u482+10-windows-amd64.zip"
+build_package "windows" "x86" "zulu8.92.0.21-ca-jre8.0.482-win_i686.zip"
 build_package "linux" "x64" "bellsoft-jre8u482+10-linux-amd64.tar.gz"
 build_package "macos" "x64" "bellsoft-jre8u482+10-macos-amd64.tar.gz"
 build_package "macos" "arm64" "bellsoft-jre8u482+10-macos-aarch64.tar.gz"
@@ -384,6 +386,7 @@ ls -la "$RELEASE_DIR"/*.{zip,tar.gz} 2>/dev/null || echo "  (无安装包文件)
 echo ""
 echo "📋 安装包说明:"
 echo "  • Windows: viberemote-agent-${VERSION}-windows-x64.zip"
+echo "  • Windows: viberemote-agent-${VERSION}-windows-x86.zip"
 echo "  • Linux:   viberemote-agent-${VERSION}-linux-x64.tar.gz" 
 echo "  • macOS:   viberemote-agent-${VERSION}-macos-x64.tar.gz"
 echo "  • macOS:   viberemote-agent-${VERSION}-macos-arm64.tar.gz"

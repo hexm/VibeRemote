@@ -25,7 +25,7 @@ show_usage() {
     echo ""
     echo "选项:"
     echo "  --platform=PLATFORM    只上传指定平台的安装包"
-    echo "                         可选值: windows, linux, macos-x64, macos-arm64, all"
+    echo "                         可选值: windows, windows-x64, windows-x86, linux, macos-x64, macos-arm64, all"
     echo "  --help                 显示此帮助信息"
     echo ""
     echo "示例:"
@@ -93,6 +93,7 @@ fi
 # 根据平台选择要上传的安装包
 ALL_PACKAGES=(
     "viberemote-agent-0.4.0-windows-x64.zip"
+    "viberemote-agent-0.4.0-windows-x86.zip"
     "viberemote-agent-0.4.0-linux-x64.tar.gz"
     "viberemote-agent-0.4.0-macos-x64.tar.gz"
     "viberemote-agent-0.4.0-macos-arm64.tar.gz"
@@ -100,7 +101,13 @@ ALL_PACKAGES=(
 
 case "$PLATFORM" in
     "windows")
+        PACKAGES=("viberemote-agent-0.4.0-windows-x64.zip" "viberemote-agent-0.4.0-windows-x86.zip")
+        ;;
+    "windows-x64")
         PACKAGES=("viberemote-agent-0.4.0-windows-x64.zip")
+        ;;
+    "windows-x86")
+        PACKAGES=("viberemote-agent-0.4.0-windows-x86.zip")
         ;;
     "linux")
         PACKAGES=("viberemote-agent-0.4.0-linux-x64.tar.gz")
@@ -116,7 +123,7 @@ case "$PLATFORM" in
         ;;
     *)
         echo -e "${RED}❌ 不支持的平台: $PLATFORM${NC}"
-        echo -e "${YELLOW}支持的平台: windows, linux, macos-x64, macos-arm64, all${NC}"
+        echo -e "${YELLOW}支持的平台: windows, windows-x64, windows-x86, linux, macos-x64, macos-arm64, all${NC}"
         exit 1
         ;;
 esac

@@ -3,7 +3,9 @@ setlocal enabledelayedexpansion
 
 set "INSTALL_DIR=%USERPROFILE%\VibeRemote-Agent"
 set "VERSION=0.4.0"
-set "DOWNLOAD_URL=http://8.138.114.34/agent/release/viberemote-agent-%VERSION%-windows-x64.zip"
+set "BASE_DOWNLOAD_URL=http://8.138.114.34/agent/release"
+set "PACKAGE_ARCH=x64"
+set "DOWNLOAD_URL="
 set "ZIP_FILE=%TEMP%\viberemote-agent.zip"
 set "LOG_DIR=%INSTALL_DIR%\logs"
 set "INSTALL_LOG=%TEMP%\viberemote-install.log"
@@ -15,6 +17,12 @@ call :log "  VibeRemote Agent Installer v%VERSION%"
 call :log "=========================================="
 call :log "  Install dir: %INSTALL_DIR%"
 call :log "  Install log: %INSTALL_LOG%"
+call :log ""
+
+call :detect_arch
+set "DOWNLOAD_URL=%BASE_DOWNLOAD_URL%/viberemote-agent-%VERSION%-windows-%PACKAGE_ARCH%.zip"
+call :log "  Detected Windows architecture: %PACKAGE_ARCH%"
+call :log "  Package URL: %DOWNLOAD_URL%"
 call :log ""
 
 REM ---- 1. Kill existing agent process ----
@@ -107,4 +115,12 @@ REM ---- helper: print to screen and log ----
 :log
 echo %~1
 echo %~1 >> "%INSTALL_LOG%"
+goto :eof
+
+REM ---- helper: detect os architecture ----
+:detect_arch
+if /i "%PROCESSOR_ARCHITEW6432%"=="AMD64" set "PACKAGE_ARCH=x64"
+if /i "%PROCESSOR_ARCHITEW6432%"=="IA64" set "PACKAGE_ARCH=x64"
+if /i "%PROCESSOR_ARCHITECTURE%"=="AMD64" set "PACKAGE_ARCH=x64"
+if /i "%PROCESSOR_ARCHITECTURE%"=="IA64" set "PACKAGE_ARCH=x64"
 goto :eof
