@@ -1,5 +1,7 @@
 package com.example.lightscript.server.config;
 
+import com.example.lightscript.server.entity.SystemSetting;
+import com.example.lightscript.server.service.SystemSettingService;
 import com.example.lightscript.server.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Component;
 public class DataInitializer implements CommandLineRunner {
     
     private final UserService userService;
+    private final SystemSettingService systemSettingService;
     
     @Override
     public void run(String... args) throws Exception {
@@ -43,6 +46,33 @@ public class DataInitializer implements CommandLineRunner {
             } catch (Exception e) {
                 log.error("Failed to update admin user permissions", e);
             }
+        }
+
+        ensureSystemSetting(
+            "task.file_upload.max_size_mb",
+            "500",
+            "NUMBER",
+            "task",
+            "文件上传任务允许的最大压缩包大小（MB），Agent打包后和服务端接收时都会校验"
+        );
+    }
+
+    private void ensureSystemSetting(String key, String value, String type, String category, String description) {
+        if (systemSettingService.getSettingByKey(key) != null) {
+            return;
+        }
+
+        try {
+            SystemSetting setting = new SystemSetting();
+            setting.setSettingKey(key);
+            setting.setSettingValue(value);
+            setting.setSettingType(type);
+            setting.setCategory(category);
+            setting.setDescription(description);
+            systemSettingService.createSetting(setting);
+            log.info("Default system setting created: {}={}", key, value);
+        } catch (Exception e) {
+            log.error("Failed to create default system setting: {}", key, e);
         }
     }
 }

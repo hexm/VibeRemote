@@ -19,6 +19,7 @@ import {
   PlayCircleOutlined,
   CodeOutlined,
   CloudDownloadOutlined,
+  CloudUploadOutlined,
   DesktopOutlined,
 } from '@ant-design/icons'
 import AgentSelectorModal from '../components/AgentSelectorModal'
@@ -48,6 +49,7 @@ const Tasks = () => {
   const [selectedTask, setSelectedTask] = useState(null)
   const [form] = Form.useForm()
   const [fileTransferForm] = Form.useForm()
+  const [fileUploadForm] = Form.useForm()
   
   // 任务详情相关状态
   const [taskExecutions, setTaskExecutions] = useState([])
@@ -83,6 +85,7 @@ const Tasks = () => {
   const [taskType, setTaskType] = useState('SCRIPT')
   const [availableFiles, setAvailableFiles] = useState([])
   const [activeTaskTab, setActiveTaskTab] = useState('script') // 任务创建TAB状态
+  const [fileUploadMaxSizeMb, setFileUploadMaxSizeMb] = useState(null)
 
   // 获取可用脚本列表
   const fetchAvailableScripts = async () => {
@@ -101,6 +104,17 @@ const Tasks = () => {
       setAvailableFiles(response || [])
     } catch (error) {
       console.error('获取文件列表失败:', error)
+    }
+  }
+
+  const fetchFileUploadLimit = async () => {
+    try {
+      const response = await api.get('/web/system-settings/key/task.file_upload.max_size_mb')
+      const limitValue = Number(response?.settingValue)
+      setFileUploadMaxSizeMb(Number.isFinite(limitValue) ? limitValue : null)
+    } catch (error) {
+      console.error('获取文件上传大小限制失败:', error)
+      setFileUploadMaxSizeMb(null)
     }
   }
 
@@ -220,6 +234,7 @@ const Tasks = () => {
     fetchAgentGroups()
     fetchAvailableScripts()
     fetchAvailableFiles()
+    fetchFileUploadLimit()
     
     const handleScriptsChange = () => {
       fetchAvailableScripts()
@@ -361,6 +376,8 @@ const Tasks = () => {
       if (!formValues || Object.keys(formValues).length === 0) {
         if (activeTaskTab === 'script') {
           formValues = await form.validateFields()
+        } else if (activeTaskTab === 'file-upload') {
+          formValues = await fileUploadForm.validateFields()
         } else {
           formValues = await fileTransferForm.validateFields()
         }
@@ -380,7 +397,11 @@ const Tasks = () => {
         return
       }
       
-      const currentTaskType = activeTaskTab === 'file-transfer' ? 'FILE_TRANSFER' : 'SCRIPT'
+      const currentTaskType = activeTaskTab === 'file-transfer'
+        ? 'FILE_TRANSFER'
+        : activeTaskTab === 'file-upload'
+          ? 'FILE_UPLOAD'
+          : 'SCRIPT'
       
       if (currentTaskType === 'FILE_TRANSFER') {
         const fileTransferRequest = {
@@ -395,6 +416,16 @@ const Tasks = () => {
         
         await api.post('/web/tasks/file-transfer/create', fileTransferRequest)
         message.success('文件传输任务创建成功')
+      } else if (currentTaskType === 'FILE_UPLOAD') {
+        const fileUploadRequest = {
+          agentIds,
+          taskName: formValues.taskName,
+          sourcePath: formValues.sourcePath,
+          timeoutSec: formValues.timeoutSec || 600
+        }
+
+        await api.post('/web/tasks/file-upload/create', fileUploadRequest)
+        message.success('文件上传任务创建成功')
       } else {
         const taskSpec = {
           scriptLang: formValues.scriptLang || 'shell',
@@ -426,6 +457,7 @@ const Tasks = () => {
       setCreateModalVisible(false)
       form.resetFields()
       fileTransferForm.resetFields()
+      fileUploadForm.resetFields()
       setSelectedAgentIds([])
       setSelectedScriptId(null)
       setActiveTaskTab('script')
@@ -541,6 +573,40 @@ const Tasks = () => {
     } catch (error) {
       console.error('下载日志失败:', error)
       message.error(`下载日志失败: ${error.message}`)
+    }
+  }
+
+  const downloadExecutionArtifact = async (execution) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${api.defaults.baseURL}/web/tasks/executions/${execution.id}/artifact/download`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `HTTP ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = execution.uploadedFilePath?.split('/').pop() || `execution_${execution.id}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      message.success('上传文件下载成功')
+    } catch (error) {
+      console.error('下载上传文件失败:', error)
+      message.error(`下载上传文件失败: ${error.message}`)
     }
   }
   // 取消单个执行实例
@@ -667,8 +733,8 @@ const Tasks = () => {
       key: 'taskType',
       width: 80,
       render: (taskType) => (
-        <Tag color={taskType === 'FILE_TRANSFER' ? 'blue' : 'purple'}>
-          {taskType === 'FILE_TRANSFER' ? '文件传输' : '脚本执行'}
+        <Tag color={taskType === 'FILE_TRANSFER' ? 'blue' : taskType === 'FILE_UPLOAD' ? 'cyan' : 'purple'}>
+          {taskType === 'FILE_TRANSFER' ? '文件传输' : taskType === 'FILE_UPLOAD' ? '文件上传' : '脚本执行'}
         </Tag>
       ),
     },
@@ -745,8 +811,8 @@ const Tasks = () => {
       key: 'scriptLang',
       width: 80,
       render: (lang, record) => {
-        // 文件传输任务不显示脚本类型
-        if (record.taskType === 'FILE_TRANSFER') {
+        // 文件传输/上传任务不显示脚本类型
+        if (record.taskType === 'FILE_TRANSFER' || record.taskType === 'FILE_UPLOAD') {
           return '-'
         }
         return <Tag color="purple">{lang || 'shell'}</Tag>
@@ -922,6 +988,7 @@ const Tasks = () => {
               <Option value="all">全部类型</Option>
               <Option value="SCRIPT">脚本执行</Option>
               <Option value="FILE_TRANSFER">文件传输</Option>
+              <Option value="FILE_UPLOAD">文件上传</Option>
             </Select>
           </Space>
           
@@ -979,6 +1046,7 @@ const Tasks = () => {
           setCreateModalVisible(false)
           form.resetFields()
           fileTransferForm.resetFields()
+          fileUploadForm.resetFields()
           setSelectedAgentIds([])
       setSelectedScriptId(null)
           setActiveTaskTab('script')
@@ -988,6 +1056,7 @@ const Tasks = () => {
             setCreateModalVisible(false)
             form.resetFields()
             fileTransferForm.resetFields()
+            fileUploadForm.resetFields()
             setSelectedAgentIds([])
       setSelectedScriptId(null)
             setActiveTaskTab('script')
@@ -997,11 +1066,13 @@ const Tasks = () => {
           <Button key="submit" type="primary" onClick={() => {
             if (activeTaskTab === 'script') {
               form.submit()
+            } else if (activeTaskTab === 'file-upload') {
+              fileUploadForm.submit()
             } else {
               fileTransferForm.submit()
             }
           }}>
-            {activeTaskTab === 'script' ? '创建脚本任务' : '创建文件传输任务'}
+            {activeTaskTab === 'script' ? '创建脚本任务' : activeTaskTab === 'file-transfer' ? '创建文件传输任务' : '创建文件上传任务'}
           </Button>
         ]}
         width={800}
@@ -1253,6 +1324,73 @@ const Tasks = () => {
               </div>
                 </Form>
               )
+            },
+            {
+              key: 'file-upload',
+              label: <span><CloudUploadOutlined />文件上传</span>,
+              children: (
+                <Form
+                  form={fileUploadForm}
+                  layout="vertical"
+                  onFinish={handleCreateTask}
+                  initialValues={{
+                    timeoutSec: 600,
+                    taskName: `文件上传任务_${new Date().toLocaleString('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    }).replace(/\//g, '').replace(/:/g, '').replace(/\s/g, '_')}`
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-4">
+                    <Form.Item
+                      name="taskName"
+                      label="任务名称"
+                      rules={[{ required: true, message: '请输入任务名称' }]}
+                    >
+                      <Input placeholder="输入任务名称" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name="timeoutSec"
+                      label="超时时间（秒）"
+                    >
+                      <Input type="number" min={1} placeholder="默认600秒" />
+                    </Form.Item>
+                  </div>
+
+                  <Form.Item label="目标节点" required>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Button
+                        icon={<DesktopOutlined />}
+                        onClick={() => setAgentSelectorOpen(true)}
+                      >
+                        选择节点
+                      </Button>
+                      {selectedAgentIds.length > 0 ? (
+                        <span style={{ color: '#52c41a', fontSize: 13 }}>
+                          已选 <strong>{selectedAgentIds.length}</strong> 台：{getSelectedAgentsPreview()}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#999', fontSize: 13 }}>未选择节点</span>
+                      )}
+                    </div>
+                  </Form.Item>
+
+                  <Form.Item
+                    name="sourcePath"
+                    label="Agent端文件或目录路径"
+                    rules={[{ required: true, message: '请输入Agent端文件或目录路径' }]}
+                    extra={fileUploadMaxSizeMb ? `当前系统限制：压缩包最大 ${fileUploadMaxSizeMb} MB` : 'Agent 会先打包再上传到服务器'}
+                  >
+                    <Input placeholder="例如: /var/log/app.log 或 /data/export" />
+                  </Form.Item>
+                </Form>
+              )
             }
           ]}
         />
@@ -1298,8 +1436,8 @@ const Tasks = () => {
                     <div><Text strong>任务名称:</Text> {selectedTask.taskName || '未命名任务'}</div>
                     <div><Text strong>任务ID:</Text> <Text code>{selectedTask.taskId}</Text></div>
                     <div><Text strong>任务类型:</Text> 
-                      <Tag color={selectedTask.taskType === 'FILE_TRANSFER' ? 'blue' : 'purple'} className="ml-2">
-                        {selectedTask.taskType === 'FILE_TRANSFER' ? '文件传输' : '脚本执行'}
+                      <Tag color={selectedTask.taskType === 'FILE_TRANSFER' ? 'blue' : selectedTask.taskType === 'FILE_UPLOAD' ? 'cyan' : 'purple'} className="ml-2">
+                        {selectedTask.taskType === 'FILE_TRANSFER' ? '文件传输' : selectedTask.taskType === 'FILE_UPLOAD' ? '文件上传' : '脚本执行'}
                       </Tag>
                     </div>
                     <div><Text strong>创建者:</Text> {selectedTask.createdBy || 'admin'}</div>
@@ -1315,6 +1453,12 @@ const Tasks = () => {
                         <div><Text strong>超时时间:</Text> {selectedTask.timeoutSec || 300}秒</div>
                         <div><Text strong>覆盖模式:</Text> {selectedTask.overwriteExisting ? '覆盖已存在文件' : '跳过已存在文件'}</div>
                         <div><Text strong>校验模式:</Text> {selectedTask.verifyChecksum !== false ? '验证文件完整性' : '跳过完整性验证'}</div>
+                      </>
+                    ) : selectedTask.taskType === 'FILE_UPLOAD' ? (
+                      <>
+                        <div><Text strong>Agent端路径:</Text> <Text code>{selectedTask.sourcePath || '-'}</Text></div>
+                        <div><Text strong>服务器保存位置:</Text> <Text code>{selectedTask.uploadedFilePath || '-'}</Text></div>
+                        <div><Text strong>超时时间:</Text> {selectedTask.timeoutSec || 600}秒</div>
                       </>
                     ) : (
                       <>
@@ -1460,10 +1604,24 @@ const Tasks = () => {
                       )
                     },
                   },
+                  ...(selectedTask?.taskType === 'FILE_UPLOAD'
+                    ? [{
+                        title: '上传文件',
+                        key: 'uploadedArtifact',
+                        width: 220,
+                        render: (_, record) => (
+                          <div>
+                            <Text className="text-xs" code>
+                              {record.uploadedFilePath || '-'}
+                            </Text>
+                          </div>
+                        ),
+                      }]
+                    : []),
                   {
                     title: '操作',
                     key: 'actions',
-                    width: 140,
+                    width: selectedTask?.taskType === 'FILE_UPLOAD' ? 220 : 140,
                     render: (_, record) => (
                       <Space size="small">
                         <Button 
@@ -1483,6 +1641,17 @@ const Tasks = () => {
                             onClick={() => handleViewScript(selectedTask)}
                           >
                             脚本
+                          </Button>
+                        )}
+                        {selectedTask?.taskType === 'FILE_UPLOAD' && (
+                          <Button
+                            type="link"
+                            icon={<DownloadOutlined />}
+                            size="small"
+                            onClick={() => downloadExecutionArtifact(record)}
+                            disabled={!record.uploadedFilePath}
+                          >
+                            下载文件
                           </Button>
                         )}
                         {(record.status === 'PENDING' || record.status === 'PULLED' || record.status === 'RUNNING') && (

@@ -215,6 +215,14 @@ public class TaskExecutionServiceImpl implements TaskExecutionService {
         dto.setStartedAt(execution.getStartedAt());
         dto.setFinishedAt(execution.getFinishedAt());
         dto.setCreatedAt(execution.getCreatedAt());
+        dto.setFileId(execution.getFileId());
+        dto.setTargetPath(execution.getTargetPath());
+        dto.setSourcePath(execution.getSourcePath());
+        dto.setTransferSize(execution.getTransferSize());
+        dto.setChecksumVerified(execution.getChecksumVerified());
+        dto.setTransferSpeed(execution.getTransferSpeed());
+        dto.setErrorDetails(execution.getErrorDetails());
+        dto.setUploadedFilePath(execution.getUploadedFilePath());
         
         // 计算执行耗时
         if (execution.getStartedAt() != null && execution.getFinishedAt() != null) {

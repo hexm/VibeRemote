@@ -45,7 +45,7 @@ public class Task {
     private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
     
     @Column(name = "task_type", length = 20)
-    private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER
+    private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER | FILE_UPLOAD
     
     @Column(name = "target_agent_ids", length = 2000)
     private String targetAgentIds; // 目标代理ID列表，逗号分隔

@@ -6,10 +6,16 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.FileInputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 class SimpleTaskRunner {
     private static final Logger logger = LoggerFactory.getLogger(SimpleTaskRunner.class);
@@ -150,11 +156,12 @@ class SimpleTaskRunner {
     }
 
     void runTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
-        runTask(executionId, taskId, "SCRIPT", scriptLang, scriptContent, timeoutSec, null, null, false, true);
+        runTask(executionId, taskId, "SCRIPT", scriptLang, scriptContent, timeoutSec, null, null, null, null, false, true);
     }
 
     void runTask(Long executionId, String taskId, String taskType, String scriptLang, String scriptContent,
-                 int timeoutSec, String fileId, String targetPath, boolean overwriteExisting, boolean verifyChecksum) {
+                 int timeoutSec, String fileId, String targetPath, String sourcePath, Long maxUploadSizeBytes,
+                 boolean overwriteExisting, boolean verifyChecksum) {
         logger.info("========================================");
         logger.info("[TASK-{}] TASK EXECUTION STARTED", executionId);
         logger.info("========================================");
@@ -167,11 +174,108 @@ class SimpleTaskRunner {
             logger.info("[TASK-{}] Overwrite Existing: {}", executionId, overwriteExisting);
             logger.info("[TASK-{}] Verify Checksum: {}", executionId, verifyChecksum);
             runFileTransferTask(executionId, taskId, fileId, targetPath, timeoutSec, overwriteExisting, verifyChecksum);
+        } else if ("FILE_UPLOAD".equals(taskType)) {
+            logger.info("[TASK-{}] Source Path: {}", executionId, sourcePath);
+            logger.info("[TASK-{}] Max Upload Size: {} bytes", executionId, maxUploadSizeBytes);
+            runFileUploadTask(executionId, taskId, sourcePath, timeoutSec, maxUploadSizeBytes);
         } else {
             logger.info("[TASK-{}] Script Language: {}", executionId, scriptLang);
             logger.info("[TASK-{}] Script Content Length: {} chars", executionId, scriptContent != null ? scriptContent.length() : 0);
             logger.info("[TASK-{}] Timeout: {} seconds", executionId, timeoutSec);
             runScriptTask(executionId, taskId, scriptLang, scriptContent, timeoutSec);
+        }
+    }
+
+    private void runFileUploadTask(Long executionId, String taskId, String sourcePath, int timeoutSec, Long maxUploadSizeBytes) {
+        LogBuffer taskBuffer = createTaskLogBuffer(executionId);
+
+        try {
+            logger.info("[TASK-{}] Starting file upload task", executionId);
+            taskStatusMonitor.onTaskStart(executionId);
+            synchronized (this) {
+                api.ackTask(agentId, agentToken, executionId);
+            }
+            sendLog(executionId, "system", "File upload task started (source: " + sourcePath + ")", taskBuffer);
+
+            File source = new File(sourcePath);
+            if (!source.exists()) {
+                throw new RuntimeException("Source path not found: " + sourcePath);
+            }
+
+            File archiveFile = createArchive(source, executionId);
+            sendLog(executionId, "system", "Archive created: " + archiveFile.getName(), taskBuffer);
+            sendLog(executionId, "system", "Archive size: " + archiveFile.length() + " bytes", taskBuffer);
+
+            if (maxUploadSizeBytes != null && maxUploadSizeBytes > 0 && archiveFile.length() > maxUploadSizeBytes) {
+                throw new RuntimeException("Archive size exceeds limit: " + archiveFile.length() +
+                    " bytes > " + maxUploadSizeBytes + " bytes");
+            }
+
+            String storedPath;
+            synchronized (this) {
+                storedPath = api.uploadArtifact(agentId, agentToken, executionId, archiveFile);
+                api.finish(agentId, agentToken, executionId, 0, "SUCCESS",
+                    "File uploaded successfully to " + storedPath);
+            }
+            sendLog(executionId, "system", "File uploaded successfully: " + storedPath, taskBuffer);
+            logger.info("[TASK-{}] ✓ File upload completed successfully", executionId);
+
+            if (!archiveFile.delete()) {
+                logger.warn("[TASK-{}] Failed to delete temp archive: {}", executionId, archiveFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            logger.error("[TASK-{}] ✗ Exception during file upload: {}", executionId, e.getMessage(), e);
+            try {
+                sendLog(executionId, "stderr", "Exception: " + e.getMessage(), taskBuffer);
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                }
+            } catch (Exception ignored) {
+                logger.error("[TASK-{}] ✗ Failed to report upload task failure: {}", executionId, ignored.getMessage());
+            }
+        } finally {
+            flushTaskBuffer(executionId, taskBuffer);
+            onTaskComplete(executionId);
+            taskStatusMonitor.onTaskComplete(executionId);
+            logger.info("[TASK-{}] File upload task completed", executionId);
+        }
+    }
+
+    private File createArchive(File source, Long executionId) throws IOException {
+        String baseName = source.getName().isEmpty() ? "upload" : source.getName();
+        File archive = File.createTempFile("vr_upload_" + executionId + "_", ".zip");
+
+        try (ZipOutputStream zipOutputStream = new ZipOutputStream(new FileOutputStream(archive))) {
+            Path sourcePath = source.toPath();
+            if (source.isDirectory()) {
+                try (java.util.stream.Stream<Path> paths = Files.walk(sourcePath)) {
+                    paths.filter(path -> !Files.isDirectory(path))
+                        .forEach(path -> writeZipEntry(zipOutputStream, sourcePath, path, baseName));
+                }
+            } else {
+                writeZipEntry(zipOutputStream, sourcePath.getParent(), sourcePath, "");
+            }
+        }
+        return archive;
+    }
+
+    private void writeZipEntry(ZipOutputStream zipOutputStream, Path rootPath, Path filePath, String prefix) {
+        try (FileInputStream inputStream = new FileInputStream(filePath.toFile())) {
+            Path relativePath = rootPath != null ? rootPath.relativize(filePath) : Paths.get(filePath.getFileName().toString());
+            String entryName = prefix == null || prefix.isEmpty()
+                ? relativePath.toString()
+                : Paths.get(prefix).resolve(relativePath).toString();
+            entryName = entryName.replace("\\", "/");
+            zipOutputStream.putNextEntry(new ZipEntry(entryName));
+
+            byte[] buffer = new byte[16 * 1024];
+            int len;
+            while ((len = inputStream.read(buffer)) != -1) {
+                zipOutputStream.write(buffer, 0, len);
+            }
+            zipOutputStream.closeEntry();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to add zip entry for " + filePath + ": " + e.getMessage(), e);
         }
     }
 

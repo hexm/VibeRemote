@@ -7,6 +7,8 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.FileEntity;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -14,6 +16,7 @@ import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 
 import java.io.IOException;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -527,7 +530,32 @@ class AgentApi {
 			return false;
 		}
 	}
-	/**
+
+	String uploadArtifact(String agentId, String agentToken, Long executionId, File archiveFile) throws Exception {
+		String url = String.format("%s/api/agent/tasks/executions/%d/upload-artifact?agentId=%s&agentToken=%s&archiveName=%s",
+			baseUrl,
+			executionId,
+			java.net.URLEncoder.encode(agentId, "UTF-8"),
+			java.net.URLEncoder.encode(agentToken, "UTF-8"),
+			java.net.URLEncoder.encode(archiveFile.getName(), "UTF-8"));
+		HttpPost post = new HttpPost(url);
+		post.setEntity(new FileEntity(archiveFile, ContentType.APPLICATION_OCTET_STREAM));
+
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity(), "UTF-8") : "";
+
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				throw new RuntimeException("Upload artifact failed: " + responseBody);
+			}
+
+			Map<String, Object> result = mapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+			return String.valueOf(result.get("storedPath"));
+		}
+	}
 	/**
 	 * 推送截图帧到服务器（屏幕监控）
 	 * @return true=继续截图，false=服务器要求停止（无人观看）

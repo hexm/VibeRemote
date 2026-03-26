@@ -4,6 +4,8 @@ import com.example.lightscript.server.entity.Task;
 import com.example.lightscript.server.entity.TaskExecution;
 import com.example.lightscript.server.entity.TaskLog;
 import com.example.lightscript.server.entity.Agent;
+import com.example.lightscript.server.exception.BusinessException;
+import com.example.lightscript.server.exception.ErrorCode;
 import com.example.lightscript.server.model.AgentModels.*;
 import com.example.lightscript.server.model.TaskModels;
 import com.example.lightscript.server.model.FileModels;
@@ -40,6 +42,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class TaskService {
+    private static final String FILE_UPLOAD_MAX_SIZE_MB_KEY = "task.file_upload.max_size_mb";
+    private static final long DEFAULT_FILE_UPLOAD_MAX_SIZE_MB = 500L;
     
     private final TaskRepository taskRepository;
     private final TaskLogRepository taskLogRepository;
@@ -56,6 +60,9 @@ public class TaskService {
     
     @Autowired
     private FileService fileService;
+
+    @Autowired
+    private SystemSettingService systemSettingService;
     
     @Value("${lightscript.log.storage.path:logs/tasks}")
     private String logStoragePath;
@@ -205,6 +212,64 @@ public class TaskService {
         response.setTargetAgentCount(request.getAgentIds().size());
         response.setMessage("文件传输任务创建成功，已分配给 " + request.getAgentIds().size() + " 个代理");
 
+        return response;
+    }
+
+    /**
+     * 创建文件上传任务
+     */
+    @Transactional
+    public TaskModels.CreateTaskResponse createFileUploadTask(
+            TaskModels.CreateFileUploadTaskRequest request,
+            String createdBy) {
+
+        if (request.getAgentIds() == null || request.getAgentIds().isEmpty()) {
+            throw new IllegalArgumentException("至少需要选择一个代理");
+        }
+        if (request.getSourcePath() == null || request.getSourcePath().trim().isEmpty()) {
+            throw new IllegalArgumentException("请填写Agent端文件或目录路径");
+        }
+
+        if (request.getTaskName() != null && !request.getTaskName().trim().isEmpty()) {
+            if (taskRepository.existsByTaskName(request.getTaskName())) {
+                throw new IllegalArgumentException("任务名称已存在: " + request.getTaskName());
+            }
+        }
+
+        Task task = new Task();
+        task.setTaskId(UUID.randomUUID().toString());
+        task.setTaskName(request.getTaskName());
+        task.setTaskType("FILE_UPLOAD");
+        task.setTimeoutSec(request.getTimeoutSec());
+        task.setCreatedBy(createdBy);
+        task.setCreatedAt(LocalDateTime.now());
+        task.setTargetAgentIds(String.join(",", request.getAgentIds()));
+        task.setTaskStatus("PENDING");
+
+        task = taskRepository.save(task);
+        log.info("File upload task created: {}, sourcePath: {}, targets: {}",
+            task.getTaskId(), request.getSourcePath(), request.getAgentIds().size());
+
+        List<TaskExecution> executions = new ArrayList<>();
+        for (String agentId : request.getAgentIds()) {
+            TaskExecution execution = new TaskExecution();
+            execution.setTaskId(task.getTaskId());
+            execution.setAgentId(agentId);
+            execution.setExecutionNumber(1);
+            execution.setStatus("PENDING");
+            execution.setSourcePath(request.getSourcePath());
+            execution.setCreatedAt(LocalDateTime.now());
+            executions.add(execution);
+        }
+        taskExecutionRepository.saveAll(executions);
+
+        updateTaskStatus(task.getTaskId());
+
+        TaskModels.CreateTaskResponse response = new TaskModels.CreateTaskResponse();
+        response.setTaskId(task.getTaskId());
+        response.setTaskStatus(task.getTaskStatus());
+        response.setTargetAgentCount(request.getAgentIds().size());
+        response.setMessage("文件上传任务创建成功，已分配给 " + request.getAgentIds().size() + " 个代理");
         return response;
     }
     
@@ -678,6 +743,10 @@ public class TaskService {
                     log.warn("Failed to get file info for fileId: {}", firstExecution.getFileId(), e);
                 }
             }
+        } else if ("FILE_UPLOAD".equals(task.getTaskType()) && !executions.isEmpty()) {
+            TaskExecution firstExecution = executions.get(0);
+            dto.setSourcePath(firstExecution.getSourcePath());
+            dto.setUploadedFilePath(firstExecution.getUploadedFilePath());
         }
         
         // 计算统计信息
@@ -1052,9 +1121,49 @@ public class TaskService {
             // 从任务配置中获取这些信息
             spec.setOverwriteExisting(task.getOverwriteExisting() != null ? task.getOverwriteExisting() : false);
             spec.setVerifyChecksum(task.getVerifyChecksum() != null ? task.getVerifyChecksum() : true);
+        } else if ("FILE_UPLOAD".equals(task.getTaskType()) && execution != null) {
+            spec.setSourcePath(execution.getSourcePath());
+            spec.setUploadedFilePath(execution.getUploadedFilePath());
+            spec.setMaxUploadSizeBytes(getFileUploadMaxSizeBytes());
         }
-        
+
         return spec;
+    }
+
+    @Transactional
+    public String saveUploadedArtifact(Long executionId, String agentId, String archiveName, java.io.InputStream inputStream) {
+        TaskExecution execution = taskExecutionRepository.findById(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("执行实例不存在: " + executionId));
+
+        if (!execution.getAgentId().equals(agentId)) {
+            throw new IllegalArgumentException("执行实例与Agent不匹配");
+        }
+
+        String storedPath = fileService.saveAgentUpload(
+            agentId,
+            execution.getTaskId(),
+            executionId,
+            archiveName,
+            inputStream,
+            getFileUploadMaxSizeBytes()
+        );
+        try {
+            long size = java.nio.file.Files.size(java.nio.file.Paths.get(storedPath));
+            execution.setTransferSize(size);
+        } catch (IOException e) {
+            log.warn("Failed to read uploaded artifact size: {}", storedPath, e);
+        }
+        execution.setUploadedFilePath(storedPath);
+        taskExecutionRepository.save(execution);
+        return storedPath;
+    }
+
+    private long getFileUploadMaxSizeBytes() {
+        long maxSizeMb = systemSettingService.getLongValue(FILE_UPLOAD_MAX_SIZE_MB_KEY, DEFAULT_FILE_UPLOAD_MAX_SIZE_MB);
+        if (maxSizeMb <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "系统参数 " + FILE_UPLOAD_MAX_SIZE_MB_KEY + " 必须大于 0");
+        }
+        return maxSizeMb * 1024L * 1024L;
     }
     
     /**

@@ -23,6 +23,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import javax.validation.Valid;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -676,6 +677,28 @@ public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterReq
 					.body(resource);
 		} catch (Exception e) {
 			throw new BusinessException(ErrorCode.INTERNAL_ERROR, "文件下载失败: " + e.getMessage());
+		}
+	}
+
+	@PostMapping(value = "/tasks/executions/{executionId}/upload-artifact", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+	public ResponseEntity<Map<String, Object>> uploadArtifact(
+			@PathVariable Long executionId,
+			@RequestParam String agentId,
+			@RequestParam String agentToken,
+			@RequestParam String archiveName,
+			HttpServletRequest request) {
+
+		if (!agentService.validateAgent(agentId, agentToken)) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+
+		try {
+			String storedPath = taskService.saveUploadedArtifact(executionId, agentId, archiveName, request.getInputStream());
+			Map<String, Object> response = new HashMap<>();
+			response.put("storedPath", storedPath);
+			return ResponseEntity.ok(response);
+		} catch (Exception e) {
+			throw new BusinessException(ErrorCode.INTERNAL_ERROR, "文件上传失败: " + e.getMessage());
 		}
 	}
 

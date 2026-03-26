@@ -97,8 +97,7 @@ public class AgentMain {
         }
 
         String agentId = null;
-        // token 固定为 register.token
-        final String agentToken = registerToken;
+        String agentToken = null;
 
         logger.info("========================================");
         logger.info("AGENT REGISTRATION (idempotent)");
@@ -112,8 +111,10 @@ public class AgentMain {
                 // 每次启动都调用 register，服务端幂等处理（hostname+osType 已存在则更新）
                 Map<String, Object> reg = api.register(registerToken, hostname, osType);
                 agentId = String.valueOf(reg.get("agentId"));
+                agentToken = String.valueOf(reg.get("agentToken"));
                 idStore.save(agentId);
                 logger.info("✓ Agent registered. Agent ID: {}", agentId);
+                logger.info("✓ Agent token received from server");
                 logger.info("========================================");
             } catch (Exception e) {
                 retryCount++;
@@ -385,6 +386,10 @@ public class AgentMain {
                         // 文件传输相关字段
                         String fileId = String.valueOf(task.get("fileId"));
                         String targetPath = String.valueOf(task.get("targetPath"));
+                        String sourcePath = String.valueOf(task.get("sourcePath"));
+                        Long maxUploadSizeBytes = task.get("maxUploadSizeBytes") instanceof Number
+                            ? ((Number) task.get("maxUploadSizeBytes")).longValue()
+                            : null;
                         Boolean overwriteExisting = (Boolean) task.getOrDefault("overwriteExisting", false);
                         Boolean verifyChecksum = (Boolean) task.getOrDefault("verifyChecksum", true);
 
@@ -394,6 +399,9 @@ public class AgentMain {
                             logger.debug("Script content length: {} chars", scriptContent != null && !"null".equals(scriptContent) ? scriptContent.length() : 0);
                         } else if ("FILE_TRANSFER".equals(taskType)) {
                             logger.debug("File transfer - fileId: {}, targetPath: {}", fileId, targetPath);
+                        } else if ("FILE_UPLOAD".equals(taskType)) {
+                            logger.debug("File upload - sourcePath: {}", sourcePath);
+                            logger.debug("File upload - maxUploadSizeBytes: {}", maxUploadSizeBytes);
                         }
                         
                         // 检查基本字段
@@ -413,6 +421,13 @@ public class AgentMain {
                                 errorMessage = "Invalid file transfer task - fileId or targetPath is null. fileId: " + fileId + ", targetPath: " + targetPath;
                                 logger.error("✗ INVALID FILE TRANSFER TASK");
                                 logger.error("  fileId: {}, targetPath: {}", fileId, targetPath);
+                            }
+                        } else if ("FILE_UPLOAD".equals(taskType)) {
+                            if (sourcePath == null || "null".equals(sourcePath) || sourcePath.trim().isEmpty()) {
+                                isValidTask = false;
+                                errorMessage = "Invalid file upload task - sourcePath is null";
+                                logger.error("✗ INVALID FILE UPLOAD TASK");
+                                logger.error("  sourcePath: {}", sourcePath);
                             }
                         } else {
                             if (scriptContent == null || "null".equals(scriptContent)) {
@@ -448,6 +463,8 @@ public class AgentMain {
                         final String finalTaskType = taskType;
                         final String finalFileId = fileId;
                         final String finalTargetPath = targetPath;
+                        final String finalSourcePath = sourcePath;
+                        final Long finalMaxUploadSizeBytes = maxUploadSizeBytes;
                         final boolean finalOverwriteExisting = overwriteExisting;
                         final boolean finalVerifyChecksum = verifyChecksum;
                         
@@ -456,7 +473,8 @@ public class AgentMain {
                             logger.info("[TASK-{}] TaskExecutor thread started", finalExecutionId);
                             try {
                                 taskRunner.runTask(finalExecutionId, taskId, finalTaskType, scriptLang, scriptContent, 
-                                                 timeoutSec, finalFileId, finalTargetPath, finalOverwriteExisting, finalVerifyChecksum);
+                                                 timeoutSec, finalFileId, finalTargetPath, finalSourcePath,
+                                                 finalMaxUploadSizeBytes, finalOverwriteExisting, finalVerifyChecksum);
                             } catch (Exception e) {
                                 logger.error("[TASK-{}] ✗ Error in taskExecutor thread: {}", finalExecutionId, e.getMessage(), e);
                             }

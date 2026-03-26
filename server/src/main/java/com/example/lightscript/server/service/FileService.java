@@ -16,10 +16,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -34,6 +36,7 @@ public class FileService {
     
     // 文件存储目录
     private static final String FILE_STORAGE_DIR = "files";
+    private static final String AGENT_UPLOAD_STORAGE_DIR = "agent-uploads";
     
     // 文件大小限制 (100MB)
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024L;
@@ -234,12 +237,86 @@ public class FileService {
         // 支持MD5和SHA256校验
         return expectedChecksum.equals(file.getMd5()) || expectedChecksum.equals(file.getSha256());
     }
+
+    /**
+     * 保存Agent上传的任务产物
+     */
+    public String saveAgentUpload(String agentId, String taskId, Long executionId, String archiveName, InputStream inputStream) {
+        return saveAgentUpload(agentId, taskId, executionId, archiveName, inputStream, null);
+    }
+
+    public String saveAgentUpload(String agentId, String taskId, Long executionId, String archiveName, InputStream inputStream, Long maxSizeBytes) {
+        try {
+            String safeAgentId = sanitizePathSegment(agentId);
+            String safeTaskId = sanitizePathSegment(taskId);
+            String safeArchiveName = sanitizeFileName(archiveName);
+
+            Path uploadDir = Paths.get(AGENT_UPLOAD_STORAGE_DIR, safeAgentId, safeTaskId, String.valueOf(executionId));
+            Files.createDirectories(uploadDir);
+
+            Path targetPath = uploadDir.resolve(safeArchiveName);
+            copyWithLimit(inputStream, targetPath, maxSizeBytes);
+            return targetPath.toAbsolutePath().toString();
+        } catch (BusinessException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "保存Agent上传文件失败: " + e.getMessage());
+        }
+    }
     
     // 私有方法
     
     private String generateFileId() {
         // 使用时间戳生成唯一ID
         return "F" + System.currentTimeMillis();
+    }
+
+    private String sanitizePathSegment(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "unknown";
+        }
+        return value.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return "upload.zip";
+        }
+        String normalized = fileName.replace("\\", "/");
+        int lastSlash = normalized.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            normalized = normalized.substring(lastSlash + 1);
+        }
+        normalized = normalized.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return normalized.isEmpty() ? "upload.zip" : normalized;
+    }
+
+    private void copyWithLimit(InputStream inputStream, Path targetPath, Long maxSizeBytes) throws IOException {
+        long totalBytes = 0L;
+        byte[] buffer = new byte[8192];
+
+        try (java.io.OutputStream outputStream = Files.newOutputStream(
+            targetPath,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.WRITE
+        )) {
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                totalBytes += read;
+                if (maxSizeBytes != null && maxSizeBytes > 0 && totalBytes > maxSizeBytes) {
+                    throw new BusinessException(ErrorCode.FILE_SIZE_EXCEEDED,
+                        String.format("最大允许 %d MB", Math.max(1L, maxSizeBytes / 1024 / 1024)));
+                }
+                outputStream.write(buffer, 0, read);
+            }
+        } catch (BusinessException e) {
+            Files.deleteIfExists(targetPath);
+            throw e;
+        } catch (IOException e) {
+            Files.deleteIfExists(targetPath);
+            throw e;
+        }
     }
     
     private String saveUploadedFile(MultipartFile file) throws IOException {

@@ -54,7 +54,7 @@ public class AgentModels {
 		private String taskId;
 		private Long executionId; // 执行实例ID（必需，用于多代理支持）
 		private String taskName; // 任务名称
-		private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER
+		private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER | FILE_UPLOAD
 		private String scriptLang; // bash | powershell | cmd
 		private String scriptContent;
 		private String scriptId; // 来自脚本库的脚本ID，非空表示使用已有脚本
@@ -66,6 +66,9 @@ public class AgentModels {
 		private String targetPath; // 目标路径
 		private Boolean overwriteExisting = false; // 是否覆盖已存在的文件
 		private Boolean verifyChecksum = true; // 是否验证校验和
+		private String sourcePath; // Agent端源文件/目录路径（文件上传任务）
+		private String uploadedFilePath; // 上传到服务器后的保存路径
+		private Long maxUploadSizeBytes; // 文件上传任务允许的最大压缩包大小
 	}
 	
 	@Data

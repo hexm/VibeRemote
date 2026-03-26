@@ -71,6 +71,12 @@ public class TaskExecution {
     
     @Column(name = "target_path", length = 500)
     private String targetPath; // 目标路径
+
+    @Column(name = "source_path", length = 1000)
+    private String sourcePath; // Agent端源文件/目录路径
+
+    @Column(name = "uploaded_file_path", length = 1000)
+    private String uploadedFilePath; // 上传到服务器后的保存路径
     
     @Column(name = "transfer_size")
     private Long transferSize; // 实际传输大小

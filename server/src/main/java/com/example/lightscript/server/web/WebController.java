@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.HashMap;
@@ -485,6 +486,26 @@ public class WebController {
 
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * 创建文件上传任务
+     */
+    @PostMapping("/tasks/file-upload/create")
+    @RequirePermission("task:create")
+    public ResponseEntity<Map<String, Object>> createFileUploadTask(
+            @RequestBody TaskModels.CreateFileUploadTaskRequest request,
+            Authentication authentication) {
+
+        String createdBy = authentication.getName();
+        TaskModels.CreateTaskResponse createResponse = taskService.createFileUploadTask(request, createdBy);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("taskId", createResponse.getTaskId());
+        response.put("taskStatus", createResponse.getTaskStatus());
+        response.put("targetAgentCount", createResponse.getTargetAgentCount());
+        response.put("message", createResponse.getMessage());
+        return ResponseEntity.ok(response);
+    }
     
     /**
      * 启动任务（草稿状态的任务）
@@ -636,6 +657,42 @@ public class WebController {
             .header(HttpHeaders.CONTENT_DISPOSITION, 
                 "attachment; filename=\"" + filename + "\"")
             .contentType(MediaType.TEXT_PLAIN)
+            .body(resource);
+    }
+
+    /**
+     * 下载文件上传任务产物
+     */
+    @GetMapping("/tasks/executions/{executionId}/artifact/download")
+    @RequirePermission("task:view")
+    public ResponseEntity<Resource> downloadExecutionArtifact(@PathVariable Long executionId) {
+        TaskExecution execution = taskService.getTaskExecution(executionId)
+            .orElseThrow(() -> new IllegalArgumentException("执行记录不存在"));
+
+        if (execution.getUploadedFilePath() == null || execution.getUploadedFilePath().isEmpty()) {
+            throw new IllegalArgumentException("该执行记录暂无上传文件");
+        }
+
+        File artifactFile = new File(execution.getUploadedFilePath());
+        if (!artifactFile.exists()) {
+            throw new IllegalArgumentException("上传文件不存在: " + execution.getUploadedFilePath());
+        }
+
+        Resource resource = new FileSystemResource(artifactFile);
+        String filename = artifactFile.getName();
+        String encodedFilename;
+        try {
+            encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8.toString())
+                .replaceAll("\\+", "%20");
+        } catch (Exception e) {
+            encodedFilename = filename;
+        }
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encodedFilename)
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .contentLength(artifactFile.length())
             .body(resource);
     }
     

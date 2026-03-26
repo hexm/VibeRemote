@@ -37,7 +37,7 @@ public class TaskModels {
         private String taskStatus; // DRAFT | PENDING | RUNNING | SUCCESS | FAILED | PARTIAL_SUCCESS | STOPPED | CANCELLED
         
         // 任务类型
-        private String taskType; // SCRIPT | FILE_TRANSFER
+        private String taskType; // SCRIPT | FILE_TRANSFER | FILE_UPLOAD
         
         // 文件传输相关字段
         private String fileId; // 文件ID
@@ -45,6 +45,8 @@ public class TaskModels {
         private String targetPath; // 目标路径
         private Boolean overwriteExisting; // 是否覆盖已存在文件
         private Boolean verifyChecksum; // 是否验证校验和
+        private String sourcePath; // Agent端源文件/目录路径
+        private String uploadedFilePath; // 上传到服务器后的保存路径
         
         // 统计字段（从TaskExecution计算得出）
         private Integer targetAgentCount; // 目标代理数量
@@ -87,10 +89,12 @@ public class TaskModels {
         private String fileName; // 文件名（从File表关联）
         private String fileSizeDisplay; // 格式化的文件大小
         private String targetPath; // 目标路径
+        private String sourcePath; // Agent端源文件/目录路径
         private Long transferSize; // 实际传输大小
         private Boolean checksumVerified; // 校验是否通过
         private Long transferSpeed; // 传输速度（字节/秒）
         private String errorDetails; // 详细错误信息
+        private String uploadedFilePath; // 上传到服务器后的保存路径
     }
 
     /**
@@ -157,6 +161,24 @@ public class TaskModels {
 
         private Boolean overwriteExisting = false; // 是否覆盖已存在的文件
         private Boolean verifyChecksum = true; // 是否验证校验和
+    }
+
+    /**
+     * 创建文件上传任务请求
+     */
+    @Data
+    public static class CreateFileUploadTaskRequest {
+        @NotEmpty(message = "至少需要选择一个代理")
+        private List<String> agentIds;
+
+        @NotBlank(message = "任务名称不能为空")
+        private String taskName;
+
+        @NotBlank(message = "Agent端文件或目录路径不能为空")
+        private String sourcePath;
+
+        @NotNull(message = "超时时间不能为空")
+        private Integer timeoutSec = 600;
     }
 
     /**

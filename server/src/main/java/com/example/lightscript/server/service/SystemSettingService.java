@@ -125,4 +125,14 @@ public class SystemSettingService {
         String value = getSettingValue(key, null);
         return value != null ? Boolean.parseBoolean(value) : defaultValue;
     }
+
+    public Long getLongValue(String key, Long defaultValue) {
+        try {
+            String value = getSettingValue(key, null);
+            return value != null ? Long.parseLong(value) : defaultValue;
+        } catch (NumberFormatException e) {
+            log.warn("Failed to parse long value for key: {}", key);
+            return defaultValue;
+        }
+    }
 }
