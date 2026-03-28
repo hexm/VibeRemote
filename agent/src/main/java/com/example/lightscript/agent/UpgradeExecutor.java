@@ -32,6 +32,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 class UpgradeExecutor {
     private static final Logger logger = LoggerFactory.getLogger(UpgradeExecutor.class);
     private static final String UPGRADER_JAR = "upgrader.jar";
+    private static final String UPGRADE_CONTEXT_FILE = ".upgrade-context.json";
+    private static final String UPGRADER_LAUNCHD_LABEL_PROPERTY = "upgrader.launchd.label";
+    private static final String MACOS_LAUNCH_AGENT_LABEL = "com.viberemote.agent";
+    private static final String LEGACY_MACOS_LAUNCH_AGENT_LABEL = "com.lightscript.agent";
     private final UpgradeStatusReporter statusReporter;
     private final TaskStatusMonitor taskStatusMonitor;
     private final ScheduledExecutorService scheduler;
@@ -63,17 +67,19 @@ class UpgradeExecutor {
         logger.info("Starting upgrade: {} -> {} (force: {})", fromVersion, toVersion, forceUpgrade);
 
         try {
+            Path upgraderPath = AgentPaths.getAgentHome().resolve(UPGRADER_JAR);
+
             // 1. 报告升级开始
             statusReporter.reportUpgradeStart(fromVersion, toVersion, forceUpgrade);
             logger.info("Upgrade status reported to server");
 
             // 2. 检查升级器是否存在
-            if (!Files.exists(Paths.get(UPGRADER_JAR))) {
-                statusReporter.reportUpgradeStatus("FAILED", "Upgrader not found: " + UPGRADER_JAR);
-                logger.error("Upgrader not found: {}", UPGRADER_JAR);
+            if (!Files.exists(upgraderPath)) {
+                statusReporter.reportUpgradeStatus("FAILED", "Upgrader not found: " + upgraderPath);
+                logger.error("Upgrader not found: {}", upgraderPath);
                 return;
             }
-            logger.info("Upgrader found: {}", UPGRADER_JAR);
+            logger.info("Upgrader found: {}", upgraderPath);
 
             // 3. 报告开始下载
             statusReporter.reportUpgradeStatus("DOWNLOADING", null);
@@ -88,9 +94,10 @@ class UpgradeExecutor {
             }
             logger.info("New version downloaded: {}", newVersionPath);
 
-            // 5. 临时禁用LaunchAgent自动重启
-            logger.info("Temporarily disabling LaunchAgent auto-restart for upgrade");
-            disableLaunchAgentAutoRestart();
+            // 5. 将上下文传给升级器，并把状态切到安装阶段
+            saveUpgradeContext(fromVersion, toVersion, forceUpgrade);
+            saveCredentialsForUpgrader();
+            statusReporter.reportUpgradeStatus("INSTALLING", null);
 
             // 6. 启动升级器（只传递必要参数）
             logger.info("Starting upgrader process with new version: {}", newVersionPath);
@@ -143,7 +150,7 @@ class UpgradeExecutor {
             String fileName = "agent-" + versionInfo.getVersion() + ".jar";
             
             // 使用当前工作目录（Agent启动目录）而不是系统临时目录
-            String currentDir = System.getProperty("user.dir");
+            String currentDir = AgentPaths.getAgentHome().toString();
             String downloadPath = currentDir + File.separator + fileName;
             
             logger.info("Downloading new version from: {}", downloadUrl);
@@ -221,20 +228,95 @@ class UpgradeExecutor {
     private void startUpgrader(String newVersionPath) throws IOException {
         // 从完整路径中提取文件名
         String newVersionFilename = Paths.get(newVersionPath).getFileName().toString();
-        
-        ProcessBuilder pb = new ProcessBuilder();
-        // 只传递1个参数：新版本文件名
-        pb.command("java", "-jar", UPGRADER_JAR, newVersionFilename);
-        pb.directory(new File(System.getProperty("user.dir")));
-        
-        // 重定向输出到日志文件
-        File logsDir = new File("logs");
+
+        String workingDir = AgentPaths.getAgentHome().toString();
+        File logsDir = new File(workingDir, "logs");
         logsDir.mkdirs();
-        pb.redirectOutput(new File(logsDir, "upgrade.log"));
-        pb.redirectError(new File(logsDir, "upgrade-error.log"));
-        
-        Process process = pb.start();
-        logger.info("Upgrader started with parameter: newVersionFile={}", newVersionFilename);
+
+        String javaCommand = resolveJavaCommand(workingDir);
+        ProcessBuilder pb = new ProcessBuilder();
+        pb.directory(new File(workingDir));
+
+        if (isWindows()) {
+            pb.command(
+                javaCommand,
+                "-Dagent.home=" + workingDir,
+                "-jar",
+                UPGRADER_JAR,
+                newVersionFilename
+            );
+            pb.redirectOutput(new File(logsDir, "upgrade.log"));
+            pb.redirectError(new File(logsDir, "upgrade-error.log"));
+        } else if (isMacLaunchAgentInstall(workingDir)) {
+            String launchctlLabel = MACOS_LAUNCH_AGENT_LABEL + ".upgrader." + System.currentTimeMillis();
+            String shellCommand = String.format(
+                "cd %s && exec %s -Dagent.home=%s -D%s=%s -jar %s %s >> %s 2>> %s",
+                shellQuote(workingDir),
+                shellQuote(javaCommand),
+                shellQuote(workingDir),
+                UPGRADER_LAUNCHD_LABEL_PROPERTY,
+                shellQuote(launchctlLabel),
+                shellQuote(UPGRADER_JAR),
+                shellQuote(newVersionFilename),
+                shellQuote(new File(logsDir, "upgrade.log").getAbsolutePath()),
+                shellQuote(new File(logsDir, "upgrade-error.log").getAbsolutePath())
+            );
+            pb.command("launchctl", "submit", "-l", launchctlLabel, "--", "/bin/bash", "-lc", shellCommand);
+            logger.info("Submitting upgrader via launchctl label={} for macOS LaunchAgent install", launchctlLabel);
+        } else {
+            // launchd 管理的进程退出时可能会连带清理子进程，使用 shell + nohup 将升级器彻底脱离。
+            String shellCommand = String.format(
+                "cd %s && nohup %s -Dagent.home=%s -jar %s %s >> %s 2>> %s < /dev/null &",
+                shellQuote(workingDir),
+                shellQuote(javaCommand),
+                shellQuote(workingDir),
+                shellQuote(UPGRADER_JAR),
+                shellQuote(newVersionFilename),
+                shellQuote(new File(logsDir, "upgrade.log").getAbsolutePath()),
+                shellQuote(new File(logsDir, "upgrade-error.log").getAbsolutePath())
+            );
+            pb.command("/bin/bash", "-lc", shellCommand);
+        }
+
+        pb.start();
+        logger.info("Upgrader started with java={}, newVersionFile={}", javaCommand, newVersionFilename);
+    }
+
+    private String resolveJavaCommand(String workingDir) {
+        Path bundledJava = Paths.get(workingDir, "jre", "bin", isWindows() ? "java.exe" : "java");
+        if (Files.isRegularFile(bundledJava) && Files.isExecutable(bundledJava)) {
+            return bundledJava.toAbsolutePath().toString();
+        }
+
+        String javaHome = System.getenv("JAVA_HOME");
+        if (javaHome != null && !javaHome.trim().isEmpty()) {
+            Path javaHomeBin = Paths.get(javaHome, "bin", isWindows() ? "java.exe" : "java");
+            if (Files.isRegularFile(javaHomeBin) && Files.isExecutable(javaHomeBin)) {
+                return javaHomeBin.toAbsolutePath().toString();
+            }
+        }
+
+        return "java";
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase().contains("win");
+    }
+
+    private boolean isMacLaunchAgentInstall(String workingDir) {
+        if (!System.getProperty("os.name").toLowerCase().contains("mac")) {
+            return false;
+        }
+
+        Path home = Paths.get(System.getProperty("user.home"), "Library", "LaunchAgents");
+        return Files.exists(home.resolve(MACOS_LAUNCH_AGENT_LABEL + ".plist"))
+            || Files.exists(home.resolve(LEGACY_MACOS_LAUNCH_AGENT_LABEL + ".plist"))
+            || Files.exists(Paths.get(workingDir, MACOS_LAUNCH_AGENT_LABEL + ".plist"))
+            || Files.exists(Paths.get(workingDir, LEGACY_MACOS_LAUNCH_AGENT_LABEL + ".plist"));
+    }
+
+    private String shellQuote(String value) {
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
     
     /**
@@ -260,7 +342,7 @@ class UpgradeExecutor {
         
         // 方法3: 检查常见的JAR文件名
         String[] commonNames = {"agent.jar", "lightscript-agent.jar", "app.jar"};
-        String currentDir = System.getProperty("user.dir");
+        String currentDir = AgentPaths.getAgentHome().toString();
         for (String name : commonNames) {
             if (Files.exists(Paths.get(currentDir, name))) {
                 logger.info("Found main JAR: {}", name);
@@ -276,26 +358,24 @@ class UpgradeExecutor {
     /**
      * 保存升级上下文信息
      */
-    private void saveUpgradeContext(String fromVersion, String toVersion, boolean forceUpgrade) {
+    private void saveUpgradeContext(String fromVersion, String toVersion, boolean forceUpgrade) throws IOException {
+        Map<String, Object> context = new HashMap<>();
+        context.put("fromVersion", fromVersion);
+        context.put("toVersion", toVersion);
+        context.put("forceUpgrade", forceUpgrade);
+        context.put("agentId", agentId);
+        context.put("agentToken", agentToken);
+        context.put("serverUrl", baseUrl);
+        context.put("upgradeLogId", statusReporter.getCurrentUpgradeLogId());
+        context.put("timestamp", System.currentTimeMillis());
+
+        Path contextFile = AgentPaths.getAgentHome().resolve(UPGRADE_CONTEXT_FILE);
         try {
-            Map<String, Object> context = new HashMap<>();
-            context.put("fromVersion", fromVersion);
-            context.put("toVersion", toVersion);
-            context.put("forceUpgrade", forceUpgrade);
-            context.put("agentId", agentId);
-            context.put("agentToken", agentToken);
-            context.put("serverUrl", baseUrl);
-            context.put("upgradeLogId", statusReporter.getCurrentUpgradeLogId());
-            context.put("timestamp", System.currentTimeMillis());
-            
-            // 保存为JSON文件
-            Path contextFile = Paths.get(".upgrade-context.json");
             String json = new ObjectMapper().writeValueAsString(context);
             Files.write(contextFile, json.getBytes(StandardCharsets.UTF_8));
-            
             logger.info("Upgrade context saved");
         } catch (Exception e) {
-            logger.error("Failed to save upgrade context: {}", e.getMessage());
+            throw new IOException("Failed to save upgrade context", e);
         }
     }
     
@@ -320,40 +400,6 @@ class UpgradeExecutor {
         }
     }
     
-    /**
-     * 临时禁用LaunchAgent自动重启，避免升级过程中的竞争条件
-     */
-    private void disableLaunchAgentAutoRestart() {
-        try {
-            // 检查用户级LaunchAgent
-            String userAgentPlist = System.getProperty("user.home") + "/Library/LaunchAgents/com.lightscript.agent.plist";
-            if (Files.exists(Paths.get(userAgentPlist))) {
-                logger.info("Unloading user-level LaunchAgent for upgrade");
-                ProcessBuilder pb = new ProcessBuilder("launchctl", "unload", userAgentPlist);
-                Process process = pb.start();
-                process.waitFor();
-                logger.info("User-level LaunchAgent unloaded");
-                return;
-            }
-            
-            // 检查系统级LaunchDaemon
-            String systemDaemonPlist = "/Library/LaunchDaemons/com.lightscript.agent.plist";
-            if (Files.exists(Paths.get(systemDaemonPlist))) {
-                logger.info("Unloading system-level LaunchDaemon for upgrade");
-                ProcessBuilder pb = new ProcessBuilder("sudo", "launchctl", "unload", systemDaemonPlist);
-                Process process = pb.start();
-                process.waitFor();
-                logger.info("System-level LaunchDaemon unloaded");
-                return;
-            }
-            
-            logger.info("No LaunchAgent/LaunchDaemon found, upgrade can proceed normally");
-            
-        } catch (Exception e) {
-            logger.warn("Failed to disable LaunchAgent auto-restart: {}", e.getMessage());
-            logger.warn("Upgrade may still work, but there might be race conditions");
-        }
-    }
     public static class VersionInfo {
         private String version;
         private String downloadUrl;
