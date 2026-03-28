@@ -9,11 +9,12 @@ set -e
 SERVER_IP="8.138.114.34"
 SERVER_USER="root"
 REMOTE_DIR="/opt/lightscript"
-AGENT_VERSION="0.4.0"
 DEPLOY_AGENT_PACKAGES=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VERSION_HELPER="$PROJECT_ROOT/agent/scripts/get-agent-version.sh"
+AGENT_VERSION="$(bash "$VERSION_HELPER")"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -120,9 +121,15 @@ rsync -az --delete --exclude='agent/' "$PROJECT_ROOT/portal/" ${SERVER_USER}@${S
 # 上传一键安装脚本（与当前 agent 发布包保持一致）
 echo "上传安装脚本..."
 ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p /var/www/html/scripts"
-scp "$PROJECT_ROOT/agent/scripts/unix/install-linux.sh" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh
-scp "$PROJECT_ROOT/agent/scripts/unix/install-macos.sh" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh
-scp "$PROJECT_ROOT/agent/scripts/windows/install-agent.bat" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-windows.bat
+ssh ${SERVER_USER}@${SERVER_IP} "find /var/www/html/scripts -maxdepth 1 -type f -name 'viberemote-agent-*-install-*' -delete"
+TMP_SCRIPT_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_SCRIPT_DIR"' EXIT
+sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/unix/install-linux.sh" > "$TMP_SCRIPT_DIR/install-linux.sh"
+sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/unix/install-macos.sh" > "$TMP_SCRIPT_DIR/install-macos.sh"
+sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/windows/install-agent.bat" > "$TMP_SCRIPT_DIR/install-agent.bat"
+scp "$TMP_SCRIPT_DIR/install-linux.sh" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh
+scp "$TMP_SCRIPT_DIR/install-macos.sh" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh
+scp "$TMP_SCRIPT_DIR/install-agent.bat" ${SERVER_USER}@${SERVER_IP}:/var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-windows.bat
 ssh ${SERVER_USER}@${SERVER_IP} "chmod +x /var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh /var/www/html/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh"
 
 # 修复 bat 文件换行符（rsync 会把 CRLF 覆盖为 LF，Windows cmd 要求 CRLF）

@@ -160,23 +160,6 @@
   z-index: 1055 !important;
 }
 
-/* 确保内容区域不被遮挡 */
-.ant-layout-content {
-  overflow: visible;
-}
-
-/* 强制确保页面可交互 */
-body {
-  pointer-events: auto !important;
-  overflow: auto !important;
-}
-
-/* 防止任何全屏遮罩 */
-body.ant-scrolling-effect {
-  overflow: auto !important;
-  pointer-events: auto !important;
-}
-
 /* 确保输入框始终可用 */
 input, textarea, select, button {
   pointer-events: auto !important;

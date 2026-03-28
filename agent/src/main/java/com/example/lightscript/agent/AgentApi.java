@@ -3,6 +3,7 @@ package com.example.lightscript.agent;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -422,6 +423,12 @@ class AgentApi {
 	
 	public void offline(String agentId, String agentToken) throws Exception {
 		HttpPost post = new HttpPost(baseUrl + "/api/agent/offline");
+		RequestConfig requestConfig = RequestConfig.custom()
+			.setConnectTimeout(3000)
+			.setConnectionRequestTimeout(3000)
+			.setSocketTimeout(3000)
+			.build();
+		post.setConfig(requestConfig);
 		List<NameValuePair> params = new ArrayList<>();
 		params.add(new BasicNameValuePair("agentId", agentId));
 		params.add(new BasicNameValuePair("agentToken", agentToken));
@@ -672,7 +679,7 @@ class AgentApi {
 	// 获取工作目录
 	private String getWorkingDirectory() {
 		try {
-			return System.getProperty("user.dir");
+			return AgentPaths.getAgentHome().toString();
 		} catch (Exception e) {
 			return null;
 		}
@@ -681,7 +688,7 @@ class AgentApi {
 	// 获取磁盘总空间(GB)
 	private Long getDiskSpaceGb() {
 		try {
-			java.io.File root = new java.io.File(System.getProperty("user.dir"));
+			java.io.File root = AgentPaths.getAgentHome().toFile();
 			long totalSpace = root.getTotalSpace();
 			return totalSpace / (1024 * 1024 * 1024); // 转换为GB
 		} catch (Exception e) {
@@ -692,7 +699,7 @@ class AgentApi {
 	// 获取磁盘可用空间(GB)
 	private Long getFreeSpaceGb() {
 		try {
-			java.io.File root = new java.io.File(System.getProperty("user.dir"));
+			java.io.File root = AgentPaths.getAgentHome().toFile();
 			long freeSpace = root.getFreeSpace();
 			return freeSpace / (1024 * 1024 * 1024); // 转换为GB
 		} catch (Exception e) {

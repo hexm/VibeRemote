@@ -22,13 +22,7 @@ else
     echo "  Skipping server notification (missing config)."
 fi
 
-# 先卸载 launchd 服务，防止 kill 后自动重启
-if [ -f "$PLIST" ]; then
-    echo "Unloading launchd service..."
-    launchctl unload "$PLIST" 2>/dev/null || true
-fi
-
-# 再 kill 残留进程
+# 直接停止进程，保留开机自启配置
 PIDS=$(ps aux | grep "java.*agent.jar" | grep -v grep | awk '{print $2}')
 if [ -n "$PIDS" ]; then
     for PID in $PIDS; do

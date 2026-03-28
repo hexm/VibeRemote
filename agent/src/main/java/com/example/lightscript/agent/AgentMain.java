@@ -38,8 +38,10 @@ public class AgentMain {
             System.exit(1);
         }
         
+        Path agentHome = AgentPaths.getAgentHome();
         System.out.println("Instance lock acquired");
         System.out.println("Working directory: " + System.getProperty("user.dir"));
+        System.out.println("Agent home: " + agentHome);
         
         // 加载配置
         AgentConfig config = AgentConfig.getInstance();
@@ -54,6 +56,7 @@ public class AgentMain {
         logger.info("Server: {}", server);
         logger.info("Register Token: {}", (registerToken.length() > 10 ? registerToken.substring(0, 10) + "..." : registerToken));
         logger.info("Working Directory: {}", System.getProperty("user.dir"));
+        logger.info("Agent Home: {}", agentHome);
         logger.info("Java Version: {}", System.getProperty("java.version"));
         logger.info("OS: {} {}", System.getProperty("os.name"), System.getProperty("os.version"));
         
@@ -63,7 +66,7 @@ public class AgentMain {
         }
 
         // 获取主机信息
-        String hostname = java.net.InetAddress.getLocalHost().getHostName();
+        String hostname = HostnameResolver.resolve();
         String osName = System.getProperty("os.name").toLowerCase();
         String osType;
         if (osName.contains("win")) {
@@ -239,6 +242,7 @@ public class AgentMain {
                 // 忽略关闭错误，避免在关闭过程中抛出异常
                 logger.warn("Warning: Error closing HTTP client: {}", e.getMessage());
             }
+            cleanupPidFile();
             releaseLock(); // 释放文件锁
             logger.info("✓ Agent shutdown complete");
             logger.info("========================================");
@@ -575,6 +579,11 @@ public class AgentMain {
             versionInfo.setFileHash((String) latestVersionMap.get("fileHash"));
             versionInfo.setForceUpgrade(Boolean.TRUE.equals(latestVersionMap.get("forceUpgrade")));
             versionInfo.setReleaseNotes((String) latestVersionMap.get("releaseNotes"));
+
+            if (versionInfo.getDownloadUrl() == null || versionInfo.getDownloadUrl().trim().isEmpty()) {
+                logger.error("[VersionCheck] Missing downloadUrl in server response for target version {}", versionInfo.getVersion());
+                return;
+            }
             
             // 根据强制升级标志决定升级策略
             if (versionInfo.isForceUpgrade()) {
@@ -647,7 +656,7 @@ public class AgentMain {
             
             // 写入当前进程信息（用于调试）
             lockChannel.truncate(0);
-            String workingDir = System.getProperty("user.dir");
+            String workingDir = AgentPaths.getAgentHome().toString();
             String lockInfo = String.format("PID: %s, Started: %s, WorkingDir: %s", 
                 ManagementFactory.getRuntimeMXBean().getName(),
                 LocalDateTime.now(),
@@ -683,4 +692,17 @@ public class AgentMain {
             logger.error("Failed to release lock: {}", e.getMessage());
         }
     }
+
+    private static void cleanupPidFile() {
+        try {
+            Path pidFile = AgentPaths.getPidFile();
+            if (Files.exists(pidFile)) {
+                Files.delete(pidFile);
+                logger.info("Removed PID file: {}", pidFile);
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to remove PID file: {}", e.getMessage());
+        }
+    }
+
 }

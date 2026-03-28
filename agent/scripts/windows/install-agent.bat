@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "INSTALL_DIR=%USERPROFILE%\VibeRemote-Agent"
-set "VERSION=0.4.0"
+set "VERSION=__AGENT_VERSION__"
 set "BASE_DOWNLOAD_URL=http://8.138.114.34/agent/release"
 set "PACKAGE_ARCH=x64"
 set "DOWNLOAD_URL="
@@ -88,6 +88,13 @@ call :log "  Extraction complete. agent.jar verified."
 
 REM ---- 4. Start and verify ----
 call :log "[4/4] Starting agent..."
+call :log "  Enabling login autostart..."
+call "%INSTALL_DIR%\install-autostart.bat" --silent
+if !errorlevel! equ 0 (
+    call :log "  Autostart enabled."
+) else (
+    call :log "  [WARN] Failed to enable autostart."
+)
 call "%INSTALL_DIR%\start-agent.bat"
 call :log "  Waiting for agent to start..."
 timeout /t 5 /nobreak >nul

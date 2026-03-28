@@ -20,6 +20,15 @@ if "!RUNNING!"=="1" (
 
 echo.
 
+set STARTUP_SHORTCUT=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VibeRemote Agent.lnk
+if exist "%STARTUP_SHORTCUT%" (
+    echo [Autostart] Enabled (Startup folder)
+) else (
+    echo [Autostart] Disabled
+)
+
+echo.
+
 set LOG_FILE=%~dp0logs\agent.log
 if exist "%LOG_FILE%" (
     echo [Last 10 log lines]

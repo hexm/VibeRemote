@@ -5,6 +5,7 @@ import com.example.lightscript.server.repository.AgentVersionRepository;
 import com.example.lightscript.server.model.FileModels.FileDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,9 @@ public class AgentVersionService {
     
     private final AgentVersionRepository versionRepository;
     private final FileService fileService;
+
+    @Value("${lightscript.agent.public-base-url:http://localhost:8080}")
+    private String agentPublicBaseUrl;
     
     /**
      * 获取最新版本（基于版本号自动判断）
@@ -127,7 +131,7 @@ public class AgentVersionService {
             agentVersion.setOriginalFilename(fileInfo.getOriginalName());
             agentVersion.setFileSize(fileInfo.getFileSize());
             agentVersion.setFileHash(fileInfo.getSha256());
-            agentVersion.setDownloadUrl("http://localhost:8080/api/web/files/" + fileId + "/download-for-agent");
+            agentVersion.setDownloadUrl(buildAgentDownloadUrl(fileId));
             agentVersion.setReleaseNotes(releaseNotes);
             agentVersion.setPlatform("ALL"); // 默认支持所有平台
             agentVersion.setForceUpgrade(false); // 默认非强制升级
@@ -185,6 +189,14 @@ public class AgentVersionService {
         // 这里需要调用FileService获取文件信息
         // 为了避免循环依赖，我们通过Repository直接查询
         return fileService.getFileById(fileId);
+    }
+
+    private String buildAgentDownloadUrl(String fileId) {
+        String baseUrl = agentPublicBaseUrl != null ? agentPublicBaseUrl.trim() : "";
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        return baseUrl + "/api/web/files/" + fileId + "/download-for-agent";
     }
     
     /**

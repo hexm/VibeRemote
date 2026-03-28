@@ -6,8 +6,6 @@ import zhCN from 'antd/locale/zh_CN'
 import App from './App.jsx'
 import './index.css'
 import './utils/axios' // 导入axios配置
-
-// 安全的Ant Design主题配置
 const theme = {
   token: {
     colorPrimary: '#3b82f6',
@@ -33,34 +31,6 @@ const theme = {
     }
   }
 }
-
-// 添加全局防护措施
-document.addEventListener('DOMContentLoaded', function() {
-  // 确保body始终可交互
-  document.body.style.pointerEvents = 'auto'
-  document.body.style.overflow = 'auto'
-  
-  // 移除可能的Ant Design遮罩类
-  document.body.classList.remove('ant-scrolling-effect')
-  
-  // 定期清理可能的遮罩元素
-  setInterval(() => {
-    // 只清理没有父容器的孤立遮罩
-    const masks = document.querySelectorAll('.ant-modal-mask, .ant-drawer-mask')
-    masks.forEach(mask => {
-      if (!mask.closest('.ant-modal-wrap, .ant-drawer-wrap')) {
-        console.log('清理孤立遮罩元素:', mask)
-        mask.remove()
-      }
-    })
-    
-    // 确保body状态正常
-    if (document.body.style.overflow === 'hidden' && !document.querySelector('.ant-modal-wrap, .ant-drawer-wrap')) {
-      document.body.style.overflow = 'auto'
-      document.body.style.pointerEvents = 'auto'
-    }
-  }, 2000)
-})
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

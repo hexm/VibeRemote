@@ -1,10 +1,16 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 JRE_HOME="$SCRIPT_DIR/jre"
 JAVA_EXE="$JRE_HOME/bin/java"
 PID_FILE="$SCRIPT_DIR/agent.pid"
 LOG_FILE="$SCRIPT_DIR/logs/agent.log"
+AGENT_JAR="$SCRIPT_DIR/agent.jar"
+JAVA_AGENT_PROPS=(
+    "-Dagent.home=$SCRIPT_DIR"
+    "-Dlog.home=$SCRIPT_DIR/logs"
+)
 
 mkdir -p "$SCRIPT_DIR/logs"
 
@@ -13,10 +19,11 @@ echo "Dir: $SCRIPT_DIR"
 
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
-    if ps -p $PID > /dev/null 2>&1; then
+    if [ -n "$PID" ] && ps -p "$PID" -o command= 2>/dev/null | grep -F "$AGENT_JAR" > /dev/null 2>&1; then
         echo "Agent already running (PID: $PID). Run ./stop-agent.sh first."
         exit 1
     else
+        echo "Removing stale PID file: $PID_FILE"
         rm -f "$PID_FILE"
     fi
 fi
@@ -35,14 +42,25 @@ fi
 echo "Java: $JAVA_CMD"
 echo "Log: $LOG_FILE"
 
-if [ -n "$LAUNCHED_BY_LAUNCHD" ] || [ "$1" = "--launchd" ]; then
+if [ "$1" = "--detach" ]; then
+    # 这里统一使用 nohup，避免 setsid 在部分 macOS 环境下触发额外的不稳定行为。
+    nohup "$JAVA_CMD" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m \
+        -Dfile.encoding=UTF-8 \
+        "${JAVA_AGENT_PROPS[@]}" \
+        -jar "$AGENT_JAR" > /dev/null 2>&1 < /dev/null &
+    AGENT_PID=$!
+    echo $AGENT_PID > "$PID_FILE"
+    echo "Detached agent started (PID: $AGENT_PID)"
+elif [ -n "$LAUNCHED_BY_LAUNCHD" ] || [ "$1" = "--launchd" ]; then
     exec "$JAVA_CMD" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m \
         -Dfile.encoding=UTF-8 \
-        -jar "$SCRIPT_DIR/agent.jar"
+        "${JAVA_AGENT_PROPS[@]}" \
+        -jar "$AGENT_JAR"
 else
     nohup "$JAVA_CMD" -Xms32m -Xmx128m -XX:MaxMetaspaceSize=64m \
         -Dfile.encoding=UTF-8 \
-        -jar "$SCRIPT_DIR/agent.jar" > /dev/null 2>&1 &
+        "${JAVA_AGENT_PROPS[@]}" \
+        -jar "$AGENT_JAR" > /dev/null 2>&1 &
     AGENT_PID=$!
     echo $AGENT_PID > "$PID_FILE"
     sleep 2

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Layout, App as AntApp } from 'antd'
 import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
@@ -15,10 +15,12 @@ import AgentVersions from './pages/AgentVersions'
 import Login from './pages/Login'
 import { authService } from './services/auth'
 import { getSessionKey } from './utils/crypto'
+import { cleanupOverlayArtifacts } from './utils/overlayCleanup'
 
 const { Content } = Layout
 
 function App() {
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -62,6 +64,14 @@ function App() {
     }
   }, [message])
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      cleanupOverlayArtifacts()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [location.pathname, isAuthenticated])
+
   const checkAuth = async () => {
     try {
       const token = localStorage.getItem('token')
@@ -98,35 +108,19 @@ function App() {
       setUserInfo(response.user)
       setIsAuthenticated(true)
       
-      // 延迟显示成功消息，避免立即触发可能的遮罩问题
-      setTimeout(() => {
+      window.setTimeout(() => {
         message.success('登录成功')
       }, 100)
-      
-      // 确保没有任何遮罩残留
-      document.body.style.overflow = 'auto'
-      document.body.style.pointerEvents = 'auto'
-      document.body.classList.remove('ant-scrolling-effect')
-      
-      // 强制移除所有可能的遮罩
-      setTimeout(() => {
-        const masks = document.querySelectorAll('.ant-modal-mask, .ant-drawer-mask, .ant-message')
-        masks.forEach(mask => {
-          if (!mask.closest('.ant-modal-wrap, .ant-drawer-wrap')) {
-            mask.remove()
-          }
-        })
-      }, 500)
+
+      window.setTimeout(() => {
+        cleanupOverlayArtifacts({ force: true })
+      }, 150)
       
       return true
     } catch (error) {
       console.error('Login error:', error)
       message.error(error.message || '登录失败')
-      
-      // 清理可能的遮罩状态
-      document.body.style.overflow = 'auto'
-      document.body.style.pointerEvents = 'auto'
-      document.body.classList.remove('ant-scrolling-effect')
+      cleanupOverlayArtifacts({ force: true })
       
       return false
     }
@@ -137,11 +131,7 @@ function App() {
     localStorage.removeItem('user') // Also remove 'user' key
     setIsAuthenticated(false)
     setUserInfo(null)
-    
-    // 清理可能的遮罩状态
-    document.body.style.overflow = 'auto'
-    document.body.style.pointerEvents = 'auto'
-    document.body.classList.remove('ant-scrolling-effect')
+    cleanupOverlayArtifacts({ force: true })
     
     message.success('已退出登录')
   }

@@ -50,7 +50,6 @@ public class AgentConfig {
         // 设置默认值
         properties.setProperty("server.url", "http://localhost:8080");
         properties.setProperty("server.register.token", "dev-register-token");
-        properties.setProperty("agent.name", getHostname());
         properties.setProperty("agent.labels", "");
         properties.setProperty("heartbeat.interval", "30000");
         properties.setProperty("heartbeat.system.info.interval", "600000");
@@ -102,7 +101,6 @@ public class AgentConfig {
         String[][] envMappings = {
             {"LIGHTSCRIPT_SERVER_URL", "server.url"},
             {"LIGHTSCRIPT_REGISTER_TOKEN", "server.register.token"},
-            {"LIGHTSCRIPT_AGENT_NAME", "agent.name"},
             {"LIGHTSCRIPT_AGENT_LABELS", "agent.labels"},
             {"LIGHTSCRIPT_HEARTBEAT_INTERVAL", "heartbeat.interval"},
             {"LIGHTSCRIPT_LOG_LEVEL", "log.level"}
@@ -114,14 +112,6 @@ public class AgentConfig {
                 properties.setProperty(mapping[1], envValue.trim());
                 System.out.println("[Config] Applied environment override: " + mapping[1] + " = " + envValue);
             }
-        }
-    }
-    
-    private String getHostname() {
-        try {
-            return java.net.InetAddress.getLocalHost().getHostName();
-        } catch (Exception e) {
-            return "unknown-host";
         }
     }
     
@@ -137,10 +127,6 @@ public class AgentConfig {
             return token.trim();
         }
         return properties.getProperty("server.register.token");
-    }
-    
-    public String getAgentName() {
-        return properties.getProperty("agent.name");
     }
     
     public String getAgentLabels() {

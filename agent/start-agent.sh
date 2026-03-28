@@ -4,6 +4,11 @@
 # 脚本目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+PID_FILE="$SCRIPT_DIR/agent.pid"
+JAVA_AGENT_PROPS=(
+    "-Dagent.home=$SCRIPT_DIR"
+    "-Dlog.home=$SCRIPT_DIR/logs"
+)
 
 # 配置Java环境
 if [ -n "$JAVA_HOME" ]; then
@@ -31,10 +36,15 @@ fi
 mkdir -p logs
 
 # 检查是否已有Agent在运行
-if [ -f ~/.lightscript/.agent.lock ]; then
-    echo "WARNING: Another Agent instance may be running (lock file exists)"
-    echo "If you're sure no other Agent is running, delete ~/.lightscript/.agent.lock and try again"
-    exit 1
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if [ -n "$PID" ] && ps -p "$PID" -o command= 2>/dev/null | grep -F "$SCRIPT_DIR/$AGENT_JAR" > /dev/null 2>&1; then
+        echo "Agent already running (PID: $PID)"
+        exit 1
+    else
+        echo "Removing stale PID file: $PID_FILE"
+        rm -f "$PID_FILE"
+    fi
 fi
 
 # 启动Agent（后台运行）
@@ -44,8 +54,9 @@ echo "JVM Options: $JVM_OPTS"
 echo "Working Directory: $SCRIPT_DIR"
 echo "Logs Directory: $SCRIPT_DIR/logs"
 
-nohup "$JAVA_CMD" $JVM_OPTS -jar "$AGENT_JAR" > logs/agent-startup.log 2>&1 &
+nohup "$JAVA_CMD" $JVM_OPTS "${JAVA_AGENT_PROPS[@]}" -jar "$AGENT_JAR" > logs/agent-startup.log 2>&1 &
 AGENT_PID=$!
+echo $AGENT_PID > "$PID_FILE"
 
 # 等待几秒检查启动状态
 sleep 3
@@ -60,5 +71,6 @@ if kill -0 $AGENT_PID 2>/dev/null; then
 else
     echo "❌ Agent failed to start"
     echo "Check startup log: cat logs/agent-startup.log"
+    rm -f "$PID_FILE"
     exit 1
 fi

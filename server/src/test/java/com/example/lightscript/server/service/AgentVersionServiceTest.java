@@ -1,15 +1,12 @@
 package com.example.lightscript.server.service;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
-@ActiveProfiles("test")
 public class AgentVersionServiceTest {
 
     @Test
@@ -61,7 +58,7 @@ public class AgentVersionServiceTest {
         // 测试无效格式
         assertNull(parseVersionFromFilename.invoke(service, "invalid-filename.jar"));
         assertNull(parseVersionFromFilename.invoke(service, "agent-abc.jar"));
-        assertNull(parseVersionFromFilename.invoke(service, null));
+        assertNull(parseVersionFromFilename.invoke(service, (Object) null));
     }
     
     @Test
@@ -77,5 +74,22 @@ public class AgentVersionServiceTest {
             assertTrue((Integer) compareVersions.invoke(service, versions[i + 1], versions[i]) > 0,
                 String.format("%s should be greater than %s", versions[i + 1], versions[i]));
         }
+    }
+
+    @Test
+    public void testBuildAgentDownloadUrlUsesConfiguredPublicBaseUrl() throws Exception {
+        AgentVersionService service = new AgentVersionService(null, null);
+
+        Field publicBaseUrlField = AgentVersionService.class.getDeclaredField("agentPublicBaseUrl");
+        publicBaseUrlField.setAccessible(true);
+        publicBaseUrlField.set(service, "http://8.138.114.34:8080/");
+
+        Method buildAgentDownloadUrl = AgentVersionService.class.getDeclaredMethod("buildAgentDownloadUrl", String.class);
+        buildAgentDownloadUrl.setAccessible(true);
+
+        assertEquals(
+            "http://8.138.114.34:8080/api/web/files/F123/download-for-agent",
+            buildAgentDownloadUrl.invoke(service, "F123")
+        );
     }
 }

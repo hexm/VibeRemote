@@ -11,7 +11,7 @@ INSTALL_DIR="/opt/viberemote-agent"
 SERVICE_NAME="viberemote-agent"
 MANUAL_MODE=""
 REGISTER_TOKEN="917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83"
-VERSION="0.4.0"
+VERSION="__AGENT_VERSION__"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -252,7 +252,6 @@ server.url=$SERVER_URL
 server.register.token=$REGISTER_TOKEN
 
 # Agent配置
-agent.name=$(hostname)
 agent.labels=os=linux,arch=$(uname -m),auto-installed=true
 
 # 日志配置
@@ -291,13 +290,13 @@ After=network.target
 Wants=network.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/java -jar $INSTALL_DIR/agent.jar
-ExecStop=/bin/kill -TERM \$MAINPID
-Restart=always
-RestartSec=10
+ExecStart=$INSTALL_DIR/start-agent.sh --detach
+ExecStop=$INSTALL_DIR/stop-agent.sh
+RemainAfterExit=yes
+Restart=no
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=viberemote-agent

@@ -11,7 +11,7 @@ INSTALL_DIR="$HOME/.viberemote-agent"
 SERVICE_NAME="com.viberemote.agent"
 MANUAL_MODE=""
 REGISTER_TOKEN="917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83"
-VERSION="0.4.0"
+VERSION="__AGENT_VERSION__"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -92,7 +92,6 @@ echo -e "${GREEN}✅ 解压完成${NC}"
 cat > "$INSTALL_DIR/agent.properties" << EOF
 server.url=$SERVER_URL
 register.token=$REGISTER_TOKEN
-agent.name=$(hostname)
 agent.labels=os=macos,arch=$ARCH
 log.level=INFO
 encryption.enabled=true
@@ -120,8 +119,6 @@ cat > "$PLIST" << EOF
     <string>${INSTALL_DIR}</string>
     <key>RunAtLoad</key>
     <true/>
-    <key>KeepAlive</key>
-    <true/>
     <key>StandardOutPath</key>
     <string>${INSTALL_DIR}/logs/agent-stdout.log</string>
     <key>StandardErrorPath</key>
@@ -130,8 +127,6 @@ cat > "$PLIST" << EOF
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin</string>
-        <key>LAUNCHED_BY_LAUNCHD</key>
-        <string>1</string>
     </dict>
 </dict>
 </plist>

@@ -389,25 +389,13 @@
                             <p class="text-gray-600 mb-4">复制并运行以下命令，自动下载并安装 VibeRemote 客户端：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('linux-install-cmd')">复制</button>
-                                <pre id="linux-install-cmd">curl -fsSL http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-linux.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                                <pre id="linux-install-cmd"></pre>
                             </div>
                             
                             <h4 class="font-semibold mb-2 mt-4">手动安装步骤</h4>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('linux-manual')">复制</button>
-                                <pre id="linux-manual"># 下载客户端
-wget http://8.138.114.34/agent/release/viberemote-agent-0.4.0-linux-x64.tar.gz
-tar -xzf viberemote-agent-0.4.0-linux-x64.tar.gz
-cd viberemote-agent
-
-# 配置服务器地址
-echo "server.url=http://8.138.114.34:8080" > agent.properties
-
-# 启动
-./start-agent.sh
-
-# 设置开机自启（systemd）
-sudo systemctl enable viberemote-agent</pre>
+                                <pre id="linux-manual"></pre>
                             </div>
                         </div>
                     </div>
@@ -422,7 +410,7 @@ sudo systemctl enable viberemote-agent</pre>
                                 <p class="text-blue-700 text-sm mb-3">安装到用户目录，无需sudo权限，仅当前用户可用</p>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyToClipboard('macos-user-install')">复制</button>
-                                    <pre id="macos-user-install">curl -fsSL http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-macos.sh | bash -s -- --server=http://8.138.114.34:8080</pre>
+                                    <pre id="macos-user-install"></pre>
                                 </div>
                                 <div class="text-xs text-blue-600 mt-2">
                                     ✓ 安装到: ~/.viberemote-agent<br>
@@ -445,8 +433,7 @@ sudo systemctl enable viberemote-agent</pre>
                             <p class="text-gray-600 mb-4">在命令提示符（cmd）中运行以下两条命令：</p>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-bat-install')">复制</button>
-                                <pre id="windows-bat-install">curl -o viberemote-install.bat http://8.138.114.34/scripts/viberemote-agent-0.4.0-install-windows.bat
-viberemote-install.bat</pre>
+                                <pre id="windows-bat-install"></pre>
                             </div>
                             <div class="text-xs text-blue-600 mt-2">
                                 ✓ 安装到: %USERPROFILE%\VibeRemote-Agent<br>
@@ -457,10 +444,7 @@ viberemote-install.bat</pre>
                             <h4 class="font-semibold mb-2 mt-6">手动安装步骤</h4>
                             <div class="code-block">
                                 <button class="copy-btn" onclick="copyToClipboard('windows-manual')">复制</button>
-                                <pre id="windows-manual">curl -o viberemote-agent.zip http://8.138.114.34/agent/release/viberemote-agent-0.4.0-windows-x64.zip
-powershell -Command "Expand-Archive -Path viberemote-agent.zip -DestinationPath '%USERPROFILE%\VibeRemote-Agent' -Force"
-cd /d "%USERPROFILE%\VibeRemote-Agent"
-start-agent.bat</pre>
+                                <pre id="windows-manual"></pre>
                             </div>
                         </div>
                     </div>
@@ -489,7 +473,7 @@ start-agent.bat</pre>
                                 <div class="bg-gray-50 p-4 rounded-lg mb-4">
                                     <div class="grid grid-cols-2 gap-4 text-sm">
                                         <div>
-                                            <strong>版本:</strong> v0.4.0
+                                            <strong>版本:</strong> <span id="release-version">加载中...</span>
                                         </div>
                                         <div>
                                             <strong>大小:</strong> ~45MB
@@ -498,7 +482,7 @@ start-agent.bat</pre>
                                             <strong>包含:</strong> 完整 JRE 8
                                         </div>
                                         <div>
-                                            <strong>发布:</strong> 2026-03-14
+                                            <strong>发布:</strong> <span id="release-date">加载中...</span>
                                         </div>
                                     </div>
                                 </div>
@@ -815,25 +799,25 @@ start-agent.bat</pre>
                 'windows-x64': {
                     name: 'Windows x64',
                     emoji: '🪟',
-                    filename: 'viberemote-agent-0.4.0-windows-x64.zip',
+                    filename: agentRelease.packages['windows-x64'],
                     color: 'linear-gradient(135deg, #0078d4, #106ebe)'
                 },
                 'linux-x64': {
                     name: 'Linux x64', 
                     emoji: '🐧',
-                    filename: 'viberemote-agent-0.4.0-linux-x64.tar.gz',
+                    filename: agentRelease.packages['linux-x64'],
                     color: 'linear-gradient(135deg, #fcc624, #f57c00)'
                 },
                 'macos-x64': {
                     name: 'macOS Intel',
                     emoji: '🍎', 
-                    filename: 'viberemote-agent-0.4.0-macos-x64.tar.gz',
+                    filename: agentRelease.packages['macos-x64'],
                     color: 'linear-gradient(135deg, #007aff, #5856d6)'
                 },
                 'macos-arm64': {
                     name: 'macOS Apple Silicon',
                     emoji: '🍎',
-                    filename: 'viberemote-agent-0.4.0-macos-arm64.tar.gz', 
+                    filename: agentRelease.packages['macos-arm64'], 
                     color: 'linear-gradient(135deg, #007aff, #5856d6)'
                 }
             };
@@ -876,9 +860,70 @@ start-agent.bat</pre>
             clearTimeout(toast._timer);
             toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
         }
+
+        const SERVER_HOST = window.location.origin;
+        let agentRelease = {
+            version: '0.4.3',
+            releaseDate: '2026-03-26',
+            packages: {
+                'windows-x64': 'viberemote-agent-0.4.3-windows-x64.zip',
+                'windows-x86': 'viberemote-agent-0.4.3-windows-x86.zip',
+                'linux-x64': 'viberemote-agent-0.4.3-linux-x64.tar.gz',
+                'macos-x64': 'viberemote-agent-0.4.3-macos-x64.tar.gz',
+                'macos-arm64': 'viberemote-agent-0.4.3-macos-arm64.tar.gz'
+            }
+        };
+
+        function renderInstallCommands() {
+            const version = agentRelease.version;
+            const packages = agentRelease.packages;
+
+            document.getElementById('linux-install-cmd').textContent =
+                `curl -fsSL ${SERVER_HOST}/scripts/viberemote-agent-${version}-install-linux.sh | bash -s -- --server=${SERVER_HOST}:8080`;
+            document.getElementById('linux-manual').textContent =
+`# 下载客户端
+wget ${SERVER_HOST}/agent/release/${packages['linux-x64']}
+tar -xzf ${packages['linux-x64']}
+cd viberemote-agent
+
+# 配置服务器地址
+echo "server.url=${SERVER_HOST}:8080" > agent.properties
+
+# 启动
+./start-agent.sh
+
+# 设置开机自启（systemd）
+sudo systemctl enable viberemote-agent`;
+            document.getElementById('macos-user-install').textContent =
+                `curl -fsSL ${SERVER_HOST}/scripts/viberemote-agent-${version}-install-macos.sh | bash -s -- --server=${SERVER_HOST}:8080`;
+            document.getElementById('windows-bat-install').textContent =
+`curl -o viberemote-install.bat ${SERVER_HOST}/scripts/viberemote-agent-${version}-install-windows.bat
+viberemote-install.bat`;
+            document.getElementById('windows-manual').textContent =
+`curl -o viberemote-agent.zip ${SERVER_HOST}/agent/release/${packages['windows-x64']}
+powershell -Command "Expand-Archive -Path viberemote-agent.zip -DestinationPath '%USERPROFILE%\\VibeRemote-Agent' -Force"
+cd /d "%USERPROFILE%\\VibeRemote-Agent"
+start-agent.bat`;
+            document.getElementById('release-version').textContent = `v${version}`;
+            document.getElementById('release-date').textContent = agentRelease.releaseDate;
+        }
+
+        async function loadAgentRelease() {
+            try {
+                const response = await fetch('/agent/release/version.json', { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                agentRelease = await response.json();
+            } catch (error) {
+                console.warn('Failed to load latest agent release metadata, using fallback.', error);
+            }
+            renderInstallCommands();
+        }
         
         // 页面加载时设置推荐下载
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadAgentRelease();
             const osType = detectOS();
             const osInfo = getOSInfo(osType);
             

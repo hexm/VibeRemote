@@ -10,7 +10,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SERVER_IP="8.138.114.34"
 SERVER_USER="root"
 REMOTE_RELEASES_DIR="/var/www/html/agent/release"
-AGENT_VERSION="0.4.0"
+REMOTE_SCRIPTS_DIR="/var/www/html/scripts"
+VERSION_HELPER="$PROJECT_ROOT/agent/scripts/get-agent-version.sh"
+AGENT_VERSION="$(bash "$VERSION_HELPER")"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -90,33 +92,40 @@ if [ ! -d "$RELEASE_DIR" ]; then
     exit 1
 fi
 
+MANIFEST_FILE="$RELEASE_DIR/version.json"
+if [ ! -f "$MANIFEST_FILE" ]; then
+    echo -e "${RED}❌ 版本清单不存在: $MANIFEST_FILE${NC}"
+    echo -e "${YELLOW}请先运行构建脚本生成安装包和版本清单${NC}"
+    exit 1
+fi
+
 # 根据平台选择要上传的安装包
 ALL_PACKAGES=(
-    "viberemote-agent-0.4.0-windows-x64.zip"
-    "viberemote-agent-0.4.0-windows-x86.zip"
-    "viberemote-agent-0.4.0-linux-x64.tar.gz"
-    "viberemote-agent-0.4.0-macos-x64.tar.gz"
-    "viberemote-agent-0.4.0-macos-arm64.tar.gz"
+    "viberemote-agent-${AGENT_VERSION}-windows-x64.zip"
+    "viberemote-agent-${AGENT_VERSION}-windows-x86.zip"
+    "viberemote-agent-${AGENT_VERSION}-linux-x64.tar.gz"
+    "viberemote-agent-${AGENT_VERSION}-macos-x64.tar.gz"
+    "viberemote-agent-${AGENT_VERSION}-macos-arm64.tar.gz"
 )
 
 case "$PLATFORM" in
     "windows")
-        PACKAGES=("viberemote-agent-0.4.0-windows-x64.zip" "viberemote-agent-0.4.0-windows-x86.zip")
+        PACKAGES=("viberemote-agent-${AGENT_VERSION}-windows-x64.zip" "viberemote-agent-${AGENT_VERSION}-windows-x86.zip")
         ;;
     "windows-x64")
-        PACKAGES=("viberemote-agent-0.4.0-windows-x64.zip")
+        PACKAGES=("viberemote-agent-${AGENT_VERSION}-windows-x64.zip")
         ;;
     "windows-x86")
-        PACKAGES=("viberemote-agent-0.4.0-windows-x86.zip")
+        PACKAGES=("viberemote-agent-${AGENT_VERSION}-windows-x86.zip")
         ;;
     "linux")
-        PACKAGES=("viberemote-agent-0.4.0-linux-x64.tar.gz")
+        PACKAGES=("viberemote-agent-${AGENT_VERSION}-linux-x64.tar.gz")
         ;;
     "macos-x64")
-        PACKAGES=("viberemote-agent-0.4.0-macos-x64.tar.gz")
+        PACKAGES=("viberemote-agent-${AGENT_VERSION}-macos-x64.tar.gz")
         ;;
     "macos-arm64")
-        PACKAGES=("viberemote-agent-0.4.0-macos-arm64.tar.gz")
+        PACKAGES=("viberemote-agent-${AGENT_VERSION}-macos-arm64.tar.gz")
         ;;
     "all")
         PACKAGES=("${ALL_PACKAGES[@]}")
@@ -183,22 +192,14 @@ fi
 
 # 创建远程目录
 echo -e "${YELLOW}📁 创建远程目录...${NC}"
-ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p ${REMOTE_RELEASES_DIR}"
+ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p ${REMOTE_RELEASES_DIR} ${REMOTE_SCRIPTS_DIR}"
 
-# 备份现有安装包（如果存在）
-echo -e "${YELLOW}💾 备份现有安装包...${NC}"
+echo -e "${YELLOW}🧹 清理远程旧安装包...${NC}"
 ssh ${SERVER_USER}@${SERVER_IP} "
-    if [ -d ${REMOTE_RELEASES_DIR} ] && [ \"\$(ls -A ${REMOTE_RELEASES_DIR} 2>/dev/null)\" ]; then
-        backup_dir=\"${REMOTE_RELEASES_DIR}.backup.\$(date +%Y%m%d-%H%M%S)\"
-        echo \"备份到: \$backup_dir\"
-        cp -r ${REMOTE_RELEASES_DIR} \$backup_dir
-        
-        # 只保留最近3个备份
-        cd \$(dirname ${REMOTE_RELEASES_DIR})
-        ls -dt *.backup.* 2>/dev/null | tail -n +4 | xargs rm -rf 2>/dev/null || true
-    else
-        echo \"无现有安装包需要备份\"
-    fi
+    find ${REMOTE_RELEASES_DIR} -maxdepth 1 -type f \
+        \\( -name 'viberemote-agent-*.zip' -o -name 'viberemote-agent-*.tar.gz' \\) \
+        ! -name 'viberemote-agent-${AGENT_VERSION}-*' -delete
+    find ${REMOTE_SCRIPTS_DIR} -maxdepth 1 -type f -name 'viberemote-agent-*-install-*' -delete
 "
 
 # 上传安装包
@@ -228,6 +229,23 @@ for i in "${!PACKAGES[@]}"; do
     fi
 done
 
+echo -e "${BLUE}上传版本清单...${NC}"
+scp "$MANIFEST_FILE" "${SERVER_USER}@${SERVER_IP}:${REMOTE_RELEASES_DIR}/version.json"
+
+echo -e "${BLUE}上传安装脚本...${NC}"
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/unix/install-linux.sh" > "$TMP_DIR/install-linux.sh"
+sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/unix/install-macos.sh" > "$TMP_DIR/install-macos.sh"
+sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/windows/install-agent.bat" > "$TMP_DIR/install-agent.bat"
+
+scp "$TMP_DIR/install-linux.sh" "${SERVER_USER}@${SERVER_IP}:${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-linux.sh"
+scp "$TMP_DIR/install-macos.sh" "${SERVER_USER}@${SERVER_IP}:${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-macos.sh"
+scp "$TMP_DIR/install-agent.bat" "${SERVER_USER}@${SERVER_IP}:${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-windows.bat"
+ssh ${SERVER_USER}@${SERVER_IP} "chmod +x ${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-linux.sh ${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-macos.sh"
+ssh ${SERVER_USER}@${SERVER_IP} "sed -i 's/\r//' ${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-windows.bat && sed -i 's/\$/\r/' ${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-windows.bat"
+
 upload_end_time=$(date +%s)
 upload_duration=$((upload_end_time - upload_start_time))
 upload_speed=$((TOTAL_SIZE_MB / upload_duration))
@@ -240,7 +258,7 @@ echo ""
 echo -e "${YELLOW}🔍 验证上传结果...${NC}"
 ssh ${SERVER_USER}@${SERVER_IP} "
     echo '远程安装包列表:'
-    ls -lh ${REMOTE_RELEASES_DIR}/*.{zip,tar.gz} 2>/dev/null | while read line; do
+    ls -lh ${REMOTE_RELEASES_DIR}/*.{zip,tar.gz,json} 2>/dev/null | while read line; do
         echo \"  \$line\"
     done
     
@@ -272,7 +290,6 @@ done
 echo ""
 echo -e "${BLUE}管理命令：${NC}"
 echo -e "  查看远程文件: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'ls -la ${REMOTE_RELEASES_DIR}'${NC}"
-echo -e "  清理备份: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'rm -rf ${REMOTE_RELEASES_DIR}.backup.*'${NC}"
 echo ""
 echo -e "${BLUE}一键安装命令：${NC}"
 echo -e "  Linux:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh | sudo bash -s -- --server=http://${SERVER_IP}:8080${NC}"

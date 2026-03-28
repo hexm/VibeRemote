@@ -9,11 +9,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RELEASE_DIR="$SCRIPT_DIR/release"
 JRE_CACHE_DIR="$RELEASE_DIR/jre8"
+VERSION_HELPER="$SCRIPT_DIR/scripts/get-agent-version.sh"
 
-# 从 pom.xml 获取版本号
-VERSION=$(grep -A 1 "<parent>" "$SCRIPT_DIR/pom.xml" | grep "<version>" | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | head -1)
+# 从 pom.xml 获取 Agent 模块版本号
+VERSION=$(bash "$VERSION_HELPER")
 if [ -z "$VERSION" ]; then
-    VERSION="0.4.0"  # 默认版本
+    VERSION="0.4.3"  # 默认版本
 fi
 
 echo "🚀 开始构建 LightScript Agent 发布包..."
@@ -21,6 +22,14 @@ echo "📁 项目根目录: $PROJECT_ROOT"
 echo "📦 发布目录: $RELEASE_DIR"
 echo "🏷️  版本: $VERSION"
 echo ""
+
+build_upgrader() {
+    echo "🔧 构建最新 Upgrader..."
+    (cd "$PROJECT_ROOT/upgrader" && mvn -DskipTests package -q)
+    cp "$PROJECT_ROOT/upgrader/target/upgrader.jar" "$PROJECT_ROOT/upgrader/upgrader.jar"
+    echo "✅ Upgrader 构建完成"
+    echo ""
+}
 
 # 检查和准备JRE文件
 prepare_jre_files() {
@@ -76,6 +85,7 @@ prepare_jre_files() {
 }
 
 prepare_jre_files
+build_upgrader
 
 # 清理发布目录（保留JRE文件）
 echo "🧹 清理旧的安装包..."
@@ -86,10 +96,31 @@ rm -f "$RELEASE_DIR"/lightscript-agent-*.zip
 mkdir -p "$RELEASE_DIR"
 mkdir -p "$JRE_CACHE_DIR"
 
+generate_release_manifest() {
+    local release_date
+    release_date=$(date '+%Y-%m-%d')
+    cat > "$RELEASE_DIR/version.json" <<EOF
+{
+  "version": "$VERSION",
+  "releaseDate": "$release_date",
+  "packages": {
+    "windows-x64": "viberemote-agent-$VERSION-windows-x64.zip",
+    "windows-x86": "viberemote-agent-$VERSION-windows-x86.zip",
+    "linux-x64": "viberemote-agent-$VERSION-linux-x64.tar.gz",
+    "macos-x64": "viberemote-agent-$VERSION-macos-x64.tar.gz",
+    "macos-arm64": "viberemote-agent-$VERSION-macos-arm64.tar.gz"
+  }
+}
+EOF
+    echo "📝 版本清单已生成: $RELEASE_DIR/version.json"
+}
+
+generate_release_manifest
+
 # 检查必要文件
 echo "🔍 检查必要文件..."
-AGENT_JAR="$SCRIPT_DIR/target/agent-0.4.0-jar-with-dependencies.jar"
-UPGRADER_JAR="$PROJECT_ROOT/upgrader/upgrader.jar"
+AGENT_JAR="$SCRIPT_DIR/target/agent-${VERSION}-jar-with-dependencies.jar"
+UPGRADER_JAR="$PROJECT_ROOT/upgrader/target/upgrader.jar"
 
 if [ ! -f "$AGENT_JAR" ]; then
     echo "❌ Agent JAR 文件不存在: $AGENT_JAR"
@@ -312,7 +343,6 @@ server.url=http://8.138.114.34:8080
 register.token=917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83
 
 # Agent配置
-agent.name=${hostname}
 agent.labels=
 
 # 心跳配置

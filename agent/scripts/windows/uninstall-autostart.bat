@@ -1,16 +1,19 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set REG_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-set REG_NAME=VibeRemoteAgent
+set STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
+set SHORTCUT_PATH=%STARTUP_DIR%\VibeRemote Agent.lnk
 
 echo Removing VibeRemote Agent autostart...
 
-reg delete "%REG_KEY%" /v "%REG_NAME%" /f >nul 2>&1
-if !errorlevel! equ 0 (
+if exist "%SHORTCUT_PATH%" (
+    del /f /q "%SHORTCUT_PATH%" >nul 2>&1
+)
+
+if not exist "%SHORTCUT_PATH%" (
     echo [OK] Autostart removed.
 ) else (
-    echo [INFO] Autostart was not set.
+    echo [INFO] Autostart shortcut was not set.
 )
 
 echo.
