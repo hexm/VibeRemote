@@ -42,9 +42,8 @@
     <section class="hero">
         <div class="container">
             <div class="hero-content">
-                <h1 class="hero-title">
-                    现代化的<span class="highlight">分布式脚本</span><br>
-                    执行平台
+                <h1 class="hero-title hero-title-single-line">
+                    <span>分布式</span><span class="highlight">远程设备管理平台</span>
                 </h1>
                 
                 <!-- 开源项目统计徽章 -->
@@ -64,8 +63,8 @@
                 </div>
                 
                 <p class="hero-subtitle">
-                    VibeRemote 提供强大的多节点管理、智能任务调度和实时监控功能，
-                    让您的脚本执行更加高效、可靠和可视化。
+                    VibeRemote 提供多端 Agent 接入、后台常驻运行、脚本远程执行、
+                    自动升级与实时监控能力，让分散设备的托管和运维更轻量。
                 </p>
                 <div class="hero-actions">
                     <a href="http://8.138.114.34:3000/dashboard" class="btn btn-primary btn-large">
@@ -128,7 +127,7 @@
             <div class="section-header">
                 <h2 class="section-title">为什么选择 VibeRemote？</h2>
                 <p class="section-subtitle">
-                    专为现代化运维和开发团队设计的脚本执行平台
+                    专为分布式设备托管、远程执行与持续运维设计的平台
                 </p>
             </div>
             <div class="features-grid">
@@ -139,9 +138,9 @@
                             <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
                         </svg>
                     </div>
-                    <h3 class="feature-title">分布式执行</h3>
+                    <h3 class="feature-title">多端 Agent 管理</h3>
                     <p class="feature-description">
-                        支持多节点并行执行，自动负载均衡，提升执行效率
+                        支持 Windows、macOS、Linux 设备统一接入与分组管理
                     </p>
                 </div>
                 <div class="feature-card">
@@ -152,9 +151,9 @@
                             <path d="M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                         </svg>
                     </div>
-                    <h3 class="feature-title">实时监控</h3>
+                    <h3 class="feature-title">后台常驻运行</h3>
                     <p class="feature-description">
-                        可视化监控面板，实时查看执行状态、日志和性能指标
+                        Agent 以系统后台方式运行，支持开机自启，减少人工值守
                     </p>
                 </div>
                 <div class="feature-card">
@@ -163,9 +162,9 @@
                             <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
                         </svg>
                     </div>
-                    <h3 class="feature-title">智能调度</h3>
+                    <h3 class="feature-title">自动升级</h3>
                     <p class="feature-description">
-                        基于资源使用情况和优先级的智能任务调度算法
+                        服务端发布新版本后，在线 Agent 可自动完成下载、切换与状态回报
                     </p>
                 </div>
                 <div class="feature-card">
@@ -178,9 +177,9 @@
                             <path d="M8 12H5"/>
                         </svg>
                     </div>
-                    <h3 class="feature-title">多语言支持</h3>
+                    <h3 class="feature-title">实时任务执行</h3>
                     <p class="feature-description">
-                        支持 Shell、Python、PowerShell 等多种脚本语言
+                        远程下发脚本任务，实时查看输出日志、执行状态和结果
                     </p>
                 </div>
                 <div class="feature-card">
@@ -191,9 +190,9 @@
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                     </div>
-                    <h3 class="feature-title">安全可靠</h3>
+                    <h3 class="feature-title">屏幕截图监控</h3>
                     <p class="feature-description">
-                        完善的权限管理、审计日志和安全执行环境
+                        支持 Windows / macOS 可选截图监控，便于远程观察设备状态
                     </p>
                 </div>
                 <div class="feature-card">
@@ -204,9 +203,9 @@
                             <line x1="12" y1="22.08" x2="12" y2="12"/>
                         </svg>
                     </div>
-                    <h3 class="feature-title">易于部署</h3>
+                    <h3 class="feature-title">加密传输</h3>
                     <p class="feature-description">
-                        简单的安装配置，支持 Docker 容器化部署
+                        脚本与日志传输支持加密，降低敏感内容裸传风险
                     </p>
                 </div>
             </div>
@@ -254,28 +253,28 @@
                 <div class="quick-start-text">
                     <h2 class="section-title">快速开始</h2>
                     <p class="section-subtitle">
-                        几分钟内即可部署并运行 VibeRemote
+                        几分钟内即可安装 Agent、接入管理后台并开始托管
                     </p>
                     <div class="steps">
                         <div class="step">
                             <div class="step-number">1</div>
                             <div class="step-content">
-                                <h4>下载安装包</h4>
-                                <p>选择适合您系统的安装包</p>
+                                <h4>首次安装</h4>
+                                <p>选择适合您系统的安装包或一键安装脚本</p>
                             </div>
                         </div>
                         <div class="step">
                             <div class="step-number">2</div>
                             <div class="step-content">
-                                <h4>配置节点</h4>
-                                <p>添加执行节点并配置连接</p>
+                                <h4>接入平台</h4>
+                                <p>Agent 后台启动并自动连接管理后台</p>
                             </div>
                         </div>
                         <div class="step">
                             <div class="step-number">3</div>
                             <div class="step-content">
-                                <h4>开始使用</h4>
-                                <p>创建并执行您的第一个脚本任务</p>
+                                <h4>持续托管</h4>
+                                <p>远程执行任务，并在后续版本发布时自动升级</p>
                             </div>
                         </div>
                     </div>
@@ -287,16 +286,13 @@
                             <button class="copy-btn" onclick="copyCode()">复制</button>
                         </div>
                         <div class="code-content">
-                            <pre><code># 下载并安装 VibeRemote
-wget https://github.com/hexm/VibeRemote/releases/latest/download/viberemote.tar.gz
-tar -xzf viberemote.tar.gz
-cd viberemote
+                            <pre><code># 首次安装 Agent（macOS 示例）
+curl -fsSL http://your-server/scripts/install-macos.sh | bash -s -- --server=http://your-server:8080
 
-# 启动服务
-./start-server.sh
-
-# 启动 Agent
-./start-agent.sh</code></pre>
+# 安装完成后
+# 1. Agent 以后台方式常驻运行
+# 2. 管理后台可看到在线状态
+# 3. 后续服务端发布新版本时可自动升级</code></pre>
                         </div>
                     </div>
                 </div>
@@ -314,7 +310,7 @@ cd viberemote
                         <span class="footer-brand-name">VibeRemote</span>
                     </div>
                     <p class="footer-description">
-                        现代化的分布式脚本执行平台，让自动化更简单。
+                        面向多端托管、远程执行与自动升级的轻量平台。
                     </p>
                 </div>
                 <div class="footer-section">

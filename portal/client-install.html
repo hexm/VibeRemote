@@ -369,6 +369,13 @@
                         <p class="text-gray-600">选择您的操作系统，复制并运行相应的安装命令</p>
                     </div>
 
+                    <div class="warning-box" style="max-width: 900px; margin-left: auto; margin-right: auto; margin-bottom: 2rem; background: #eff6ff; border-color: #bfdbfe;">
+                        <div class="warning-title" style="color: #1d4ed8;">为什么推荐脚本安装？</div>
+                        <div class="warning-text" style="color: #1e40af;">
+                            首次安装完成后，Agent 将以后台常驻方式运行，并支持后续自动升级。多数情况下，服务端发布新版本后无需人工重新安装客户端。
+                        </div>
+                    </div>
+
                     <!-- 操作系统选择 -->
                     <div class="os-tabs">
                         <div class="os-tab active" onclick="switchScriptTab('linux')" id="linux-tab">
@@ -407,7 +414,7 @@
                             
                             <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                                 <h4 class="font-semibold text-blue-800 mb-2">🏠 用户安装（推荐）</h4>
-                                <p class="text-blue-700 text-sm mb-3">安装到用户目录，无需sudo权限，仅当前用户可用</p>
+                                <p class="text-blue-700 text-sm mb-3">安装到当前用户目录，无需 sudo，不显示前台应用图标，由 LaunchAgent 在后台常驻并随登录自动启动</p>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyToClipboard('macos-user-install')">复制</button>
                                     <pre id="macos-user-install"></pre>
@@ -421,7 +428,7 @@
                             
                             <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
                                 <h4 class="font-semibold text-orange-800 mb-2">ℹ️ 说明</h4>
-                                <p class="text-orange-700 text-sm">安装到用户目录 <code>~/.viberemote-agent</code>，无需 sudo，开机自动启动。</p>
+                                <p class="text-orange-700 text-sm">安装到用户目录 <code>~/.viberemote-agent</code>，无需 sudo，开机自动启动。适用于希望纯后台运行的场景；如需屏幕截图能力，macOS 需额外授予“屏幕录制”权限。</p>
                             </div>
                         </div>
                     </div>
@@ -490,8 +497,9 @@
                                 <ul class="feature-list text-sm text-gray-600 mb-6">
                                     <li>包含完整的 Java 运行环境</li>
                                     <li>无需额外安装 JDK/JRE</li>
-                                    <li>开箱即用，一键启动</li>
-                                    <li>支持自动升级功能</li>
+                                    <li>安装后可后台常驻运行</li>
+                                    <li>支持后续自动升级</li>
+                                    <li>适合统一托管多台终端</li>
                                 </ul>
                                 
                                 <button class="download-btn" id="recommended-btn" onclick="downloadRecommended()">
@@ -601,6 +609,16 @@
                     <p class="text-gray-600">安装完成后，请验证客户端是否正常运行</p>
                 </div>
 
+                <div class="download-card max-w-4xl mx-auto" style="margin-bottom: 1.5rem;">
+                    <h4 class="font-semibold mb-3">安装后的托管流程</h4>
+                    <p class="text-gray-600">
+                        首次安装 -> Agent 上线 -> 服务端发布新版本 -> Agent 自动升级 -> 恢复在线
+                    </p>
+                    <p class="text-sm text-gray-600" style="margin-top: 0.75rem;">
+                        VibeRemote 的 Agent 不是一次性安装包思路，而是“先装上、后托管”。首次安装完成后，后续版本可由服务端统一下发，客户端自动完成升级。
+                    </p>
+                </div>
+
                 <div class="download-card max-w-4xl mx-auto">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
@@ -622,6 +640,9 @@
                                 1. 访问 <a href="http://8.138.114.34:3000/dashboard" class="text-blue-600 hover:underline">管理后台</a><br>
                                 2. 进入"客户端管理"页面<br>
                                 3. 查看新注册的客户端节点
+                            </p>
+                            <p class="text-sm text-gray-600">
+                                macOS 安装后不会出现常驻前台图标，请以管理后台在线状态或 <code>check-status.sh</code> 输出为准。
                             </p>
                         </div>
                     </div>

@@ -222,16 +222,16 @@
             </div>
             
             <h2>什么是 VibeRemote？</h2>
-            <p>VibeRemote 是一个现代化的分布式脚本执行平台，专为运维团队和开发者设计。它提供了强大的多节点管理、智能任务调度和实时监控功能，让您的脚本执行更加高效、可靠和可视化。</p>
+            <p>VibeRemote 是一个面向运维团队和开发者的远程脚本执行与 Agent 托管平台。它提供多端 Agent 管理、后台常驻运行、自动升级和实时监控能力，让分散设备的托管更加高效、可靠和可视化。</p>
             
             <h3>核心特性</h3>
             <ul>
-                <li><strong>分布式执行</strong>：支持多节点并行执行，自动负载均衡</li>
-                <li><strong>实时监控</strong>：可视化监控面板，实时查看执行状态和性能指标</li>
-                <li><strong>智能调度</strong>：基于资源使用情况的智能任务调度算法</li>
-                <li><strong>多语言支持</strong>：支持 Shell、Python、PowerShell 等多种脚本语言</li>
-                <li><strong>安全可靠</strong>：完善的权限管理、审计日志和安全执行环境</li>
-                <li><strong>易于部署</strong>：支持 Docker 容器化部署，简单快捷</li>
+                <li><strong>多端 Agent 管理</strong>：支持 Windows、macOS、Linux 统一接入</li>
+                <li><strong>后台常驻运行</strong>：支持系统后台托管与开机自启</li>
+                <li><strong>自动升级</strong>：服务端发布新版本后，在线 Agent 可自动完成升级</li>
+                <li><strong>实时任务执行</strong>：远程下发脚本任务并实时查看日志与状态</li>
+                <li><strong>屏幕截图监控</strong>：支持 Windows / macOS 可选截图监控</li>
+                <li><strong>加密传输</strong>：脚本与日志传输支持加密</li>
             </ul>
             
             <h3>架构概览</h3>
@@ -272,12 +272,21 @@ java -jar viberemote-server.jar</pre>
             </div>
             
             <h2>客户端安装</h2>
-            <h3>Linux/macOS</h3>
+            <h3>Linux</h3>
             <div class="code-block">
-                <button class="copy-btn" onclick="copyToClipboard('client-install-unix')">复制</button>
-                <pre id="client-install-unix"># 一键安装脚本
+                <button class="copy-btn" onclick="copyToClipboard('client-install-linux')">复制</button>
+                <pre id="client-install-linux"># 一键安装脚本
 curl -fsSL http://your-server/scripts/install-linux.sh | bash -s -- --server=http://your-server:8080</pre>
             </div>
+
+            <h3>macOS</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyToClipboard('client-install-macos')">复制</button>
+                <pre id="client-install-macos"># 一键安装脚本
+curl -fsSL http://your-server/scripts/install-macos.sh | bash -s -- --server=http://your-server:8080</pre>
+            </div>
+
+            <p>macOS 默认安装到 <code>~/.viberemote-agent</code>，由 LaunchAgent 托管后台运行，不显示前台应用图标。</p>
             
             <h3>Windows</h3>
             <div class="code-block">
@@ -344,6 +353,16 @@ echo "系统信息: $(uname -a)"</pre>
                 <li>添加客户端：将客户端加入到相应的分组</li>
                 <li>批量操作：对整个分组执行批量任务</li>
             </ul>
+
+            <h2>运行方式</h2>
+            <ul>
+                <li><strong>macOS</strong>：默认安装到 <code>~/.viberemote-agent</code>，由 LaunchAgent 托管后台运行</li>
+                <li><strong>Linux</strong>：可由 systemd 托管后台运行</li>
+                <li><strong>Windows</strong>：以后台方式运行，便于长期在线托管</li>
+            </ul>
+
+            <h2>自动升级</h2>
+            <p>当服务端存在更高版本且满足升级条件时，Agent 会自动执行升级流程，并将升级开始、结果和历史记录回报到服务端。这样可以减少逐台手工更新客户端的成本。</p>
             
             <h2>资源监控</h2>
             <p>实时监控客户端的资源使用情况：</p>
@@ -445,6 +464,9 @@ echo "备份路径: $BACKUP_PATH"</pre>
                 <li>系统资源使用情况</li>
                 <li>最近任务执行趋势</li>
             </ul>
+
+            <h2>屏幕截图监控</h2>
+            <p>屏幕截图监控为可选能力，当前支持 Windows / macOS。macOS 需要桌面会话和“屏幕录制”权限，未授权时可能出现黑屏截图。</p>
             
             <h2>性能监控</h2>
             <p>实时监控关键性能指标：</p>

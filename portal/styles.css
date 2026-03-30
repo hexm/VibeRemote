@@ -220,6 +220,12 @@ body {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+.hero-title-single-line {
+    white-space: nowrap;
+    font-size: clamp(1.5rem, 3.1vw, 2.5rem);
+    letter-spacing: -0.02em;
+}
+
 .highlight {
     background: linear-gradient(45deg, #00d4ff, #0099ff);
     -webkit-background-clip: text;
@@ -229,7 +235,7 @@ body {
 }
 
 .hero-subtitle {
-    font-size: 1.25rem;
+    font-size: 1.08rem;
     line-height: 1.6;
     margin-bottom: 2rem;
     opacity: 0.95;
@@ -644,6 +650,10 @@ body {
     .hero-title {
         font-size: 2.5rem;
     }
+
+    .hero-title-single-line {
+        font-size: clamp(1.25rem, 3.5vw, 2rem);
+    }
     
     .hero-actions {
         justify-content: center;
@@ -699,9 +709,14 @@ body {
     .hero-title {
         font-size: 2rem;
     }
+
+    .hero-title-single-line {
+        font-size: 1.35rem;
+        white-space: normal;
+    }
     
     .hero-subtitle {
-        font-size: 1rem;
+        font-size: 0.92rem;
     }
     
     .section-title {
