@@ -331,7 +331,7 @@
                 <a href="client-install.html" class="nav-link active">安装客户端</a>
                 <a href="server-deploy.html" class="nav-link">服务端部署</a>
                 <a href="docs.html" class="nav-link">文档</a>
-                <a href="http://8.138.114.34:3000/dashboard" class="nav-link">管理后台</a>
+                <a href="#" class="nav-link" data-dashboard-link>管理后台</a>
             </div>
         </div>
     </nav>
@@ -637,7 +637,7 @@
                         <div>
                             <h4 class="font-semibold mb-2">管理后台检查</h4>
                             <p class="text-gray-600 mb-4">
-                                1. 访问 <a href="http://8.138.114.34:3000/dashboard" class="text-blue-600 hover:underline">管理后台</a><br>
+                                1. 访问 <a href="#" class="text-blue-600 hover:underline" data-dashboard-link>管理后台</a><br>
                                 2. 进入"客户端管理"页面<br>
                                 3. 查看新注册的客户端节点
                             </p>
@@ -882,7 +882,9 @@
             toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
         }
 
-        const SERVER_HOST = window.location.origin;
+        const PORTAL_ORIGIN = window.location.origin;
+        const API_ORIGIN = `${window.location.protocol}//${window.location.hostname}:8080`;
+        const DASHBOARD_URL = `${window.location.protocol}//${window.location.hostname}:3001/dashboard`;
         let agentRelease = {
             version: '0.4.3',
             releaseDate: '2026-03-26',
@@ -900,15 +902,15 @@
             const packages = agentRelease.packages;
 
             document.getElementById('linux-install-cmd').textContent =
-                `curl -fsSL ${SERVER_HOST}/scripts/viberemote-agent-${version}-install-linux.sh | bash -s -- --server=${SERVER_HOST}:8080`;
+                `curl -fsSL ${PORTAL_ORIGIN}/scripts/viberemote-agent-${version}-install-linux.sh | bash`;
             document.getElementById('linux-manual').textContent =
 `# 下载客户端
-wget ${SERVER_HOST}/agent/release/${packages['linux-x64']}
+wget ${PORTAL_ORIGIN}/agent/release/${packages['linux-x64']}
 tar -xzf ${packages['linux-x64']}
 cd viberemote-agent
 
 # 配置服务器地址
-echo "server.url=${SERVER_HOST}:8080" > agent.properties
+echo "server.url=${API_ORIGIN}" > agent.properties
 
 # 启动
 ./start-agent.sh
@@ -916,17 +918,24 @@ echo "server.url=${SERVER_HOST}:8080" > agent.properties
 # 设置开机自启（systemd）
 sudo systemctl enable viberemote-agent`;
             document.getElementById('macos-user-install').textContent =
-                `curl -fsSL ${SERVER_HOST}/scripts/viberemote-agent-${version}-install-macos.sh | bash -s -- --server=${SERVER_HOST}:8080`;
+                `curl -fsSL ${PORTAL_ORIGIN}/scripts/viberemote-agent-${version}-install-macos.sh | bash`;
             document.getElementById('windows-bat-install').textContent =
-`curl -o viberemote-install.bat ${SERVER_HOST}/scripts/viberemote-agent-${version}-install-windows.bat
+`curl -fLo viberemote-install.bat ${PORTAL_ORIGIN}/scripts/viberemote-agent-${version}-install-windows.bat
 viberemote-install.bat`;
             document.getElementById('windows-manual').textContent =
-`curl -o viberemote-agent.zip ${SERVER_HOST}/agent/release/${packages['windows-x64']}
+`curl -fLo viberemote-agent.zip ${PORTAL_ORIGIN}/agent/release/${packages['windows-x64']}
 powershell -Command "Expand-Archive -Path viberemote-agent.zip -DestinationPath '%USERPROFILE%\\VibeRemote-Agent' -Force"
 cd /d "%USERPROFILE%\\VibeRemote-Agent"
+REM 编辑 agent.properties，确认 server.url=${API_ORIGIN}
 start-agent.bat`;
             document.getElementById('release-version').textContent = `v${version}`;
             document.getElementById('release-date').textContent = agentRelease.releaseDate;
+        }
+
+        function applyServiceLinks() {
+            document.querySelectorAll('[data-dashboard-link]').forEach((link) => {
+                link.href = DASHBOARD_URL;
+            });
         }
 
         async function loadAgentRelease() {
@@ -945,6 +954,7 @@ start-agent.bat`;
         // 页面加载时设置推荐下载
         document.addEventListener('DOMContentLoaded', async function() {
             await loadAgentRelease();
+            applyServiceLinks();
             const osType = detectOS();
             const osInfo = getOSInfo(osType);
             

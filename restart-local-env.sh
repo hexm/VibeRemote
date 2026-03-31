@@ -76,6 +76,11 @@ cd agent && mvn clean package -DskipTests -q || { echo "❌ Agent编译失败"; 
 cd "$SCRIPT_DIR"
 echo "✅ Agent编译完成"
 
+echo "编译Upgrader..."
+cd upgrader && mvn clean package -DskipTests -q || { echo "❌ Upgrader编译失败"; exit 1; }
+cd "$SCRIPT_DIR"
+echo "✅ Upgrader编译完成"
+
 echo "检查前端依赖..."
 cd web
 if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules" ]; then
@@ -95,9 +100,15 @@ echo "----------------------------------------"
 
 LOCALTEST_DIR="$SCRIPT_DIR/agent/localtest"
 AGENT_JAR=$(ls "$SCRIPT_DIR/agent/target/agent-"*"-jar-with-dependencies.jar" 2>/dev/null | head -1)
+UPGRADER_JAR="$SCRIPT_DIR/upgrader/target/upgrader.jar"
 
 if [ -z "$AGENT_JAR" ]; then
     echo "❌ 未找到编译好的 agent jar"
+    exit 1
+fi
+
+if [ ! -f "$UPGRADER_JAR" ]; then
+    echo "❌ 未找到编译好的 upgrader.jar"
     exit 1
 fi
 
@@ -108,6 +119,9 @@ cp /tmp/agent.properties.bak "$LOCALTEST_DIR/agent.properties" 2>/dev/null || tr
 
 echo "复制 agent.jar → localtest/agent.jar"
 cp "$AGENT_JAR" "$LOCALTEST_DIR/agent.jar"
+
+echo "复制 upgrader.jar → localtest/upgrader.jar"
+cp "$UPGRADER_JAR" "$LOCALTEST_DIR/upgrader.jar"
 
 echo "复制启动脚本..."
 cp "$SCRIPT_DIR/agent/start-agent.sh" "$LOCALTEST_DIR/"

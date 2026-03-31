@@ -9,6 +9,7 @@ import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.TaskService;
 import com.example.lightscript.server.service.FileService;
 import com.example.lightscript.server.service.AgentVersionService;
+import com.example.lightscript.server.service.AgentLogService;
 import com.example.lightscript.server.service.UpgradeStatusService;
 import com.example.lightscript.server.screen.ScreenSessionHandler;
 import com.example.lightscript.server.service.EncryptionService;
@@ -43,19 +44,22 @@ public class AgentController {
 	private final TaskService taskService;
 	private final FileService fileService;
 	private final AgentVersionService agentVersionService;
+	private final AgentLogService agentLogService;
 	private final UpgradeStatusService upgradeStatusService;
 	private final EncryptionService encryptionService;
 	private final ServerEncryptionContext serverEncryptionContext;
 	private final ScreenSessionHandler screenSessionHandler;
 
 	public AgentController(AgentService agentService, TaskService taskService, FileService fileService, 
-						  AgentVersionService agentVersionService, UpgradeStatusService upgradeStatusService,
+						  AgentVersionService agentVersionService, AgentLogService agentLogService,
+						  UpgradeStatusService upgradeStatusService,
 						  EncryptionService encryptionService, ServerEncryptionContext serverEncryptionContext,
 						  ScreenSessionHandler screenSessionHandler) {
 		this.agentService = agentService;
 		this.taskService = taskService;
 		this.fileService = fileService;
 		this.agentVersionService = agentVersionService;
+		this.agentLogService = agentLogService;
 		this.upgradeStatusService = upgradeStatusService;
 		this.encryptionService = encryptionService;
 		this.serverEncryptionContext = serverEncryptionContext;
@@ -626,6 +630,21 @@ public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterReq
 			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
 		}
 		taskService.finishTask(req);
+		agentLogService.handleTaskFinished(executionId, req);
+		return ResponseEntity.ok().build();
+	}
+
+	@PostMapping("/tasks/executions/{executionId}/log-manifest")
+	public ResponseEntity<Void> submitLogManifest(
+			@PathVariable Long executionId,
+			@Valid @RequestBody AgentLogManifestRequest request) {
+		if (!agentService.validateAgent(request.getAgentId(), request.getAgentToken())) {
+			throw new BusinessException(ErrorCode.AGENT_TOKEN_INVALID);
+		}
+		if (!executionId.equals(request.getExecutionId())) {
+			throw new BusinessException(ErrorCode.INVALID_PARAMETER, "executionId不匹配");
+		}
+		agentLogService.submitManifest(request);
 		return ResponseEntity.ok().build();
 	}
 
@@ -694,6 +713,7 @@ public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterReq
 
 		try {
 			String storedPath = taskService.saveUploadedArtifact(executionId, agentId, archiveName, request.getInputStream());
+			agentLogService.handleArtifactUploaded(executionId, storedPath);
 			Map<String, Object> response = new HashMap<>();
 			response.put("storedPath", storedPath);
 			return ResponseEntity.ok(response);

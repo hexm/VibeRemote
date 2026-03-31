@@ -2,6 +2,7 @@ package com.example.lightscript.server.screen;
 
 import com.example.lightscript.server.security.RequirePermission;
 import com.example.lightscript.server.service.AgentService;
+import com.example.lightscript.server.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +22,11 @@ import java.util.Map;
 @Slf4j
 public class ScreenController {
 
+    private static final String SCREEN_MONITOR_ENABLED_KEY = "agent.screen_monitor.enabled";
+
     private final ScreenSessionHandler screenSessionHandler;
     private final AgentService agentService;
+    private final SystemSettingService systemSettingService;
 
     /**
      * Agent 推送截图帧 → 立即转发给 WS 前端，不落盘不缓存
@@ -31,6 +35,10 @@ public class ScreenController {
     public ResponseEntity<Map<String, Object>> receiveFrame(
             @PathVariable String agentId,
             @RequestBody Map<String, Object> payload) {
+
+        if (!isScreenMonitorEnabled()) {
+            return ResponseEntity.status(403).body(Collections.singletonMap("error", "screen monitor disabled"));
+        }
 
         // 验证 agentToken
         String agentToken = (String) payload.get("agentToken");
@@ -53,5 +61,9 @@ public class ScreenController {
         boolean pushed = screenSessionHandler.pushFrame(agentId, imageData, timestamp);
         // imageData 在此方法返回后即可被 GC，不持有引用
         return ResponseEntity.ok(Collections.singletonMap("pushed", pushed));
+    }
+
+    private boolean isScreenMonitorEnabled() {
+        return systemSettingService.getBooleanValue(SCREEN_MONITOR_ENABLED_KEY, true);
     }
 }

@@ -4,8 +4,10 @@ import com.example.lightscript.server.entity.Agent;
 import com.example.lightscript.server.entity.BatchTask;
 import com.example.lightscript.server.entity.Task;
 import com.example.lightscript.server.entity.TaskExecution;
+import com.example.lightscript.server.model.AgentLogModels;
 import com.example.lightscript.server.model.AgentModels.TaskSpec;
 import com.example.lightscript.server.model.TaskModels;
+import com.example.lightscript.server.service.AgentLogService;
 import com.example.lightscript.server.service.AgentService;
 import com.example.lightscript.server.service.AgentGroupService;
 import com.example.lightscript.server.service.BatchTaskService;
@@ -33,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +49,7 @@ import java.util.Optional;
 public class WebController {
     
     private final AgentService agentService;
+    private final AgentLogService agentLogService;
     private final TaskService taskService;
     private final BatchTaskService batchTaskService;
     private final TaskExecutionService taskExecutionService;
@@ -336,6 +340,79 @@ public class WebController {
         Map<String, String> response = new HashMap<>();
         response.put("message", "客户端已删除");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/agents/{agentId}/log-collections/latest")
+    @RequirePermission("agent:view")
+    public ResponseEntity<AgentLogModels.AgentLogCollectionDTO> getLatestAgentLogCollection(@PathVariable String agentId) {
+        AgentLogModels.AgentLogCollectionDTO collection = agentLogService.getLatestCollection(agentId);
+        if (collection == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(collection);
+    }
+
+    @PostMapping("/agents/{agentId}/log-collections")
+    @RequirePermission("agent:view")
+    public ResponseEntity<AgentLogModels.AgentLogCollectionDTO> triggerAgentLogCollection(
+            @PathVariable String agentId,
+            Authentication authentication) {
+        return ResponseEntity.ok(agentLogService.triggerCollection(agentId, authentication.getName()));
+    }
+
+    @GetMapping("/agents/{agentId}/log-collections/{collectionId}/files")
+    @RequirePermission("agent:view")
+    public ResponseEntity<List<AgentLogModels.AgentLogFileDTO>> getAgentLogFiles(
+            @PathVariable String agentId,
+            @PathVariable Long collectionId) {
+        return ResponseEntity.ok(agentLogService.getCollectionFiles(agentId, collectionId));
+    }
+
+    @GetMapping("/agents/{agentId}/log-collections/{collectionId}/files/{fileId}")
+    @RequirePermission("agent:view")
+    public ResponseEntity<AgentLogModels.AgentLogFileDTO> getAgentLogFile(
+            @PathVariable String agentId,
+            @PathVariable Long collectionId,
+            @PathVariable Long fileId) {
+        return ResponseEntity.ok(agentLogService.getCollectionFile(agentId, collectionId, fileId));
+    }
+
+    @PostMapping("/agents/{agentId}/log-collections/{collectionId}/files/{fileId}/recollect")
+    @RequirePermission("agent:view")
+    public ResponseEntity<AgentLogModels.AgentLogCollectionDTO> recollectAgentLogFile(
+            @PathVariable String agentId,
+            @PathVariable Long collectionId,
+            @PathVariable Long fileId,
+            Authentication authentication) {
+        return ResponseEntity.ok(agentLogService.recollectFile(agentId, collectionId, fileId, authentication.getName()));
+    }
+
+    @GetMapping("/agents/{agentId}/log-collections/{collectionId}/files/{fileId}/content")
+    @RequirePermission("agent:view")
+    public ResponseEntity<Map<String, Object>> getAgentLogFileContent(
+            @PathVariable String agentId,
+            @PathVariable Long collectionId,
+            @PathVariable Long fileId) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", agentLogService.readLogFileContent(agentId, collectionId, fileId));
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/agents/{agentId}/log-collections/{collectionId}/files/{fileId}/download")
+    @RequirePermission("agent:view")
+    public ResponseEntity<Resource> downloadAgentLogFile(
+            @PathVariable String agentId,
+            @PathVariable Long collectionId,
+            @PathVariable Long fileId) throws IOException {
+        Path filePath = agentLogService.getLogFilePath(agentId, collectionId, fileId);
+        Resource resource = new FileSystemResource(filePath);
+        String fileName = filePath.getFileName().toString();
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename*=UTF-8''" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()))
+            .contentType(MediaType.TEXT_PLAIN)
+            .contentLength(Files.size(filePath))
+            .body(resource);
     }
 
 
@@ -793,12 +870,22 @@ public class WebController {
      */
     private ResponseEntity<Map<String, Object>> readLogFile(
             String logFilePath, int offset, int limit, String status) {
+        if (logFilePath == null || logFilePath.trim().isEmpty()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("content", buildMissingLogMessage(status));
+            result.put("totalLines", 0);
+            result.put("offset", 0);
+            result.put("limit", limit);
+            result.put("hasMore", false);
+            result.put("status", status != null ? status : "UNKNOWN");
+            return ResponseEntity.ok(result);
+        }
         
         File logFile = new File(logFilePath);
         
         if (!logFile.exists()) {
             Map<String, Object> result = new HashMap<>();
-            result.put("content", "日志文件不存在: " + logFilePath);
+            result.put("content", buildMissingLogMessage(status));
             result.put("totalLines", 0);
             result.put("offset", 0);
             result.put("limit", limit);
@@ -829,5 +916,15 @@ public class WebController {
         } catch (IOException e) {
             throw new RuntimeException("读取日志文件失败: " + logFilePath, e);
         }
+    }
+
+    private String buildMissingLogMessage(String status) {
+        if ("PENDING".equals(status) || "PULLED".equals(status) || "RUNNING".equals(status)) {
+            return "任务已启动，暂未收到日志输出，请稍后刷新。";
+        }
+        if ("SUCCESS".equals(status) || "FAILED".equals(status) || "TIMEOUT".equals(status) || "CANCELLED".equals(status)) {
+            return "该执行已结束，但没有生成可用日志。";
+        }
+        return "当前暂无可用日志。";
     }
 }

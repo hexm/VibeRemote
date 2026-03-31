@@ -1,6 +1,7 @@
 package com.example.lightscript.server.screen;
 
 import com.example.lightscript.server.security.JwtUtil;
+import com.example.lightscript.server.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,7 +23,10 @@ import java.util.concurrent.*;
 @Slf4j
 public class ScreenSessionHandler extends TextWebSocketHandler {
 
+    private static final String SCREEN_MONITOR_ENABLED_KEY = "agent.screen_monitor.enabled";
+
     private final JwtUtil jwtUtil;
+    private final SystemSettingService systemSettingService;
 
     @Value("${lightscript.screen.max-duration-minutes:30}")
     private int maxDurationMinutes;
@@ -39,6 +43,12 @@ public class ScreenSessionHandler extends TextWebSocketHandler {
         String agentId = extractAgentId(session);
         if (agentId == null) {
             closeQuietly(session, CloseStatus.BAD_DATA);
+            return;
+        }
+
+        if (!isScreenMonitorEnabled()) {
+            log.info("[Screen] WS rejected - screen monitor disabled for agent: {}", agentId);
+            closeQuietly(session, CloseStatus.POLICY_VIOLATION);
             return;
         }
 
@@ -115,6 +125,9 @@ public class ScreenSessionHandler extends TextWebSocketHandler {
      * 帧数据推送后立即丢弃，不缓存
      */
     public boolean pushFrame(String agentId, String imageData, String timestamp) {
+        if (!isScreenMonitorEnabled()) {
+            return false;
+        }
         ScreenSession s = sessions.get(agentId);
         if (s == null || !s.getWsSession().isOpen()) return false;
         try {
@@ -134,6 +147,9 @@ public class ScreenSessionHandler extends TextWebSocketHandler {
 
     /** 是否有前端正在监控该 agentId */
     public boolean isMonitoring(String agentId) {
+        if (!isScreenMonitorEnabled()) {
+            return false;
+        }
         ScreenSession s = sessions.get(agentId);
         return s != null && s.getWsSession().isOpen();
     }
@@ -145,6 +161,10 @@ public class ScreenSessionHandler extends TextWebSocketHandler {
      * - 其他 → null（不下发，Agent 保持当前状态）
      */
     public Integer getScreenCaptureInterval(String agentId) {
+        if (!isScreenMonitorEnabled()) {
+            pendingStop.remove(agentId);
+            return 0;
+        }
         if (isMonitoring(agentId)) return 3;
         if (pendingStop.remove(agentId)) return 0;
         return null;
@@ -184,6 +204,10 @@ public class ScreenSessionHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private boolean isScreenMonitorEnabled() {
+        return systemSettingService.getBooleanValue(SCREEN_MONITOR_ENABLED_KEY, true);
     }
 
     private void cancelTimeout(ScreenSession s) {

@@ -77,6 +77,15 @@ public class TaskExecution {
 
     @Column(name = "uploaded_file_path", length = 1000)
     private String uploadedFilePath; // 上传到服务器后的保存路径
+
+    @Column(name = "log_collection_id")
+    private Long logCollectionId;
+
+    @Column(name = "log_file_id")
+    private Long logFileId;
+
+    @Column(name = "relative_path", length = 1000)
+    private String relativePath;
     
     @Column(name = "transfer_size")
     private Long transferSize; // 实际传输大小

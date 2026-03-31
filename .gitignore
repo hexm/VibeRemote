@@ -96,3 +96,10 @@ server/src/main/resources/application-prod.yml
 
 # Agent release packages (too large for git)
 agent/release/
+
+# Local LAN test assets
+portal/agent/
+portal/scripts/viberemote-agent-*-install-linux.sh
+portal/scripts/viberemote-agent-*-install-macos.sh
+portal/scripts/viberemote-agent-*-install-windows.bat
+.lan-test/

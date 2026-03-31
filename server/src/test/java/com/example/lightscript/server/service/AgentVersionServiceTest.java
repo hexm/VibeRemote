@@ -9,9 +9,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class AgentVersionServiceTest {
 
+    private AgentVersionService newService() {
+        SystemSettingService systemSettingService = new SystemSettingService(null) {
+            @Override
+            public String getSettingValue(String key, String defaultValue) {
+                return defaultValue;
+            }
+        };
+        return new AgentVersionService(null, null, systemSettingService);
+    }
+
     @Test
     public void testVersionComparison() throws Exception {
-        AgentVersionService service = new AgentVersionService(null, null);
+        AgentVersionService service = newService();
         
         // 使用反射访问私有方法进行测试
         Method compareVersions = AgentVersionService.class.getDeclaredMethod("compareVersions", String.class, String.class);
@@ -38,7 +48,7 @@ public class AgentVersionServiceTest {
     
     @Test
     public void testVersionParsing() throws Exception {
-        AgentVersionService service = new AgentVersionService(null, null);
+        AgentVersionService service = newService();
         
         // 使用反射访问私有方法进行测试
         Method parseVersionFromFilename = AgentVersionService.class.getDeclaredMethod("parseVersionFromFilename", String.class);
@@ -63,7 +73,7 @@ public class AgentVersionServiceTest {
     
     @Test
     public void testVersionSequence() throws Exception {
-        AgentVersionService service = new AgentVersionService(null, null);
+        AgentVersionService service = newService();
         Method compareVersions = AgentVersionService.class.getDeclaredMethod("compareVersions", String.class, String.class);
         compareVersions.setAccessible(true);
         
@@ -78,7 +88,7 @@ public class AgentVersionServiceTest {
 
     @Test
     public void testBuildAgentDownloadUrlUsesConfiguredPublicBaseUrl() throws Exception {
-        AgentVersionService service = new AgentVersionService(null, null);
+        AgentVersionService service = newService();
 
         Field publicBaseUrlField = AgentVersionService.class.getDeclaredField("agentPublicBaseUrl");
         publicBaseUrlField.setAccessible(true);
@@ -89,6 +99,32 @@ public class AgentVersionServiceTest {
 
         assertEquals(
             "http://8.138.114.34:8080/api/web/files/F123/download-for-agent",
+            buildAgentDownloadUrl.invoke(service, "F123")
+        );
+    }
+
+    @Test
+    public void testBuildAgentDownloadUrlUsesSystemSettingFirst() throws Exception {
+        SystemSettingService systemSettingService = new SystemSettingService(null) {
+            @Override
+            public String getSettingValue(String key, String defaultValue) {
+                if ("agent.upgrade.public_base_url".equals(key)) {
+                    return "https://download.example.com/base/";
+                }
+                return defaultValue;
+            }
+        };
+        AgentVersionService service = new AgentVersionService(null, null, systemSettingService);
+
+        Field publicBaseUrlField = AgentVersionService.class.getDeclaredField("agentPublicBaseUrl");
+        publicBaseUrlField.setAccessible(true);
+        publicBaseUrlField.set(service, "http://ignored.example.com:8080/");
+
+        Method buildAgentDownloadUrl = AgentVersionService.class.getDeclaredMethod("buildAgentDownloadUrl", String.class);
+        buildAgentDownloadUrl.setAccessible(true);
+
+        assertEquals(
+            "https://download.example.com/base/api/web/files/F123/download-for-agent",
             buildAgentDownloadUrl.invoke(service, "F123")
         );
     }

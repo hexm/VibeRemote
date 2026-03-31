@@ -74,6 +74,11 @@ function animateTerminal() {
 
 // 页面加载完成后执行动画
 document.addEventListener('DOMContentLoaded', () => {
+    const dashboardUrl = `${window.location.protocol}//${window.location.hostname}:3001/dashboard`;
+    document.querySelectorAll('[data-dashboard-link]').forEach(link => {
+        link.href = dashboardUrl;
+    });
+
     // 延迟执行终端动画
     setTimeout(animateTerminal, 1000);
     

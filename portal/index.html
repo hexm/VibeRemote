@@ -28,7 +28,7 @@
                     </svg>
                     GitHub
                 </a>
-                <a href="http://8.138.114.34:3000/dashboard" class="nav-link btn-primary">管理后台</a>
+                <a href="#" class="nav-link btn-primary" data-dashboard-link>管理后台</a>
             </div>
             <div class="nav-toggle">
                 <span></span>
@@ -67,7 +67,7 @@
                     自动升级与实时监控能力，让分散设备的托管和运维更轻量。
                 </p>
                 <div class="hero-actions">
-                    <a href="http://8.138.114.34:3000/dashboard" class="btn btn-primary btn-large">
+                    <a href="#" class="btn btn-primary btn-large" data-dashboard-link>
                         立即开始
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -287,7 +287,7 @@
                         </div>
                         <div class="code-content">
                             <pre><code># 首次安装 Agent（macOS 示例）
-curl -fsSL http://your-server/scripts/install-macos.sh | bash -s -- --server=http://your-server:8080
+curl -fsSL http://your-server/scripts/install-macos.sh | bash
 
 # 安装完成后
 # 1. Agent 以后台方式常驻运行
@@ -318,7 +318,7 @@ curl -fsSL http://your-server/scripts/install-macos.sh | bash -s -- --server=htt
                     <ul class="footer-links">
                         <li><a href="#features">功能特性</a></li>
                         <li><a href="#download">下载</a></li>
-                        <li><a href="http://8.138.114.34:3000/dashboard">在线体验</a></li>
+                        <li><a href="#" data-dashboard-link>在线体验</a></li>
                         <li><a href="#docs">文档</a></li>
                     </ul>
                 </div>

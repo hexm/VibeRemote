@@ -13,6 +13,9 @@ REMOTE_RELEASES_DIR="/var/www/html/agent/release"
 REMOTE_SCRIPTS_DIR="/var/www/html/scripts"
 VERSION_HELPER="$PROJECT_ROOT/agent/scripts/get-agent-version.sh"
 AGENT_VERSION="$(bash "$VERSION_HELPER")"
+API_BASE_URL="${LIGHTSCRIPT_AGENT_API_BASE_URL:-http://${SERVER_IP}:8080}"
+PACKAGE_BASE_URL="${LIGHTSCRIPT_AGENT_PACKAGE_BASE_URL:-http://${SERVER_IP}/agent/release}"
+REGISTER_TOKEN="${LIGHTSCRIPT_REGISTER_TOKEN:-dev-register-token}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -236,9 +239,44 @@ echo -e "${BLUE}上传安装脚本...${NC}"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/unix/install-linux.sh" > "$TMP_DIR/install-linux.sh"
-sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/unix/install-macos.sh" > "$TMP_DIR/install-macos.sh"
-sed "s/__AGENT_VERSION__/${AGENT_VERSION}/g" "$PROJECT_ROOT/agent/scripts/windows/install-agent.bat" > "$TMP_DIR/install-agent.bat"
+python3 - <<'PY' "$PROJECT_ROOT/agent/scripts/unix/install-linux.sh" "$TMP_DIR/install-linux.sh" "$AGENT_VERSION" "$API_BASE_URL" "$REGISTER_TOKEN" "$PACKAGE_BASE_URL"
+from pathlib import Path
+import sys
+
+src, dst, version, api_base, token, package_base = sys.argv[1:]
+text = Path(src).read_text()
+text = text.replace("__AGENT_VERSION__", version)
+text = text.replace("__SERVER_URL__", api_base)
+text = text.replace("__REGISTER_TOKEN__", token)
+text = text.replace("__PACKAGE_BASE_URL__", package_base)
+Path(dst).write_text(text)
+PY
+
+python3 - <<'PY' "$PROJECT_ROOT/agent/scripts/unix/install-macos.sh" "$TMP_DIR/install-macos.sh" "$AGENT_VERSION" "$API_BASE_URL" "$REGISTER_TOKEN" "$PACKAGE_BASE_URL"
+from pathlib import Path
+import sys
+
+src, dst, version, api_base, token, package_base = sys.argv[1:]
+text = Path(src).read_text()
+text = text.replace("__AGENT_VERSION__", version)
+text = text.replace("__SERVER_URL__", api_base)
+text = text.replace("__REGISTER_TOKEN__", token)
+text = text.replace("__PACKAGE_BASE_URL__", package_base)
+Path(dst).write_text(text)
+PY
+
+python3 - <<'PY' "$PROJECT_ROOT/agent/scripts/windows/install-agent.bat" "$TMP_DIR/install-agent.bat" "$AGENT_VERSION" "$API_BASE_URL" "$REGISTER_TOKEN" "$PACKAGE_BASE_URL"
+from pathlib import Path
+import sys
+
+src, dst, version, api_base, token, package_base = sys.argv[1:]
+text = Path(src).read_text()
+text = text.replace("__AGENT_VERSION__", version)
+text = text.replace("__SERVER_URL__", api_base)
+text = text.replace("__REGISTER_TOKEN__", token)
+text = text.replace("__PACKAGE_BASE_URL__", package_base)
+Path(dst).write_text(text)
+PY
 
 scp "$TMP_DIR/install-linux.sh" "${SERVER_USER}@${SERVER_IP}:${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-linux.sh"
 scp "$TMP_DIR/install-macos.sh" "${SERVER_USER}@${SERVER_IP}:${REMOTE_SCRIPTS_DIR}/viberemote-agent-${AGENT_VERSION}-install-macos.sh"
@@ -292,7 +330,7 @@ echo -e "${BLUE}管理命令：${NC}"
 echo -e "  查看远程文件: ${YELLOW}ssh ${SERVER_USER}@${SERVER_IP} 'ls -la ${REMOTE_RELEASES_DIR}'${NC}"
 echo ""
 echo -e "${BLUE}一键安装命令：${NC}"
-echo -e "  Linux:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh | sudo bash -s -- --server=http://${SERVER_IP}:8080${NC}"
-echo -e "  macOS:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh | bash -s -- --server=http://${SERVER_IP}:8080${NC}"
+echo -e "  Linux:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-linux.sh | sudo bash${NC}"
+echo -e "  macOS:   ${GREEN}curl -fsSL http://${SERVER_IP}/scripts/viberemote-agent-${AGENT_VERSION}-install-macos.sh | bash${NC}"
 echo -e "  Windows: ${GREEN}PowerShell 执行安装脚本${NC}"
 echo ""

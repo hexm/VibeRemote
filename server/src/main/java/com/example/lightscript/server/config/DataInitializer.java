@@ -62,6 +62,22 @@ public class DataInitializer implements CommandLineRunner {
             "task",
             "文件上传任务允许的最大压缩包大小（MB），Agent打包后和服务端接收时都会校验"
         );
+
+        ensureSystemSetting(
+            "agent.screen_monitor.enabled",
+            "true",
+            "BOOLEAN",
+            "agent",
+            "是否启用 Agent 屏幕监控功能。关闭后前端隐藏入口，服务端拒绝新的屏幕监控连接"
+        );
+
+        ensureSystemSetting(
+            "agent.upgrade.public_base_url",
+            "",
+            "STRING",
+            "agent",
+            "Agent 自动升级下载地址的公共访问前缀。为空时使用服务端配置 lightscript.agent.public-base-url"
+        );
     }
 
     private void ensureSystemSetting(String key, String value, String type, String category, String description) {

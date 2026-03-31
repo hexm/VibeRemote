@@ -472,17 +472,7 @@ const Tasks = () => {
   const handleViewDetail = async (task) => {
     setSelectedTask(task)
     setDetailModalVisible(true)
-    setDetailLoading(true)
-    
-    try {
-      const response = await api.get(`/web/tasks/${task.taskId}/executions`)
-      setTaskExecutions(response || [])
-    } catch (error) {
-      console.error('获取执行实例失败:', error)
-      message.error('获取执行实例失败')
-    } finally {
-      setDetailLoading(false)
-    }
+    await refreshTaskExecutions(task.taskId, true)
   }
   // 查看执行实例日志
   const handleViewLog = async (execution) => {
@@ -528,10 +518,42 @@ const Tasks = () => {
       
       setLogContent(content)
       setLogTotalLines(response.totalLines || 0)
+
+      if (response.status && response.status !== execution.status && selectedTask?.taskId) {
+        await refreshTaskExecutions(selectedTask.taskId, false, execution.id)
+      }
     } catch (error) {
       console.error('获取日志失败:', error)
       const errorMsg = error.response?.data?.message || error.message || '未知错误'
       message.error(`获取日志失败: ${errorMsg}`)
+    }
+  }
+
+  async function refreshTaskExecutions(taskId, showLoading = false, executionIdToSync = null) {
+    if (!taskId) return
+
+    if (showLoading) {
+      setDetailLoading(true)
+    }
+
+    try {
+      const response = await api.get(`/web/tasks/${taskId}/executions`)
+      const executions = response || []
+      setTaskExecutions(executions)
+
+      if (executionIdToSync) {
+        const updatedExecution = executions.find(item => item.id === executionIdToSync)
+        if (updatedExecution) {
+          setSelectedExecution(prev => prev?.id === executionIdToSync ? updatedExecution : prev)
+        }
+      }
+    } catch (error) {
+      console.error('获取执行实例失败:', error)
+      message.error('获取执行实例失败')
+    } finally {
+      if (showLoading) {
+        setDetailLoading(false)
+      }
     }
   }
 

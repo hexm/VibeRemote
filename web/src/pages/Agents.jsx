@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider } from 'antd'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Card, Table, Tag, Button, Space, Typography, Input, Select, Avatar, Tooltip, Modal, message, Row, Col, Descriptions, Statistic, Divider, Empty, Spin } from 'antd'
 import {
   DesktopOutlined,
   SearchOutlined,
@@ -17,6 +17,7 @@ import {
   CodeOutlined,
   PlusOutlined,
   VideoCameraOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/auth'
@@ -25,6 +26,53 @@ import ScreenMonitorModal from '../components/ScreenMonitorModal'
 const { Title, Text } = Typography
 const { Search } = Input
 const { Option } = Select
+const PORTAL_BASE_URL = import.meta.env.VITE_PORTAL_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8002`
+const LOG_FILE_TERMINAL_STATUSES = new Set(['SUCCESS', 'FAILED'])
+
+const sortLogFiles = (files) => [...files].sort((left, right) => {
+  const leftTime = left?.modifiedAt ? new Date(left.modifiedAt).getTime() : 0
+  const rightTime = right?.modifiedAt ? new Date(right.modifiedAt).getTime() : 0
+  if (leftTime !== rightTime) {
+    return rightTime - leftTime
+  }
+  return (left?.fileName || '').localeCompare(right?.fileName || '')
+})
+
+const summarizeLogCollection = (collection, files) => {
+  if (!collection) return null
+
+  const totalFiles = files.length
+  const successFiles = files.filter((file) => file.uploadStatus === 'SUCCESS').length
+  const failedFiles = files.filter((file) => file.uploadStatus === 'FAILED').length
+  const pendingFiles = totalFiles - successFiles - failedFiles
+
+  let status = collection.status
+  if (totalFiles > 0) {
+    if (pendingFiles > 0 && successFiles === 0 && failedFiles === 0) {
+      status = 'COLLECTING'
+    } else if (pendingFiles > 0) {
+      status = 'PARTIAL_READY'
+    } else if (failedFiles > 0 && successFiles === 0) {
+      status = 'FAILED'
+    } else if (failedFiles > 0) {
+      status = 'PARTIAL_READY'
+    } else {
+      status = 'READY'
+    }
+  }
+
+  return {
+    ...collection,
+    status,
+    totalFiles,
+    successFiles,
+    failedFiles,
+    pendingFiles,
+    files,
+  }
+}
+
+const isLogFilePending = (file) => !LOG_FILE_TERMINAL_STATUSES.has(file?.uploadStatus)
 
 const Agents = () => {
   const navigate = useNavigate()
@@ -40,9 +88,46 @@ const Agents = () => {
   const [selectedAgentForHistory, setSelectedAgentForHistory] = useState(null)
   const [screenMonitorVisible, setScreenMonitorVisible] = useState(false)
   const [screenMonitorAgent, setScreenMonitorAgent] = useState(null)
+  const [screenMonitorEnabled, setScreenMonitorEnabled] = useState(true)
+  const [logModalVisible, setLogModalVisible] = useState(false)
+  const [logAgent, setLogAgent] = useState(null)
+  const [logCollection, setLogCollection] = useState(null)
+  const [logFiles, setLogFiles] = useState([])
+  const [logLoading, setLogLoading] = useState(false)
+  const [logFileActionId, setLogFileActionId] = useState(null)
+  const [logContentVisible, setLogContentVisible] = useState(false)
+  const [logContentLoading, setLogContentLoading] = useState(false)
+  const [logContent, setLogContent] = useState('')
+  const [logContentFile, setLogContentFile] = useState(null)
+  const [logRefreshLocked, setLogRefreshLocked] = useState(false)
+  const agentsRef = useRef([])
+  const logCollectionRef = useRef(null)
+  const logFilesRef = useRef([])
+
+  useEffect(() => {
+    agentsRef.current = agents
+  }, [agents])
+
+  useEffect(() => {
+    logCollectionRef.current = logCollection
+  }, [logCollection])
+
+  useEffect(() => {
+    logFilesRef.current = logFiles
+  }, [logFiles])
+
+  const fetchAgentGroups = async (agentId, fallbackGroups = []) => {
+    try {
+      const groupsResp = await api.get(`/web/agents/${agentId}/groups`)
+      return groupsResp.groups || []
+    } catch (error) {
+      console.error('获取分组失败', error)
+      return fallbackGroups
+    }
+  }
 
   // 处理单个 Agent 数据的辅助函数
-  const processAgentData = async (agent) => {
+  const processAgentData = async (agent, previousAgent = null, includeGroups = true) => {
     // CPU负载转换为百分比（0.0-1.0 -> 0-100）
     const cpuPercent = agent.cpuLoad ? Math.round(agent.cpuLoad * 100) : 0
     
@@ -53,14 +138,9 @@ const Agents = () => {
       memoryPercent = Math.round((usedMemMb / agent.totalMemMb) * 100)
     }
     
-    // 获取Agent所属分组
-    let groups = []
-    try {
-      const groupsResp = await api.get(`/web/agents/${agent.agentId}/groups`)
-      groups = groupsResp.groups || []
-    } catch (error) {
-      console.error('获取分组失败', error)
-    }
+    const groups = includeGroups
+      ? await fetchAgentGroups(agent.agentId, previousAgent?.groups || [])
+      : (previousAgent?.groups || [])
     
     return {
       key: agent.agentId,
@@ -103,17 +183,46 @@ const Agents = () => {
   }
 
   // 加载Agent列表
-  const loadAgents = async () => {
-    setLoading(true)
+  const loadAgents = useCallback(async ({ showLoading = true, includeGroups = true } = {}) => {
+    if (showLoading) {
+      setLoading(true)
+    }
     try {
       const response = await api.get('/web/agents')
-      const agentList = await Promise.all(response.content.map(processAgentData))
+      const previousMap = new Map(agentsRef.current.map((agent) => [agent.agentId || agent.id, agent]))
+      const agentList = await Promise.all(
+        (response.content || []).map((agent) =>
+          processAgentData(agent, previousMap.get(agent.agentId), includeGroups)
+        )
+      )
       setAgents(agentList)
+
+      if (detailModalVisible && selectedAgent) {
+        const refreshedSelectedAgent = agentList.find((agent) => agent.id === (selectedAgent.agentId || selectedAgent.id))
+        if (refreshedSelectedAgent) {
+          setSelectedAgent((previous) => ({ ...previous, ...refreshedSelectedAgent }))
+        }
+      }
     } catch (error) {
       console.error('Failed to load agents:', error)
-      message.error('加载客户端列表失败')
+      if (showLoading) {
+        message.error('加载客户端列表失败')
+      }
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
+    }
+  }, [detailModalVisible, selectedAgent])
+
+  const loadScreenMonitorSetting = async () => {
+    try {
+      const response = await api.get('/web/system-settings/key/agent.screen_monitor.enabled')
+      const enabled = response?.settingValue == null ? true : String(response.settingValue).toLowerCase() === 'true'
+      setScreenMonitorEnabled(enabled)
+    } catch (error) {
+      console.warn('加载屏幕监控开关失败，默认按开启处理', error)
+      setScreenMonitorEnabled(true)
     }
   }
 
@@ -128,16 +237,124 @@ const Agents = () => {
     return `${days}天 ${hours}小时`
   }
 
-  useEffect(() => {
-    loadAgents()
-    // 每30秒自动刷新
-    const interval = setInterval(loadAgents, 30000)
-    return () => clearInterval(interval)
+  const applyLogCollectionSnapshot = useCallback((collectionDto) => {
+    const nextFiles = sortLogFiles(collectionDto?.files || [])
+    const nextCollection = summarizeLogCollection(collectionDto, nextFiles)
+    logFilesRef.current = nextFiles
+    logCollectionRef.current = nextCollection
+    setLogFiles(nextFiles)
+    setLogCollection(nextCollection)
   }, [])
+
+  const applyLogFileUpdates = useCallback((updates) => {
+    if (!updates || updates.length === 0) return
+
+    const fileMap = new Map((logFilesRef.current || []).map((file) => [file.id, file]))
+    updates.forEach((file) => {
+      if (file?.id) {
+        fileMap.set(file.id, { ...fileMap.get(file.id), ...file })
+      }
+    })
+
+    const nextFiles = sortLogFiles(Array.from(fileMap.values()))
+    const nextCollection = summarizeLogCollection(logCollectionRef.current, nextFiles)
+
+    logFilesRef.current = nextFiles
+    logCollectionRef.current = nextCollection
+    setLogFiles(nextFiles)
+    setLogCollection(nextCollection)
+  }, [])
+
+  useEffect(() => {
+    loadAgents({ showLoading: true, includeGroups: true })
+    loadScreenMonitorSetting()
+    // 每30秒静默刷新核心状态，避免整页 loading
+    const interval = setInterval(() => {
+      loadAgents({ showLoading: false, includeGroups: false })
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [loadAgents])
 
   useEffect(() => {
     filterAgents()
   }, [searchText, statusFilter, agents])
+
+  const loadLatestLogCollection = useCallback(async (agentId, autoTrigger = true, options = {}) => {
+    if (!agentId) return null
+    const { showLoading = true } = options
+
+    if (showLoading) {
+      setLogLoading(true)
+    }
+    try {
+      const response = await api.get(`/web/agents/${agentId}/log-collections/latest`)
+      if (response && response.id) {
+        return response
+      }
+
+      if (!autoTrigger) {
+        return null
+      }
+
+      return await api.post(`/web/agents/${agentId}/log-collections`)
+    } catch (error) {
+      if (!autoTrigger) {
+        throw error
+      }
+      return await api.post(`/web/agents/${agentId}/log-collections`)
+    } finally {
+      if (showLoading) {
+        setLogLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!logModalVisible || !logAgent) return undefined
+
+    if (logCollection && ((logCollection.totalFiles || 0) > 0 || logCollection.status === 'FAILED' || logCollection.status === 'READY' || logCollection.status === 'PARTIAL_READY')) {
+      return undefined
+    }
+
+    const interval = setInterval(() => {
+      loadLatestLogCollection(logAgent.agentId || logAgent.id, false, { showLoading: false })
+        .then((response) => {
+          if (response?.id) {
+            applyLogCollectionSnapshot(response)
+          }
+        })
+        .catch((error) => {
+          console.error('轮询Agent日志清单失败:', error)
+        })
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [logModalVisible, logAgent, logCollection, loadLatestLogCollection, applyLogCollectionSnapshot])
+
+  useEffect(() => {
+    if (!logModalVisible || !logAgent || !logCollection?.id || logFiles.length === 0) return undefined
+
+    const pendingFiles = logFiles.filter(isLogFilePending)
+    if (pendingFiles.length === 0) return undefined
+
+    const interval = setInterval(async () => {
+      try {
+        const results = await Promise.allSettled(
+          pendingFiles.map((file) =>
+            api.get(`/web/agents/${logAgent.agentId || logAgent.id}/log-collections/${logCollection.id}/files/${file.id}`)
+          )
+        )
+        const updates = results
+          .filter((result) => result.status === 'fulfilled' && result.value?.id)
+          .map((result) => result.value)
+        applyLogFileUpdates(updates)
+      } catch (error) {
+        console.error('轮询Agent日志文件失败:', error)
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [logModalVisible, logAgent, logCollection?.id, logFiles, applyLogFileUpdates])
 
   const filterAgents = () => {
     let filtered = agents
@@ -205,8 +422,83 @@ const Agents = () => {
   }
 
   const handleRefresh = async () => {
-    loadAgents()
+    await loadAgents({ showLoading: true, includeGroups: true })
     message.success('数据已刷新')
+  }
+
+  const handleOpenLogs = async (agent) => {
+    setLogAgent(agent)
+    setLogRefreshLocked(false)
+    setLogCollection(null)
+    setLogFiles([])
+    setLogModalVisible(true)
+    try {
+      const response = await loadLatestLogCollection(agent.agentId || agent.id, true, { showLoading: true })
+      if (response) {
+        applyLogCollectionSnapshot(response)
+      }
+    } catch (error) {
+      console.error('加载Agent日志失败:', error)
+      message.error('加载Agent日志失败: ' + (error.message || '未知错误'))
+    }
+  }
+
+  const handleViewLogContent = async (file) => {
+    if (!logAgent || !logCollection) return
+    if (file.uploadStatus !== 'SUCCESS') {
+      message.info('日志还在收集中，请稍后再试')
+      return
+    }
+
+    setLogContentVisible(true)
+    setLogContentLoading(true)
+    setLogContent('')
+    setLogContentFile(file)
+    try {
+      const response = await api.get(
+        `/web/agents/${logAgent.agentId || logAgent.id}/log-collections/${logCollection.id}/files/${file.id}/content`
+      )
+      setLogContent(response?.content || '')
+    } catch (error) {
+      console.error('读取日志内容失败:', error)
+      message.error('读取日志内容失败: ' + (error.message || '未知错误'))
+    } finally {
+      setLogContentLoading(false)
+    }
+  }
+
+  const handleRecollectLogs = async () => {
+    if (!logAgent || logRefreshLocked) return
+    setLogLoading(true)
+    try {
+      const response = await api.post(`/web/agents/${logAgent.agentId || logAgent.id}/log-collections`)
+      applyLogCollectionSnapshot(response)
+      setLogRefreshLocked(true)
+      message.success('已重新触发全部日志收集')
+    } catch (error) {
+      console.error('重新收集Agent日志失败:', error)
+      message.error('重新收集Agent日志失败: ' + (error.message || '未知错误'))
+    } finally {
+      setLogLoading(false)
+    }
+  }
+
+  const handleRecollectLogFile = async (file) => {
+    if (!logAgent || !logCollection || !file?.id) return
+
+    setLogFileActionId(file.id)
+    try {
+      const response = await api.post(
+        `/web/agents/${logAgent.agentId || logAgent.id}/log-collections/${logCollection.id}/files/${file.id}/recollect`
+      )
+      applyLogCollectionSnapshot(response)
+      message.success(`已重新触发日志上传: ${file.fileName}`)
+    } catch (error) {
+      console.error('重新上传Agent日志失败:', error)
+      message.error('重新上传Agent日志失败: ' + (error.message || '未知错误'))
+    } finally {
+      setLogFileActionId(null)
+    }
   }
 
   const handleDeleteAgent = async (agent) => {
@@ -266,7 +558,7 @@ echo ===== Network Connections =====
 netstat -an | findstr LISTENING
 echo.
 echo ===== Running Processes (Top 15 by Memory) =====
-tasklist /FO CSV | sort /R /+5 | head -16
+powershell -NoProfile -Command "Get-Process | Sort-Object WS -Descending | Select-Object -First 15 ProcessName,Id,@{Name='MemoryMB';Expression={[math]::Round($_.WS/1MB,2)}} | Format-Table -AutoSize"
 echo.
 echo ===== Services Status =====
 sc query state= all | findstr "SERVICE_NAME STATE"
@@ -509,6 +801,14 @@ env | sort
           >
             详情
           </Button>
+          <Button
+            type="link"
+            icon={<FileTextOutlined />}
+            size="small"
+            onClick={() => handleOpenLogs(record)}
+          >
+            日志
+          </Button>
           <Button 
             type="link" 
             icon={<DeleteOutlined />} 
@@ -541,7 +841,7 @@ env | sort
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => window.open('http://8.138.114.34/client-install.html', '_blank')}
+            onClick={() => window.open(`${PORTAL_BASE_URL}/client-install.html`, '_blank')}
           >
             安装客户端
           </Button>
@@ -624,6 +924,18 @@ env | sort
         style={{ top: 20 }}
         bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
         footer={[
+          <Button
+            key="logs"
+            icon={<FileTextOutlined />}
+            onClick={() => {
+              if (selectedAgent) {
+                handleOpenLogs(selectedAgent)
+              }
+            }}
+          >
+            日志
+          </Button>,
+          ...(screenMonitorEnabled ? [
           <Button 
             key="screen"
             icon={<VideoCameraOutlined />}
@@ -639,7 +951,8 @@ env | sort
             }
           >
             屏幕监控
-          </Button>,
+          </Button>
+          ] : []),
           <Button 
             key="collect" 
             type="primary"
@@ -857,7 +1170,212 @@ env | sort
         visible={screenMonitorVisible}
         onClose={() => setScreenMonitorVisible(false)}
       />
+
+      <AgentLogModal
+        visible={logModalVisible}
+        agent={logAgent}
+        collection={logCollection}
+        files={logFiles}
+        loading={logLoading}
+        refreshLocked={logRefreshLocked}
+        fileActionId={logFileActionId}
+        onClose={() => {
+          setLogModalVisible(false)
+          setLogAgent(null)
+          setLogCollection(null)
+          setLogFiles([])
+          setLogRefreshLocked(false)
+          setLogFileActionId(null)
+        }}
+        onRefresh={handleRecollectLogs}
+        onViewContent={handleViewLogContent}
+        onRecollectFile={handleRecollectLogFile}
+      />
+
+      <Modal
+        title={`日志内容 - ${logContentFile?.fileName || ''}`}
+        open={logContentVisible}
+        onCancel={() => setLogContentVisible(false)}
+        width={1000}
+        footer={[
+          <Button key="close" onClick={() => setLogContentVisible(false)}>
+            关闭
+          </Button>
+        ]}
+      >
+        {logContentLoading ? (
+          <div className="py-12 text-center">
+            <Spin />
+          </div>
+        ) : (
+          <pre
+            style={{
+              maxHeight: '65vh',
+              overflow: 'auto',
+              background: '#111827',
+              color: '#e5e7eb',
+              padding: 16,
+              borderRadius: 8,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              margin: 0,
+            }}
+          >
+            {logContent || '日志内容为空'}
+          </pre>
+        )}
+      </Modal>
     </div>
+  )
+}
+
+const formatFileSize = (size) => {
+  if (!size && size !== 0) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
+
+const renderLogStatus = (status) => {
+  const statusMap = {
+    COLLECTING: { color: 'processing', text: '收集中' },
+    READY: { color: 'success', text: '已完成' },
+    FAILED: { color: 'error', text: '失败' },
+    PARTIAL_READY: { color: 'warning', text: '部分完成' },
+    PENDING: { color: 'default', text: '待收集' },
+    QUEUED: { color: 'processing', text: '排队中' },
+    UPLOADING: { color: 'processing', text: '上传中' },
+    SUCCESS: { color: 'success', text: '已上传' },
+  }
+  const config = statusMap[status] || { color: 'default', text: status || '未知' }
+  return <Tag color={config.color}>{config.text}</Tag>
+}
+
+const AgentLogModal = ({ visible, agent, collection, files, loading, refreshLocked, fileActionId, onClose, onRefresh, onViewContent, onRecollectFile }) => {
+  const columns = [
+    {
+      title: '日志文件',
+      dataIndex: 'fileName',
+      key: 'fileName',
+      render: (text, record) => (
+        <div>
+          <Text strong>{text}</Text>
+          <div className="text-xs text-gray-500">{record.relativePath}</div>
+        </div>
+      ),
+    },
+    {
+      title: '大小',
+      dataIndex: 'fileSize',
+      key: 'fileSize',
+      width: 120,
+      render: (value) => formatFileSize(value),
+    },
+    {
+      title: '更新时间',
+      dataIndex: 'modifiedAt',
+      key: 'modifiedAt',
+      width: 180,
+      render: (value) => value ? new Date(value).toLocaleString('zh-CN') : '-',
+    },
+    {
+      title: '收集状态',
+      dataIndex: 'uploadStatus',
+      key: 'uploadStatus',
+      width: 120,
+      render: (value) => renderLogStatus(value),
+    },
+    {
+      title: '上传时间',
+      dataIndex: 'uploadedAt',
+      key: 'uploadedAt',
+      width: 180,
+      render: (value) => value ? new Date(value).toLocaleString('zh-CN') : '-',
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 220,
+      render: (_, record) => (
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            disabled={record.uploadStatus !== 'SUCCESS'}
+            onClick={() => onViewContent(record)}
+          >
+            查看
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            loading={fileActionId === record.id}
+            disabled={record.uploadStatus === 'QUEUED' || record.uploadStatus === 'UPLOADING'}
+            onClick={() => onRecollectFile(record)}
+          >
+            重新上传
+          </Button>
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <Modal
+      title={`Agent日志 - ${agent?.hostname || ''}`}
+      open={visible}
+      onCancel={onClose}
+      width={980}
+      footer={[
+        <Button key="refresh" onClick={onRefresh} loading={loading} disabled={refreshLocked}>
+          重新收集全部
+        </Button>,
+        <Button key="close" onClick={onClose}>
+          关闭
+        </Button>
+      ]}
+    >
+      <div className="space-y-4">
+        <Card size="small">
+          <Space split={<Divider type="vertical" />}>
+            <div>
+              <Text type="secondary">收集批次</Text>
+              <div>{collection?.id || '准备中'}</div>
+            </div>
+            <div>
+              <Text type="secondary">总体状态</Text>
+              <div>{renderLogStatus(collection?.status || 'COLLECTING')}</div>
+            </div>
+            <div>
+              <Text type="secondary">文件统计</Text>
+              <div>
+                {collection
+                  ? `共 ${collection.totalFiles || 0} 个，完成 ${collection.successFiles || 0} 个，待处理 ${collection.pendingFiles || 0} 个`
+                  : '正在触发日志收集'}
+              </div>
+            </div>
+          </Space>
+        </Card>
+
+        {loading ? (
+          <div className="py-12 text-center">
+            <Spin />
+          </div>
+        ) : files.length > 0 ? (
+          <Table
+            rowKey="id"
+            columns={columns}
+            dataSource={files}
+            size="small"
+            pagination={false}
+            scroll={{ y: 420 }}
+          />
+        ) : (
+          <Empty description="正在收集日志清单，请稍候刷新" />
+        )}
+      </div>
+    </Modal>
   )
 }
 

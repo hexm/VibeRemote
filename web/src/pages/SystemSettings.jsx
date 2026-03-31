@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Input, Modal, Form, message, Tooltip, Collapse, Select } from 'antd'
+import { Card, Table, Tag, Button, Space, Typography, Input, Modal, Form, message, Tooltip, Collapse, Select, Switch } from 'antd'
 import {
   SettingOutlined,
   SearchOutlined,
@@ -15,18 +15,18 @@ import api from '../services/auth'
 
 const { Title, Text } = Typography
 const { Search, TextArea } = Input
-const { Panel } = Collapse
 const { Option } = Select
 
 const SystemSettings = () => {
   const [loading, setLoading] = useState(false)
   const [settings, setSettings] = useState([])
   const [settingsByCategory, setSettingsByCategory] = useState({})
-  const [editModalVisible, setEditModalVisible] = useState(false)
   const [createModalVisible, setCreateModalVisible] = useState(false)
-  const [selectedSetting, setSelectedSetting] = useState(null)
   const [searchKeyword, setSearchKeyword] = useState('')
-  const [form] = Form.useForm()
+  const [editingKey, setEditingKey] = useState(null)
+  const [editingValue, setEditingValue] = useState('')
+  const [savingKey, setSavingKey] = useState(null)
+  const [createForm] = Form.useForm()
 
   useEffect(() => {
     fetchSettings()
@@ -49,26 +49,43 @@ const SystemSettings = () => {
     }
   }
 
-  const handleEdit = (setting) => {
-    setSelectedSetting(setting)
-    form.setFieldsValue({
-      settingValue: setting.settingValue
+  const refreshSettingInState = (updatedSetting) => {
+    setSettings(prev => prev.map(item => item.id === updatedSetting.id ? updatedSetting : item))
+    setSettingsByCategory(prev => {
+      const next = {}
+      Object.entries(prev).forEach(([category, categorySettings]) => {
+        next[category] = categorySettings.map(item => item.id === updatedSetting.id ? updatedSetting : item)
+      })
+      return next
     })
-    setEditModalVisible(true)
   }
 
-  const handleUpdate = async (values) => {
+  const handleEdit = (setting) => {
+    setEditingKey(setting.id)
+    setEditingValue(setting.settingValue ?? '')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingKey(null)
+    setEditingValue('')
+  }
+
+  const handleUpdate = async (setting, nextValue, successMessage = '参数更新成功') => {
     try {
-      await api.put(`/web/system-settings/${selectedSetting.id}`, {
-        value: values.settingValue
+      setSavingKey(setting.id)
+      const updated = await api.put(`/web/system-settings/${setting.id}`, {
+        value: String(nextValue)
       })
-      message.success('参数更新成功')
-      setEditModalVisible(false)
-      form.resetFields()
-      fetchSettings()
+      refreshSettingInState(updated)
+      message.success(successMessage)
+      if (editingKey === setting.id) {
+        handleCancelEdit()
+      }
     } catch (error) {
       console.error('更新参数失败:', error)
       message.error('更新参数失败: ' + (error.response?.data?.message || error.message))
+    } finally {
+      setSavingKey(null)
     }
   }
 
@@ -77,7 +94,7 @@ const SystemSettings = () => {
       await api.post('/web/system-settings', values)
       message.success('参数创建成功')
       setCreateModalVisible(false)
-      form.resetFields()
+      createForm.resetFields()
       fetchSettings()
     } catch (error) {
       console.error('创建参数失败:', error)
@@ -115,6 +132,8 @@ const SystemSettings = () => {
     return colors[type] || 'default'
   }
 
+  const isBooleanSetting = (setting) => setting.settingType === 'BOOLEAN'
+
   const renderValue = (setting) => {
     if (setting.isEncrypted) {
       return (
@@ -124,11 +143,48 @@ const SystemSettings = () => {
         </Space>
       )
     }
-    
-    if (setting.settingType === 'BOOLEAN') {
-      return <Tag color={setting.settingValue === 'true' ? 'success' : 'default'}>
-        {setting.settingValue}
-      </Tag>
+
+    if (isBooleanSetting(setting)) {
+      return (
+        <Switch
+          checked={String(setting.settingValue).toLowerCase() === 'true'}
+          checkedChildren="开"
+          unCheckedChildren="关"
+          loading={savingKey === setting.id}
+          onChange={(checked) => handleUpdate(setting, checked, `已${checked ? '开启' : '关闭'} ${setting.settingKey}`)}
+        />
+      )
+    }
+
+    if (editingKey === setting.id) {
+      if (setting.settingType === 'NUMBER') {
+        return (
+          <Input
+            type="number"
+            value={editingValue}
+            onChange={(e) => setEditingValue(e.target.value)}
+            onPressEnter={() => handleUpdate(setting, editingValue)}
+          />
+        )
+      }
+
+      if (setting.settingType === 'JSON') {
+        return (
+          <TextArea
+            rows={4}
+            value={editingValue}
+            onChange={(e) => setEditingValue(e.target.value)}
+          />
+        )
+      }
+
+      return (
+        <Input
+          value={editingValue}
+          onChange={(e) => setEditingValue(e.target.value)}
+          onPressEnter={() => handleUpdate(setting, editingValue)}
+        />
+      )
     }
     
     if (setting.settingType === 'JSON') {
@@ -175,25 +231,51 @@ const SystemSettings = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 120,
+      width: 150,
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          <Tooltip title="编辑">
-            <Button 
-              type="text" 
-              icon={<EditOutlined />} 
-              size="small"
-              onClick={() => handleEdit(record)}
-              className="text-blue-500 hover:bg-blue-50"
-            />
-          </Tooltip>
+          {!isBooleanSetting(record) && editingKey !== record.id && (
+            <Tooltip title="编辑">
+              <Button
+                type="text"
+                icon={<EditOutlined />}
+                size="small"
+                onClick={() => handleEdit(record)}
+                className="text-blue-500 hover:bg-blue-50"
+              />
+            </Tooltip>
+          )}
+          {!isBooleanSetting(record) && editingKey === record.id && (
+            <>
+              <Tooltip title="保存">
+                <Button
+                  type="text"
+                  icon={<SaveOutlined />}
+                  size="small"
+                  loading={savingKey === record.id}
+                  onClick={() => handleUpdate(record, editingValue)}
+                  className="text-green-600 hover:bg-green-50"
+                />
+              </Tooltip>
+              <Tooltip title="取消">
+                <Button
+                  type="text"
+                  size="small"
+                  onClick={handleCancelEdit}
+                >
+                  取消
+                </Button>
+              </Tooltip>
+            </>
+          )}
           <Tooltip title="删除">
             <Button 
               type="text" 
               icon={<DeleteOutlined />} 
               size="small"
               danger
+              disabled={savingKey === record.id}
               onClick={() => handleDelete(record)}
             />
           </Tooltip>
@@ -208,6 +290,26 @@ const SystemSettings = () => {
         s.description?.toLowerCase().includes(searchKeyword.toLowerCase())
       )
     : null
+
+  const collapseItems = Object.entries(settingsByCategory).map(([category, categorySettings]) => ({
+    key: category,
+    label: (
+      <Space>
+        <Text strong>{category}</Text>
+        <Tag color="blue">{categorySettings.length} 个参数</Tag>
+      </Space>
+    ),
+    children: (
+      <Table
+        columns={columns}
+        dataSource={categorySettings}
+        loading={loading}
+        rowKey="id"
+        pagination={false}
+        size="small"
+      />
+    ),
+  }))
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -274,86 +376,9 @@ const SystemSettings = () => {
       ) : (
         // 正常模式：按类别分组显示
         <Card className="shadow-lg">
-          <Collapse defaultActiveKey={Object.keys(settingsByCategory)}>
-            {Object.entries(settingsByCategory).map(([category, categorySettings]) => (
-              <Panel 
-                header={
-                  <Space>
-                    <Text strong>{category}</Text>
-                    <Tag color="blue">{categorySettings.length} 个参数</Tag>
-                  </Space>
-                }
-                key={category}
-              >
-                <Table
-                  columns={columns}
-                  dataSource={categorySettings}
-                  loading={loading}
-                  rowKey="id"
-                  pagination={false}
-                  size="small"
-                />
-              </Panel>
-            ))}
-          </Collapse>
+          <Collapse defaultActiveKey={Object.keys(settingsByCategory)} items={collapseItems} />
         </Card>
       )}
-
-      {/* 编辑参数模态框 */}
-      <Modal
-        title={`编辑参数 - ${selectedSetting?.settingKey}`}
-        open={editModalVisible}
-        onCancel={() => {
-          setEditModalVisible(false)
-          form.resetFields()
-        }}
-        footer={[
-          <Button key="cancel" onClick={() => {
-            setEditModalVisible(false)
-            form.resetFields()
-          }}>
-            取消
-          </Button>,
-          <Button key="submit" type="primary" icon={<SaveOutlined />} onClick={() => form.submit()}>
-            保存
-          </Button>
-        ]}
-        width={600}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleUpdate}
-          className="mt-4"
-        >
-          <div className="mb-4 p-3 bg-gray-50 rounded">
-            <Space direction="vertical" size="small">
-              <div><Text type="secondary">参数键：</Text><Text code>{selectedSetting?.settingKey}</Text></div>
-              <div><Text type="secondary">类型：</Text><Tag color={getTypeColor(selectedSetting?.settingType)}>{selectedSetting?.settingType}</Tag></div>
-              <div><Text type="secondary">描述：</Text><Text>{selectedSetting?.description}</Text></div>
-            </Space>
-          </div>
-
-          <Form.Item
-            name="settingValue"
-            label="参数值"
-            rules={[{ required: true, message: '请输入参数值' }]}
-          >
-            {selectedSetting?.settingType === 'JSON' ? (
-              <TextArea rows={6} placeholder="输入JSON格式的参数值" />
-            ) : selectedSetting?.settingType === 'BOOLEAN' ? (
-              <Select>
-                <Option value="true">true</Option>
-                <Option value="false">false</Option>
-              </Select>
-            ) : selectedSetting?.settingType === 'NUMBER' ? (
-              <Input type="number" placeholder="输入数字" />
-            ) : (
-              <Input placeholder="输入参数值" />
-            )}
-          </Form.Item>
-        </Form>
-      </Modal>
 
       {/* 创建参数模态框 */}
       <Modal
@@ -361,23 +386,23 @@ const SystemSettings = () => {
         open={createModalVisible}
         onCancel={() => {
           setCreateModalVisible(false)
-          form.resetFields()
+          createForm.resetFields()
         }}
         footer={[
           <Button key="cancel" onClick={() => {
             setCreateModalVisible(false)
-            form.resetFields()
+            createForm.resetFields()
           }}>
             取消
           </Button>,
-          <Button key="submit" type="primary" icon={<PlusOutlined />} onClick={() => form.submit()}>
+          <Button key="submit" type="primary" icon={<PlusOutlined />} onClick={() => createForm.submit()}>
             创建
           </Button>
         ]}
         width={600}
       >
         <Form
-          form={form}
+          form={createForm}
           layout="vertical"
           onFinish={handleCreate}
           className="mt-4"

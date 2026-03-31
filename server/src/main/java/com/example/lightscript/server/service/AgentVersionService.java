@@ -21,6 +21,7 @@ public class AgentVersionService {
     
     private final AgentVersionRepository versionRepository;
     private final FileService fileService;
+    private final SystemSettingService systemSettingService;
 
     @Value("${lightscript.agent.public-base-url:http://localhost:8080}")
     private String agentPublicBaseUrl;
@@ -36,7 +37,8 @@ public class AgentVersionService {
         
         // 找到版本号最高的版本
         return activeVersions.stream()
-            .max((v1, v2) -> compareVersions(v1.getVersion(), v2.getVersion()));
+            .max((v1, v2) -> compareVersions(v1.getVersion(), v2.getVersion()))
+            .map(this::resolveDownloadUrl);
     }
     
     /**
@@ -52,7 +54,8 @@ public class AgentVersionService {
      * 根据版本号获取版本信息
      */
     public Optional<AgentVersion> getVersionByNumber(String version) {
-        return versionRepository.findByVersionAndStatus(version, "ACTIVE");
+        return versionRepository.findByVersionAndStatus(version, "ACTIVE")
+            .map(this::resolveDownloadUrl);
     }
     
     /**
@@ -73,8 +76,9 @@ public class AgentVersionService {
         
         // 比较版本号
         if (compareVersions(latest.getVersion(), currentVersion) > 0) {
-            boolean forceUpgrade = latest.getForceUpgrade() || isForceUpgradeRequired(currentVersion);
-            return new VersionCheckResult(true, latest, forceUpgrade ? "Force upgrade required" : "Update available");
+            AgentVersion resolvedVersion = resolveDownloadUrl(latest);
+            boolean forceUpgrade = resolvedVersion.getForceUpgrade() || isForceUpgradeRequired(currentVersion);
+            return new VersionCheckResult(true, resolvedVersion, forceUpgrade ? "Force upgrade required" : "Update available");
         }
         
         return new VersionCheckResult(false, null, "Already up to date");
@@ -192,11 +196,50 @@ public class AgentVersionService {
     }
 
     private String buildAgentDownloadUrl(String fileId) {
-        String baseUrl = agentPublicBaseUrl != null ? agentPublicBaseUrl.trim() : "";
+        String baseUrl = resolveAgentPublicBaseUrl();
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
         return baseUrl + "/api/web/files/" + fileId + "/download-for-agent";
+    }
+
+    private String resolveAgentPublicBaseUrl() {
+        String settingValue = systemSettingService.getSettingValue("agent.upgrade.public_base_url", null);
+        if (settingValue != null && !settingValue.trim().isEmpty()) {
+            return settingValue.trim();
+        }
+        return agentPublicBaseUrl != null ? agentPublicBaseUrl.trim() : "";
+    }
+
+    private AgentVersion resolveDownloadUrl(AgentVersion source) {
+        if (source == null) {
+            return null;
+        }
+
+        AgentVersion resolved = new AgentVersion();
+        resolved.setId(source.getId());
+        resolved.setVersion(source.getVersion());
+        resolved.setBuildNumber(source.getBuildNumber());
+        resolved.setReleaseNotes(source.getReleaseNotes());
+        resolved.setFileId(source.getFileId());
+        resolved.setOriginalFilename(source.getOriginalFilename());
+        resolved.setFileSize(source.getFileSize());
+        resolved.setFileHash(source.getFileHash());
+        resolved.setIsCurrent(source.getIsCurrent());
+        resolved.setIsLatest(source.getIsLatest());
+        resolved.setMinCompatibleVersion(source.getMinCompatibleVersion());
+        resolved.setForceUpgrade(source.getForceUpgrade());
+        resolved.setPlatform(source.getPlatform());
+        resolved.setStatus(source.getStatus());
+        resolved.setCreatedAt(source.getCreatedAt());
+        resolved.setCreatedBy(source.getCreatedBy());
+        resolved.setUpdatedAt(source.getUpdatedAt());
+        if (source.getFileId() != null && !source.getFileId().trim().isEmpty()) {
+            resolved.setDownloadUrl(buildAgentDownloadUrl(source.getFileId()));
+        } else {
+            resolved.setDownloadUrl(source.getDownloadUrl());
+        }
+        return resolved;
     }
     
     /**

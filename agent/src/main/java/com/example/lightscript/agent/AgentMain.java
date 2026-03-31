@@ -17,6 +17,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -379,20 +380,27 @@ public class AgentMain {
                     logger.info("RECEIVED {} TASKS FROM SERVER", tasks.size());
                     logger.info("========================================");
                     for (Map<String, Object> task : tasks) {
-                        String taskId = String.valueOf(task.get("taskId"));
+                        String taskId = nullableString(task.get("taskId"));
                         Long executionId = task.get("executionId") != null ? 
                             ((Number) task.get("executionId")).longValue() : null;
-                        String taskType = String.valueOf(task.getOrDefault("taskType", "SCRIPT"));
-                        String scriptLang = String.valueOf(task.get("scriptLang"));
-                        String scriptContent = String.valueOf(task.get("scriptContent"));
+                        String taskType = normalizeTaskType(task.get("taskType"));
+                        String scriptLang = nullableString(task.get("scriptLang"));
+                        String scriptContent = nullableString(task.get("scriptContent"));
                         Integer timeoutSec = (Integer) task.getOrDefault("timeoutSec", 300);
                         
                         // 文件传输相关字段
-                        String fileId = String.valueOf(task.get("fileId"));
-                        String targetPath = String.valueOf(task.get("targetPath"));
-                        String sourcePath = String.valueOf(task.get("sourcePath"));
+                        String fileId = nullableString(task.get("fileId"));
+                        String targetPath = nullableString(task.get("targetPath"));
+                        String sourcePath = nullableString(task.get("sourcePath"));
+                        String relativePath = nullableString(task.get("relativePath"));
                         Long maxUploadSizeBytes = task.get("maxUploadSizeBytes") instanceof Number
                             ? ((Number) task.get("maxUploadSizeBytes")).longValue()
+                            : null;
+                        Long logCollectionId = task.get("logCollectionId") instanceof Number
+                            ? ((Number) task.get("logCollectionId")).longValue()
+                            : null;
+                        Long logFileId = task.get("logFileId") instanceof Number
+                            ? ((Number) task.get("logFileId")).longValue()
                             : null;
                         Boolean overwriteExisting = (Boolean) task.getOrDefault("overwriteExisting", false);
                         Boolean verifyChecksum = (Boolean) task.getOrDefault("verifyChecksum", true);
@@ -406,10 +414,15 @@ public class AgentMain {
                         } else if ("FILE_UPLOAD".equals(taskType)) {
                             logger.debug("File upload - sourcePath: {}", sourcePath);
                             logger.debug("File upload - maxUploadSizeBytes: {}", maxUploadSizeBytes);
+                        } else if ("AGENT_LOG_INDEX".equals(taskType)) {
+                            logger.debug("Agent log index - logCollectionId: {}", logCollectionId);
+                        } else if ("AGENT_LOG_UPLOAD".equals(taskType)) {
+                            logger.debug("Agent log upload - logCollectionId: {}, logFileId: {}, relativePath: {}",
+                                logCollectionId, logFileId, relativePath);
                         }
                         
                         // 检查基本字段
-                        if (taskId == null || "null".equals(taskId) || executionId == null) {
+                        if (taskId == null || taskId.trim().isEmpty() || executionId == null) {
                             logger.error("✗ INVALID TASK DATA - taskId or executionId is null");
                             logger.error("  taskId: {}, executionId: {}", taskId, executionId);
                             continue;
@@ -420,21 +433,32 @@ public class AgentMain {
                         String errorMessage = null;
                         
                         if ("FILE_TRANSFER".equals(taskType)) {
-                            if (fileId == null || "null".equals(fileId) || targetPath == null || "null".equals(targetPath)) {
+                            if (fileId == null || targetPath == null) {
                                 isValidTask = false;
                                 errorMessage = "Invalid file transfer task - fileId or targetPath is null. fileId: " + fileId + ", targetPath: " + targetPath;
                                 logger.error("✗ INVALID FILE TRANSFER TASK");
                                 logger.error("  fileId: {}, targetPath: {}", fileId, targetPath);
                             }
                         } else if ("FILE_UPLOAD".equals(taskType)) {
-                            if (sourcePath == null || "null".equals(sourcePath) || sourcePath.trim().isEmpty()) {
+                            if (sourcePath == null || sourcePath.trim().isEmpty()) {
                                 isValidTask = false;
                                 errorMessage = "Invalid file upload task - sourcePath is null";
                                 logger.error("✗ INVALID FILE UPLOAD TASK");
                                 logger.error("  sourcePath: {}", sourcePath);
                             }
+                        } else if ("AGENT_LOG_INDEX".equals(taskType)) {
+                            if (logCollectionId == null) {
+                                isValidTask = false;
+                                errorMessage = "Invalid agent log index task - logCollectionId is null";
+                            }
+                        } else if ("AGENT_LOG_UPLOAD".equals(taskType)) {
+                            if (logCollectionId == null || logFileId == null || relativePath == null ||
+                                relativePath.trim().isEmpty()) {
+                                isValidTask = false;
+                                errorMessage = "Invalid agent log upload task - logCollectionId/logFileId/relativePath invalid";
+                            }
                         } else {
-                            if (scriptContent == null || "null".equals(scriptContent)) {
+                            if (scriptContent == null) {
                                 isValidTask = false;
                                 errorMessage = "Invalid script task - scriptContent is null";
                                 logger.error("✗ INVALID SCRIPT TASK - scriptContent is null");
@@ -469,6 +493,9 @@ public class AgentMain {
                         final String finalTargetPath = targetPath;
                         final String finalSourcePath = sourcePath;
                         final Long finalMaxUploadSizeBytes = maxUploadSizeBytes;
+                        final Long finalLogCollectionId = logCollectionId;
+                        final Long finalLogFileId = logFileId;
+                        final String finalRelativePath = relativePath;
                         final boolean finalOverwriteExisting = overwriteExisting;
                         final boolean finalVerifyChecksum = verifyChecksum;
                         
@@ -478,9 +505,10 @@ public class AgentMain {
                             try {
                                 taskRunner.runTask(finalExecutionId, taskId, finalTaskType, scriptLang, scriptContent, 
                                                  timeoutSec, finalFileId, finalTargetPath, finalSourcePath,
-                                                 finalMaxUploadSizeBytes, finalOverwriteExisting, finalVerifyChecksum);
-                            } catch (Exception e) {
-                                logger.error("[TASK-{}] ✗ Error in taskExecutor thread: {}", finalExecutionId, e.getMessage(), e);
+                                                 finalMaxUploadSizeBytes, finalOverwriteExisting, finalVerifyChecksum,
+                                                 finalLogCollectionId, finalLogFileId, finalRelativePath);
+                            } catch (Throwable t) {
+                                logger.error("[TASK-{}] ✗ Error in taskExecutor thread: {}", finalExecutionId, t.getMessage(), t);
                             }
                         });
                     }
@@ -624,6 +652,25 @@ public class AgentMain {
         } catch (Exception e) {
             System.err.println("[VersionCheck] Failed to process version check response: " + e.getMessage());
         }
+    }
+
+    private static String normalizeTaskType(Object value) {
+        String raw = nullableString(value);
+        if (raw == null) {
+            return "SCRIPT";
+        }
+        return raw.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String nullableString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value);
+        if ("null".equalsIgnoreCase(text)) {
+            return null;
+        }
+        return text;
     }
     
     /**

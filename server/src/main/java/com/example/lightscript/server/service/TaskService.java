@@ -100,6 +100,7 @@ public class TaskService {
         task.setEnv(taskSpec.getEnv());
         task.setCreatedBy(createdBy);
         task.setCreatedAt(LocalDateTime.now());
+        task.setInternalTask(false);
         
         // 保存目标代理列表
         task.setTargetAgentIds(String.join(",", agentIds));
@@ -174,6 +175,7 @@ public class TaskService {
         task.setCreatedAt(LocalDateTime.now());
         task.setTargetAgentIds(String.join(",", request.getAgentIds()));
         task.setTaskStatus("PENDING"); // 文件传输任务自动启动
+        task.setInternalTask(false);
         
         // 设置文件传输配置
         task.setOverwriteExisting(request.getOverwriteExisting());
@@ -245,6 +247,7 @@ public class TaskService {
         task.setCreatedAt(LocalDateTime.now());
         task.setTargetAgentIds(String.join(",", request.getAgentIds()));
         task.setTaskStatus("PENDING");
+        task.setInternalTask(false);
 
         task = taskRepository.save(task);
         log.info("File upload task created: {}, sourcePath: {}, targets: {}",
@@ -506,7 +509,7 @@ public class TaskService {
      * 获取所有任务
      */
     public Page<TaskModels.TaskDTO> getAllTasksWithStatus(Pageable pageable) {
-        Page<Task> taskPage = taskRepository.findAll(pageable);
+        Page<Task> taskPage = taskRepository.findByInternalTaskFalse(pageable);
         
         List<TaskModels.TaskDTO> taskDTOs = taskPage.getContent().stream()
                 .map(task -> {
@@ -522,7 +525,7 @@ public class TaskService {
      * 按状态获取任务
      */
     public Page<TaskModels.TaskDTO> getTasksByStatus(String status, Pageable pageable) {
-        Page<Task> taskPage = taskRepository.findByTaskStatus(status, pageable);
+        Page<Task> taskPage = taskRepository.findByTaskStatusAndInternalTaskFalse(status, pageable);
         
         List<TaskModels.TaskDTO> taskDTOs = taskPage.getContent().stream()
                 .map(task -> {
@@ -542,16 +545,16 @@ public class TaskService {
         
         if (status != null && !status.isEmpty() && taskType != null && !taskType.isEmpty()) {
             // 同时按状态和类型筛选
-            taskPage = taskRepository.findByTaskStatusAndTaskType(status, taskType, pageable);
+            taskPage = taskRepository.findByTaskStatusAndTaskTypeAndInternalTaskFalse(status, taskType, pageable);
         } else if (status != null && !status.isEmpty()) {
             // 只按状态筛选
-            taskPage = taskRepository.findByTaskStatus(status, pageable);
+            taskPage = taskRepository.findByTaskStatusAndInternalTaskFalse(status, pageable);
         } else if (taskType != null && !taskType.isEmpty()) {
             // 只按类型筛选
-            taskPage = taskRepository.findByTaskType(taskType, pageable);
+            taskPage = taskRepository.findByTaskTypeAndInternalTaskFalse(taskType, pageable);
         } else {
             // 无筛选条件
-            taskPage = taskRepository.findAll(pageable);
+            taskPage = taskRepository.findByInternalTaskFalse(pageable);
         }
         
         List<TaskModels.TaskDTO> taskDTOs = taskPage.getContent().stream()
@@ -799,6 +802,48 @@ public class TaskService {
                 })
                 .collect(Collectors.toList());
     }
+
+    @Transactional
+    public TaskExecution createInternalTaskExecution(String agentId, TaskSpec taskSpec, String createdBy) {
+        if (agentId == null || agentId.trim().isEmpty()) {
+            throw new IllegalArgumentException("agentId不能为空");
+        }
+
+        String taskId = taskSpec.getTaskId() != null ? taskSpec.getTaskId() : UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+
+        Task task = new Task();
+        task.setTaskId(taskId);
+        task.setTaskName(taskSpec.getTaskName() != null ? taskSpec.getTaskName() : "内部任务-" + taskId.substring(0, 8));
+        task.setTaskType(taskSpec.getTaskType());
+        task.setScriptLang(taskSpec.getScriptLang());
+        task.setScriptContent(taskSpec.getScriptContent());
+        task.setTimeoutSec(taskSpec.getTimeoutSec() != null ? taskSpec.getTimeoutSec() : 300);
+        task.setEnv(taskSpec.getEnv());
+        task.setCreatedBy(createdBy);
+        task.setCreatedAt(now);
+        task.setTargetAgentIds(agentId);
+        task.setTaskStatus("PENDING");
+        task.setInternalTask(true);
+        task.setOverwriteExisting(taskSpec.getOverwriteExisting());
+        task.setVerifyChecksum(taskSpec.getVerifyChecksum());
+        taskRepository.save(task);
+
+        TaskExecution execution = new TaskExecution();
+        execution.setTaskId(taskId);
+        execution.setAgentId(agentId);
+        execution.setExecutionNumber(1);
+        execution.setStatus("PENDING");
+        execution.setCreatedAt(now);
+        execution.setFileId(taskSpec.getFileId());
+        execution.setTargetPath(taskSpec.getTargetPath());
+        execution.setSourcePath(taskSpec.getSourcePath());
+        execution.setUploadedFilePath(taskSpec.getUploadedFilePath());
+        execution.setLogCollectionId(taskSpec.getLogCollectionId());
+        execution.setLogFileId(taskSpec.getLogFileId());
+        execution.setRelativePath(taskSpec.getRelativePath());
+        return taskExecutionRepository.save(execution);
+    }
     
     /**
      * 代理拉取任务（适配新模型）
@@ -923,8 +968,10 @@ public class TaskService {
             log.info("Task execution {} acknowledged and started, log file: {}", 
                 execution.getId(), logFilePath);
             
-            // 增加Agent任务计数
-            agentService.incrementTaskCount(execution.getAgentId());
+            Task task = taskRepository.findById(execution.getTaskId()).orElse(null);
+            if (task == null || !Boolean.TRUE.equals(task.getInternalTask())) {
+                agentService.incrementTaskCount(execution.getAgentId());
+            }
             
             // 更新任务状态
             updateTaskStatus(execution.getTaskId());
@@ -1124,6 +1171,13 @@ public class TaskService {
         } else if ("FILE_UPLOAD".equals(task.getTaskType()) && execution != null) {
             spec.setSourcePath(execution.getSourcePath());
             spec.setUploadedFilePath(execution.getUploadedFilePath());
+            spec.setMaxUploadSizeBytes(getFileUploadMaxSizeBytes());
+        } else if (("AGENT_LOG_INDEX".equals(task.getTaskType()) || "AGENT_LOG_UPLOAD".equals(task.getTaskType())) && execution != null) {
+            spec.setSourcePath(execution.getSourcePath());
+            spec.setUploadedFilePath(execution.getUploadedFilePath());
+            spec.setLogCollectionId(execution.getLogCollectionId());
+            spec.setLogFileId(execution.getLogFileId());
+            spec.setRelativePath(execution.getRelativePath());
             spec.setMaxUploadSizeBytes(getFileUploadMaxSizeBytes());
         }
 

@@ -46,6 +46,9 @@ public class Task {
     
     @Column(name = "task_type", length = 20)
     private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER | FILE_UPLOAD
+
+    @Column(name = "internal_task")
+    private Boolean internalTask = false; // 内部任务默认不在普通任务列表展示
     
     @Column(name = "target_agent_ids", length = 2000)
     private String targetAgentIds; // 目标代理ID列表，逗号分隔

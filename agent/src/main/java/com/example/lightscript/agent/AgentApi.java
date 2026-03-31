@@ -563,6 +563,31 @@ class AgentApi {
 			return String.valueOf(result.get("storedPath"));
 		}
 	}
+
+	void submitLogManifest(String agentId, String agentToken, Long executionId, Long logCollectionId,
+						   List<Map<String, Object>> files) throws Exception {
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("agentId", agentId);
+		payload.put("agentToken", agentToken);
+		payload.put("executionId", executionId);
+		payload.put("logCollectionId", logCollectionId);
+		payload.put("files", files);
+
+		HttpPost post = new HttpPost(baseUrl + "/api/agent/tasks/executions/" + executionId + "/log-manifest");
+		post.setHeader("Content-Type", "application/json");
+		post.setEntity(new StringEntity(mapper.writeValueAsString(payload), "UTF-8"));
+
+		try (CloseableHttpResponse response = httpClient.execute(post)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity(), "UTF-8") : "";
+			if (statusCode == 401 || statusCode == 403) {
+				throw new RuntimeException("Agent token invalid, need re-register");
+			}
+			if (statusCode != 200) {
+				throw new RuntimeException("Submit log manifest failed: " + responseBody);
+			}
+		}
+	}
 	/**
 	 * 推送截图帧到服务器（屏幕监控）
 	 * @return true=继续截图，false=服务器要求停止（无人观看）

@@ -6,11 +6,12 @@
 set -e
 
 # 默认配置
-SERVER_URL="http://8.138.114.34:8080"
+SERVER_URL="__SERVER_URL__"
+PACKAGE_BASE_URL="__PACKAGE_BASE_URL__"
 INSTALL_DIR="$HOME/.viberemote-agent"
 SERVICE_NAME="com.viberemote.agent"
 MANUAL_MODE=""
-REGISTER_TOKEN="917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83"
+REGISTER_TOKEN="__REGISTER_TOKEN__"
 VERSION="__AGENT_VERSION__"
 
 RED='\033[0;31m'
@@ -27,22 +28,34 @@ echo ""
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --server=*) SERVER_URL="${1#*=}"; shift ;;
-        --server) SERVER_URL="$2"; shift 2 ;;
         --install-dir=*) INSTALL_DIR="${1#*=}"; shift ;;
         --install-dir) INSTALL_DIR="$2"; shift 2 ;;
         --manual) MANUAL_MODE="1"; shift ;;
-        --token=*) REGISTER_TOKEN="${1#*=}"; shift ;;
-        --token) REGISTER_TOKEN="$2"; shift 2 ;;
         --help)
             echo "用法: $0 [选项]"
-            echo "  --server URL        服务器地址 (默认: http://8.138.114.34:8080)"
             echo "  --install-dir DIR   安装目录 (默认: ~/.viberemote-agent)"
             echo "  --manual            手动模式，不自动启动"
+            echo ""
+            echo "发布后的安装脚本会自动带入当前环境地址和注册令牌"
             exit 0 ;;
         *) echo -e "${RED}未知参数: $1${NC}"; exit 1 ;;
     esac
 done
+
+if [[ -z "$SERVER_URL" || "$SERVER_URL" == __SERVER_URL__ ]]; then
+    echo -e "${RED}❌ 安装脚本缺少服务器地址，请重新按当前环境发布安装脚本${NC}"
+    exit 1
+fi
+
+if [[ -z "$REGISTER_TOKEN" || "$REGISTER_TOKEN" == __REGISTER_TOKEN__ ]]; then
+    echo -e "${RED}❌ 安装脚本缺少注册令牌，请重新按当前环境发布安装脚本${NC}"
+    exit 1
+fi
+
+if [[ -z "$PACKAGE_BASE_URL" || "$PACKAGE_BASE_URL" == __PACKAGE_BASE_URL__ ]]; then
+    echo -e "${RED}❌ 安装脚本缺少安装包下载地址，请重新按当前环境发布安装脚本${NC}"
+    exit 1
+fi
 
 echo -e "  服务器地址: ${GREEN}${SERVER_URL}${NC}"
 echo -e "  安装目录:   ${GREEN}${INSTALL_DIR}${NC}"
@@ -68,7 +81,7 @@ pkill -f "java.*agent.jar" 2>/dev/null || true
 
 # 下载安装包
 echo -e "${YELLOW}📦 下载安装包...${NC}"
-DOWNLOAD_URL="${SERVER_URL%:*}/agent/release/$PACKAGE_NAME"
+DOWNLOAD_URL="${PACKAGE_BASE_URL}/$PACKAGE_NAME"
 echo -e "  ${BLUE}${DOWNLOAD_URL}${NC}"
 
 TEMP_DIR=$(mktemp -d)

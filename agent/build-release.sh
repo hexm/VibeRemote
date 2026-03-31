@@ -334,13 +334,13 @@ build_package() {
     
     # 创建配置文件，根据平台设置默认服务器地址
     if [ "$os" = "windows" ]; then
-        # Windows版本默认连接阿里云
+        # 安装包内不再写死服务器地址，实际安装时由安装脚本或部署工具写入
         cat > "$temp_dir/agent.properties" << 'EOF'
 # LightScript Agent 配置文件
 
-# 服务器配置 (默认连接阿里云)
-server.url=http://8.138.114.34:8080
-register.token=917ab328ac48ff6aeb01f38b3a3a554a07a9b623f60a9bdde9ac73a9353acc83
+# 服务器配置（由安装脚本或部署工具写入）
+server.url=
+register.token=
 
 # Agent配置
 agent.labels=

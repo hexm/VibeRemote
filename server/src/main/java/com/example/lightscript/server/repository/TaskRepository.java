@@ -14,15 +14,20 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     
     // 基本查询
     Page<Task> findByCreatedByOrderByCreatedAtDesc(String createdBy, Pageable pageable);
+
+    Page<Task> findByInternalTaskFalse(Pageable pageable);
     
     // 按状态分页查询
     Page<Task> findByTaskStatus(String taskStatus, Pageable pageable);
+    Page<Task> findByTaskStatusAndInternalTaskFalse(String taskStatus, Pageable pageable);
     
     // 按任务类型分页查询
     Page<Task> findByTaskType(String taskType, Pageable pageable);
+    Page<Task> findByTaskTypeAndInternalTaskFalse(String taskType, Pageable pageable);
     
     // 按状态和任务类型分页查询
     Page<Task> findByTaskStatusAndTaskType(String taskStatus, String taskType, Pageable pageable);
+    Page<Task> findByTaskStatusAndTaskTypeAndInternalTaskFalse(String taskStatus, String taskType, Pageable pageable);
     
     // 任务名称唯一性检查
     boolean existsByTaskName(String taskName);

@@ -12,7 +12,12 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -156,12 +161,13 @@ class SimpleTaskRunner {
     }
 
     void runTask(Long executionId, String taskId, String scriptLang, String scriptContent, int timeoutSec) {
-        runTask(executionId, taskId, "SCRIPT", scriptLang, scriptContent, timeoutSec, null, null, null, null, false, true);
+        runTask(executionId, taskId, "SCRIPT", scriptLang, scriptContent, timeoutSec, null, null, null, null, false, true, null, null, null);
     }
 
     void runTask(Long executionId, String taskId, String taskType, String scriptLang, String scriptContent,
                  int timeoutSec, String fileId, String targetPath, String sourcePath, Long maxUploadSizeBytes,
-                 boolean overwriteExisting, boolean verifyChecksum) {
+                 boolean overwriteExisting, boolean verifyChecksum, Long logCollectionId, Long logFileId,
+                 String relativePath) {
         logger.info("========================================");
         logger.info("[TASK-{}] TASK EXECUTION STARTED", executionId);
         logger.info("========================================");
@@ -178,11 +184,109 @@ class SimpleTaskRunner {
             logger.info("[TASK-{}] Source Path: {}", executionId, sourcePath);
             logger.info("[TASK-{}] Max Upload Size: {} bytes", executionId, maxUploadSizeBytes);
             runFileUploadTask(executionId, taskId, sourcePath, timeoutSec, maxUploadSizeBytes);
+        } else if ("AGENT_LOG_INDEX".equals(taskType)) {
+            logger.info("[TASK-{}] Log Collection ID: {}", executionId, logCollectionId);
+            runAgentLogIndexTask(executionId, logCollectionId);
+        } else if ("AGENT_LOG_UPLOAD".equals(taskType)) {
+            logger.info("[TASK-{}] Log Collection ID: {}, Log File ID: {}, Relative Path: {}",
+                executionId, logCollectionId, logFileId, relativePath);
+            runAgentLogUploadTask(executionId, logCollectionId, logFileId, relativePath, maxUploadSizeBytes);
         } else {
             logger.info("[TASK-{}] Script Language: {}", executionId, scriptLang);
             logger.info("[TASK-{}] Script Content Length: {} chars", executionId, scriptContent != null ? scriptContent.length() : 0);
             logger.info("[TASK-{}] Timeout: {} seconds", executionId, timeoutSec);
             runScriptTask(executionId, taskId, scriptLang, scriptContent, timeoutSec);
+        }
+    }
+
+    private void runAgentLogIndexTask(Long executionId, Long logCollectionId) {
+        LogBuffer taskBuffer = createTaskLogBuffer(executionId);
+
+        try {
+            taskStatusMonitor.onTaskStart(executionId);
+            synchronized (this) {
+                api.ackTask(agentId, agentToken, executionId);
+            }
+
+            Path logDir = resolveLogDirectory();
+            sendLog(executionId, "system", "Scanning agent log directory: " + logDir.toAbsolutePath(), taskBuffer);
+
+            List<Map<String, Object>> files = new ArrayList<>();
+            if (Files.exists(logDir)) {
+                try (java.util.stream.Stream<Path> stream = Files.walk(logDir)) {
+                    stream.filter(Files::isRegularFile)
+                        .sorted()
+                        .forEach(path -> files.add(toManifestItem(logDir, path)));
+                }
+            }
+
+            synchronized (this) {
+                api.submitLogManifest(agentId, agentToken, executionId, logCollectionId, files);
+                api.finish(agentId, agentToken, executionId, 0, "SUCCESS", "Collected " + files.size() + " log files");
+            }
+            sendLog(executionId, "system", "Log manifest submitted, file count: " + files.size(), taskBuffer);
+        } catch (Exception e) {
+            logger.error("[TASK-{}] Failed to collect agent logs: {}", executionId, e.getMessage(), e);
+            try {
+                sendLog(executionId, "stderr", "Collect agent logs failed: " + e.getMessage(), taskBuffer);
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                }
+            } catch (Exception ignored) {
+                logger.error("[TASK-{}] Failed to report agent log index error", executionId, ignored);
+            }
+        } finally {
+            flushTaskBuffer(executionId, taskBuffer);
+            onTaskComplete(executionId);
+            taskStatusMonitor.onTaskComplete(executionId);
+        }
+    }
+
+    private void runAgentLogUploadTask(Long executionId, Long logCollectionId, Long logFileId,
+                                       String relativePath, Long maxUploadSizeBytes) {
+        LogBuffer taskBuffer = createTaskLogBuffer(executionId);
+
+        try {
+            taskStatusMonitor.onTaskStart(executionId);
+            synchronized (this) {
+                api.ackTask(agentId, agentToken, executionId);
+            }
+
+            Path logFilePath = resolveLogDirectory().resolve(relativePath).normalize();
+            if (!logFilePath.startsWith(resolveLogDirectory())) {
+                throw new RuntimeException("Invalid log file path: " + relativePath);
+            }
+            sendLog(executionId, "system", "Uploading agent log file: " + logFilePath, taskBuffer);
+
+            if (!Files.exists(logFilePath) || !Files.isRegularFile(logFilePath)) {
+                throw new RuntimeException("Log file not found: " + logFilePath);
+            }
+            if (maxUploadSizeBytes != null && maxUploadSizeBytes > 0 && Files.size(logFilePath) > maxUploadSizeBytes) {
+                throw new RuntimeException("Log file exceeds upload limit: " + Files.size(logFilePath) + " bytes");
+            }
+
+            String storedPath;
+            synchronized (this) {
+                storedPath = api.uploadArtifact(agentId, agentToken, executionId, logFilePath.toFile());
+                api.finish(agentId, agentToken, executionId, 0, "SUCCESS",
+                    "Uploaded log file " + relativePath + " to " + storedPath);
+            }
+            sendLog(executionId, "system", "Log file uploaded successfully: " + storedPath, taskBuffer);
+        } catch (Exception e) {
+            logger.error("[TASK-{}] Failed to upload agent log file (collectionId={}, logFileId={}): {}",
+                executionId, logCollectionId, logFileId, e.getMessage(), e);
+            try {
+                sendLog(executionId, "stderr", "Upload agent log failed: " + e.getMessage(), taskBuffer);
+                synchronized (this) {
+                    api.finish(agentId, agentToken, executionId, -2, "FAILED", e.toString());
+                }
+            } catch (Exception ignored) {
+                logger.error("[TASK-{}] Failed to report agent log upload error", executionId, ignored);
+            }
+        } finally {
+            flushTaskBuffer(executionId, taskBuffer);
+            onTaskComplete(executionId);
+            taskStatusMonitor.onTaskComplete(executionId);
         }
     }
 
@@ -257,6 +361,29 @@ class SimpleTaskRunner {
             }
         }
         return archive;
+    }
+
+    private Path resolveLogDirectory() {
+        String logHome = System.getProperty("log.home");
+        if (logHome == null || logHome.trim().isEmpty()) {
+            logHome = "./logs";
+        }
+        return Paths.get(logHome).toAbsolutePath().normalize();
+    }
+
+    private Map<String, Object> toManifestItem(Path logDir, Path filePath) {
+        try {
+            Map<String, Object> item = new HashMap<>();
+            Path relative = logDir.relativize(filePath);
+            FileTime lastModified = Files.getLastModifiedTime(filePath);
+            item.put("fileName", filePath.getFileName().toString());
+            item.put("relativePath", relative.toString().replace('\\', '/'));
+            item.put("fileSize", Files.size(filePath));
+            item.put("modifiedAt", Instant.ofEpochMilli(lastModified.toMillis()).toString());
+            return item;
+        } catch (IOException e) {
+            throw new RuntimeException("Read log file metadata failed: " + filePath, e);
+        }
     }
 
     private void writeZipEntry(ZipOutputStream zipOutputStream, Path rootPath, Path filePath, String prefix) {

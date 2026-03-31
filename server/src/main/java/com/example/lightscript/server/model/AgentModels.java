@@ -54,7 +54,7 @@ public class AgentModels {
 		private String taskId;
 		private Long executionId; // 执行实例ID（必需，用于多代理支持）
 		private String taskName; // 任务名称
-		private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER | FILE_UPLOAD
+		private String taskType = "SCRIPT"; // SCRIPT | FILE_TRANSFER | FILE_UPLOAD | AGENT_LOG_INDEX | AGENT_LOG_UPLOAD
 		private String scriptLang; // bash | powershell | cmd
 		private String scriptContent;
 		private String scriptId; // 来自脚本库的脚本ID，非空表示使用已有脚本
@@ -69,6 +69,35 @@ public class AgentModels {
 		private String sourcePath; // Agent端源文件/目录路径（文件上传任务）
 		private String uploadedFilePath; // 上传到服务器后的保存路径
 		private Long maxUploadSizeBytes; // 文件上传任务允许的最大压缩包大小
+		private Long logCollectionId; // Agent日志收集批次ID
+		private Long logFileId; // Agent日志文件ID
+		private String relativePath; // 日志文件相对日志目录的路径
+	}
+
+	@Data
+	public static class AgentLogManifestRequest {
+		@NotBlank
+		private String agentId;
+		@NotBlank
+		private String agentToken;
+		@NotNull
+		private Long executionId;
+		@NotNull
+		private Long logCollectionId;
+		@NotNull
+		private List<AgentLogManifestItem> files;
+	}
+
+	@Data
+	public static class AgentLogManifestItem {
+		@NotBlank
+		private String fileName;
+		@NotBlank
+		private String relativePath;
+		@NotNull
+		private Long fileSize;
+		@NotNull
+		private Instant modifiedAt;
 	}
 	
 	@Data

@@ -892,7 +892,11 @@ public class AgentUpgrader {
                 log("Startup log content (" + logFile.length() + " bytes): " + logContent.substring(0, Math.min(500, logContent.length())));
                 
                 if (logContent.contains("Agent started. Waiting for tasks...") || 
-                    logContent.contains("Agent registered successfully!")) {
+                    logContent.contains("Agent registered successfully!") ||
+                    (logContent.contains("Instance lock acquired")
+                        && logContent.contains("Working directory:")
+                        && (logContent.contains("Agent home:")
+                            || logContent.contains("Loaded external configuration")))) {
                     log("Startup log indicates successful start, verification passed");
                     return true;
                 }
