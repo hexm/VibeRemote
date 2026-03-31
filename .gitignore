@@ -99,6 +99,7 @@ agent/release/
 
 # Local LAN test assets
 portal/agent/
+portal/downloads/
 portal/scripts/viberemote-agent-*-install-linux.sh
 portal/scripts/viberemote-agent-*-install-macos.sh
 portal/scripts/viberemote-agent-*-install-windows.bat

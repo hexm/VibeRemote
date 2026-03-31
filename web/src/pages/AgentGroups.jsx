@@ -192,6 +192,8 @@ const AgentGroups = () => {
           agentId: a.agentId,
           hostname: a.hostname,
           status: a.status,
+          ip: a.ip,
+          startUser: a.startUser,
           addedAt: new Date().toISOString()
         }))
       

@@ -42,17 +42,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$SERVER_URL" || "$SERVER_URL" == __SERVER_URL__ ]]; then
+if [[ -z "$SERVER_URL" || "$SERVER_URL" == __*__ ]]; then
     echo -e "${RED}❌ 安装脚本缺少服务器地址，请重新按当前环境发布安装脚本${NC}"
     exit 1
 fi
 
-if [[ -z "$REGISTER_TOKEN" || "$REGISTER_TOKEN" == __REGISTER_TOKEN__ ]]; then
+if [[ -z "$REGISTER_TOKEN" || "$REGISTER_TOKEN" == __*__ ]]; then
     echo -e "${RED}❌ 安装脚本缺少注册令牌，请重新按当前环境发布安装脚本${NC}"
     exit 1
 fi
 
-if [[ -z "$PACKAGE_BASE_URL" || "$PACKAGE_BASE_URL" == __PACKAGE_BASE_URL__ ]]; then
+if [[ -z "$PACKAGE_BASE_URL" || "$PACKAGE_BASE_URL" == __*__ ]]; then
     echo -e "${RED}❌ 安装脚本缺少安装包下载地址，请重新按当前环境发布安装脚本${NC}"
     exit 1
 fi

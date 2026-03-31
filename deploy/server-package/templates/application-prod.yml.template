@@ -1,0 +1,56 @@
+server:
+  address: 0.0.0.0
+  port: __API_PORT__
+
+spring:
+  datasource:
+    url: __DB_URL__
+    username: __DB_USERNAME__
+    password: __DB_PASSWORD__
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      keepalive-time: 60000
+      connection-test-query: SELECT 1
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  security:
+    user:
+      name: admin
+      password: admin123
+  servlet:
+    multipart:
+      max-file-size: __MAX_UPLOAD_SIZE_MB__MB
+      max-request-size: __MAX_UPLOAD_SIZE_MB__MB
+
+logging:
+  level:
+    root: WARN
+    com.example.lightscript: INFO
+  file:
+    name: __LOG_DIR__/viberemote-server.log
+
+lightscript:
+  jwt:
+    secret: __JWT_SECRET__
+  agent:
+    public-base-url: __API_PUBLIC_BASE_URL__
+  register:
+    token: __REGISTER_TOKEN__
+  web:
+    encryption:
+      key: __WEB_ENCRYPTION_KEY__
+  log:
+    storage:
+      path: __TASK_LOG_STORAGE_PATH__
+    retention:
+      days: __LOG_RETENTION_DAYS__

@@ -666,6 +666,7 @@
         </div>
     </footer>
 
+    <script src="runtime-config.js"></script>
     <script>
         function switchInstallMethod(method) {
             // 移除所有活动状态
@@ -854,7 +855,7 @@
         // 下载指定平台的安装包
         function downloadPackage(osType) {
             const osInfo = getOSInfo(osType);
-            const downloadUrl = `/agent/release/${osInfo.filename}`;
+            const downloadUrl = `${PORTAL_ORIGIN}/agent/release/${osInfo.filename}`;
             
             // 创建下载链接
             const link = document.createElement('a');
@@ -882,9 +883,57 @@
             toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
         }
 
-        const PORTAL_ORIGIN = window.location.origin;
-        const API_ORIGIN = `${window.location.protocol}//${window.location.hostname}:8080`;
-        const DASHBOARD_URL = `${window.location.protocol}//${window.location.hostname}:3001/dashboard`;
+        function getRuntimeConfig() {
+            return window.VIBE_REMOTE_CONFIG || {};
+        }
+
+        function trimTrailingSlash(value) {
+            return typeof value === 'string' ? value.replace(/\/+$/, '') : '';
+        }
+
+        function resolvePortalOrigin() {
+            const configuredPortalBaseUrl = trimTrailingSlash(getRuntimeConfig().portalPublicBaseUrl);
+            return configuredPortalBaseUrl || window.location.origin;
+        }
+
+        function resolveApiOrigin() {
+            const configuredApiBaseUrl = trimTrailingSlash(getRuntimeConfig().apiPublicBaseUrl);
+            if (configuredApiBaseUrl) {
+                return configuredApiBaseUrl;
+            }
+
+            return `${window.location.protocol}//${window.location.hostname}:8080`;
+        }
+
+        function resolveDashboardUrl() {
+            const runtimeConfig = getRuntimeConfig();
+            const configuredDashboardUrl = trimTrailingSlash(runtimeConfig.dashboardUrl);
+            if (configuredDashboardUrl) {
+                return configuredDashboardUrl;
+            }
+
+            const configuredAdminBaseUrl = trimTrailingSlash(runtimeConfig.adminPublicBaseUrl);
+            if (configuredAdminBaseUrl) {
+                return `${configuredAdminBaseUrl}/dashboard`;
+            }
+
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            const currentPort = window.location.port;
+
+            let dashboardPort = '3000';
+            if (currentPort === '8002') {
+                dashboardPort = '3001';
+            } else if (currentPort === '3000' || currentPort === '3001') {
+                dashboardPort = currentPort;
+            }
+
+            return `${protocol}//${hostname}:${dashboardPort}/dashboard`;
+        }
+
+        const PORTAL_ORIGIN = resolvePortalOrigin();
+        const API_ORIGIN = resolveApiOrigin();
+        const DASHBOARD_URL = resolveDashboardUrl();
         let agentRelease = {
             version: '0.4.3',
             releaseDate: '2026-03-26',
@@ -940,7 +989,7 @@ start-agent.bat`;
 
         async function loadAgentRelease() {
             try {
-                const response = await fetch('/agent/release/version.json', { cache: 'no-store' });
+                const response = await fetch(`${PORTAL_ORIGIN}/agent/release/version.json`, { cache: 'no-store' });
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }

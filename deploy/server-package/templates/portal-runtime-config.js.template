@@ -1,0 +1,6 @@
+window.VIBE_REMOTE_CONFIG = {
+    portalPublicBaseUrl: "__PORTAL_PUBLIC_BASE_URL__",
+    adminPublicBaseUrl: "__ADMIN_PUBLIC_BASE_URL__",
+    apiPublicBaseUrl: "__API_PUBLIC_BASE_URL__",
+    dashboardUrl: "__ADMIN_PUBLIC_BASE_URL__/dashboard"
+};

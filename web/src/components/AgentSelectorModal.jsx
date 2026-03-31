@@ -104,7 +104,9 @@ const AgentSelectorModal = ({
         const q = leftSearch.toLowerCase()
         const matchHost = agent.hostname?.toLowerCase().includes(q)
         const matchIp = agent.ip?.toLowerCase().includes(q)
-        if (!matchHost && !matchIp) return false
+        const matchUser = agent.startUser?.toLowerCase().includes(q)
+        const matchId = agent.agentId?.toLowerCase().includes(q)
+        if (!matchHost && !matchIp && !matchUser && !matchId) return false
       }
       return true
     })
@@ -115,7 +117,12 @@ const AgentSelectorModal = ({
     return mergedAgents.filter(a => selected.includes(a.agentId)).filter(agent => {
       if (!rightSearch) return true
       const q = rightSearch.toLowerCase()
-      return agent.hostname?.toLowerCase().includes(q) || agent.ip?.toLowerCase().includes(q)
+      return (
+        agent.hostname?.toLowerCase().includes(q) ||
+        agent.ip?.toLowerCase().includes(q) ||
+        agent.startUser?.toLowerCase().includes(q) ||
+        agent.agentId?.toLowerCase().includes(q)
+      )
     })
   }, [mergedAgents, selected, rightSearch])
 
@@ -213,7 +220,7 @@ const AgentSelectorModal = ({
             </Space>
             <Input
               size="small"
-              placeholder="搜索 hostname / IP"
+              placeholder="搜索主机名 / 启动用户 / IP / ID"
               prefix={<SearchOutlined />}
               value={leftSearch}
               onChange={e => setLeftSearch(e.target.value)}
@@ -277,18 +284,14 @@ const AgentSelectorModal = ({
                       >
                         {agent.hostname || agent.agentId}
                       </Text>
-                      {agent.ip && (
-                        <Text
-                          type="secondary"
-                          style={{
-                            fontSize: 11,
-                            flexShrink: 0,
-                            marginLeft: 'auto'
-                          }}
-                        >
-                          {agent.ip}
-                        </Text>
-                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        启动用户: {agent.startUser || '-'}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        IP: {agent.ip || '-'}
+                      </Text>
                     </div>
                   </div>
                 </div>
@@ -306,7 +309,7 @@ const AgentSelectorModal = ({
             </Text>
             <Input
               size="small"
-              placeholder="搜索已选"
+              placeholder="搜索已选主机 / 用户 / IP / ID"
               prefix={<SearchOutlined />}
               value={rightSearch}
               onChange={e => setRightSearch(e.target.value)}
@@ -324,18 +327,27 @@ const AgentSelectorModal = ({
                   key={agent.agentId}
                   style={{
                     padding: '7px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
                     borderBottom: '1px solid #f9f9f9',
                   }}
                 >
-                  <Badge status={agent.status === 'ONLINE' ? 'success' : 'default'} />
-                  <Text style={{ flex: 1, fontSize: 13 }}>{agent.hostname || agent.agentId}</Text>
-                  <CloseOutlined
-                    style={{ fontSize: 11, color: '#999', cursor: 'pointer' }}
-                    onClick={() => removeAgent(agent.agentId)}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Badge status={agent.status === 'ONLINE' ? 'success' : 'default'} />
+                    <Text style={{ flex: 1, fontSize: 13, minWidth: 0 }} ellipsis>
+                      {agent.hostname || agent.agentId}
+                    </Text>
+                    <CloseOutlined
+                      style={{ fontSize: 11, color: '#999', cursor: 'pointer' }}
+                      onClick={() => removeAgent(agent.agentId)}
+                    />
+                  </div>
+                  <div style={{ marginTop: 2 }}>
+                    <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                      启动用户: {agent.startUser || '-'}
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                      IP: {agent.ip || '-'}
+                    </Text>
+                  </div>
                 </div>
               ))
             )}

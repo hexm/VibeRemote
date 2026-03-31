@@ -18,7 +18,7 @@ navToggle?.addEventListener('click', () => {
 });
 
 // 平滑滚动到锚点
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+document.querySelectorAll('a[href^="#"]:not([data-dashboard-link])').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
         const target = document.querySelector(this.getAttribute('href'));
@@ -72,9 +72,43 @@ function animateTerminal() {
     });
 }
 
+function getRuntimeConfig() {
+    return window.VIBE_REMOTE_CONFIG || {};
+}
+
+function trimTrailingSlash(value) {
+    return typeof value === 'string' ? value.replace(/\/+$/, '') : '';
+}
+
+function resolveDashboardUrl() {
+    const runtimeConfig = getRuntimeConfig();
+    const configuredDashboardUrl = trimTrailingSlash(runtimeConfig.dashboardUrl);
+    if (configuredDashboardUrl) {
+        return configuredDashboardUrl;
+    }
+
+    const configuredAdminBaseUrl = trimTrailingSlash(runtimeConfig.adminPublicBaseUrl);
+    if (configuredAdminBaseUrl) {
+        return `${configuredAdminBaseUrl}/dashboard`;
+    }
+
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const currentPort = window.location.port;
+
+    let dashboardPort = '3000';
+    if (currentPort === '8002') {
+        dashboardPort = '3001';
+    } else if (currentPort === '3000' || currentPort === '3001') {
+        dashboardPort = currentPort;
+    }
+
+    return `${protocol}//${hostname}:${dashboardPort}/dashboard`;
+}
+
 // 页面加载完成后执行动画
 document.addEventListener('DOMContentLoaded', () => {
-    const dashboardUrl = `${window.location.protocol}//${window.location.hostname}:3001/dashboard`;
+    const dashboardUrl = resolveDashboardUrl();
     document.querySelectorAll('[data-dashboard-link]').forEach(link => {
         link.href = dashboardUrl;
     });

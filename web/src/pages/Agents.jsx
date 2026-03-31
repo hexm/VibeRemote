@@ -29,6 +29,33 @@ const { Option } = Select
 const PORTAL_BASE_URL = import.meta.env.VITE_PORTAL_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8002`
 const LOG_FILE_TERMINAL_STATUSES = new Set(['SUCCESS', 'FAILED'])
 
+const joinUrl = (baseUrl, path) => {
+  if (!baseUrl) return path
+  return `${String(baseUrl).replace(/\/+$/, '')}/${String(path).replace(/^\/+/, '')}`
+}
+
+const extractFileNameFromDisposition = (contentDisposition, fallbackName) => {
+  if (!contentDisposition) {
+    return fallbackName
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch (error) {
+      console.warn('解析下载文件名失败，回退默认文件名', error)
+    }
+  }
+
+  const asciiMatch = contentDisposition.match(/filename="?([^"]+)"?/i)
+  if (asciiMatch?.[1]) {
+    return asciiMatch[1]
+  }
+
+  return fallbackName
+}
+
 const sortLogFiles = (files) => [...files].sort((left, right) => {
   const leftTime = left?.modifiedAt ? new Date(left.modifiedAt).getTime() : 0
   const rightTime = right?.modifiedAt ? new Date(right.modifiedAt).getTime() : 0
@@ -94,7 +121,7 @@ const Agents = () => {
   const [logCollection, setLogCollection] = useState(null)
   const [logFiles, setLogFiles] = useState([])
   const [logLoading, setLogLoading] = useState(false)
-  const [logFileActionId, setLogFileActionId] = useState(null)
+  const [logFileActionKey, setLogFileActionKey] = useState(null)
   const [logContentVisible, setLogContentVisible] = useState(false)
   const [logContentLoading, setLogContentLoading] = useState(false)
   const [logContent, setLogContent] = useState('')
@@ -360,10 +387,12 @@ const Agents = () => {
     let filtered = agents
 
     if (searchText) {
+      const keyword = searchText.toLowerCase()
       filtered = filtered.filter(agent =>
-        agent.hostname.toLowerCase().includes(searchText.toLowerCase()) ||
-        agent.ip.includes(searchText) ||
-        agent.id.toLowerCase().includes(searchText.toLowerCase())
+        agent.hostname?.toLowerCase().includes(keyword) ||
+        agent.ip?.toLowerCase().includes(keyword) ||
+        agent.id?.toLowerCase().includes(keyword) ||
+        agent.startUser?.toLowerCase().includes(keyword)
       )
     }
 
@@ -486,7 +515,7 @@ const Agents = () => {
   const handleRecollectLogFile = async (file) => {
     if (!logAgent || !logCollection || !file?.id) return
 
-    setLogFileActionId(file.id)
+    setLogFileActionKey(`recollect-${file.id}`)
     try {
       const response = await api.post(
         `/web/agents/${logAgent.agentId || logAgent.id}/log-collections/${logCollection.id}/files/${file.id}/recollect`
@@ -497,7 +526,60 @@ const Agents = () => {
       console.error('重新上传Agent日志失败:', error)
       message.error('重新上传Agent日志失败: ' + (error.message || '未知错误'))
     } finally {
-      setLogFileActionId(null)
+      setLogFileActionKey(null)
+    }
+  }
+
+  const handleDownloadLogFile = async (file) => {
+    if (!logAgent || !logCollection || !file?.id) return
+    if (file.uploadStatus !== 'SUCCESS') {
+      message.info('日志还在收集中，请稍后再试')
+      return
+    }
+
+    setLogFileActionKey(`download-${file.id}`)
+    try {
+      const token = localStorage.getItem('token')
+      const downloadUrl = joinUrl(
+        api.defaults.baseURL || '/api',
+        `/web/agents/${logAgent.agentId || logAgent.id}/log-collections/${logCollection.id}/files/${file.id}/download`
+      )
+
+      const response = await fetch(downloadUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}`
+        try {
+          const errorBody = await response.json()
+          errorMessage = errorBody?.message || errorBody?.error || errorMessage
+        } catch (error) {
+          console.warn('解析日志下载错误响应失败', error)
+        }
+        throw new Error(errorMessage)
+      }
+
+      const blob = await response.blob()
+      const objectUrl = window.URL.createObjectURL(blob)
+      const fileName = extractFileNameFromDisposition(
+        response.headers.get('content-disposition'),
+        file.fileName || `agent-log-${file.id}.log`
+      )
+
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(objectUrl)
+      message.success(`开始下载日志: ${fileName}`)
+    } catch (error) {
+      console.error('下载Agent日志失败:', error)
+      message.error('下载Agent日志失败: ' + (error.message || '未知错误'))
+    } finally {
+      setLogFileActionKey(null)
     }
   }
 
@@ -680,6 +762,13 @@ env | sort
       ),
     },
     {
+      title: '启动用户',
+      dataIndex: 'startUser',
+      key: 'startUser',
+      width: 130,
+      render: (startUser) => startUser ? <Text>{startUser}</Text> : <Text type="secondary">-</Text>,
+    },
+    {
       title: 'IP',
       dataIndex: 'ip',
       key: 'ip',
@@ -789,7 +878,7 @@ env | sort
     {
       title: '操作',
       key: 'actions',
-      width: 140,
+      width: 220,
       fixed: 'right',
       render: (_, record) => (
         <Space>
@@ -860,9 +949,9 @@ env | sort
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <Space wrap>
             <Search
-              placeholder="搜索主机名、IP或ID"
+              placeholder="搜索主机名、启动用户、IP或ID"
               allowClear
-              style={{ width: 250 }}
+              style={{ width: 300 }}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               prefix={<SearchOutlined className="text-gray-400" />}
@@ -1178,18 +1267,19 @@ env | sort
         files={logFiles}
         loading={logLoading}
         refreshLocked={logRefreshLocked}
-        fileActionId={logFileActionId}
+        fileActionKey={logFileActionKey}
         onClose={() => {
           setLogModalVisible(false)
           setLogAgent(null)
           setLogCollection(null)
           setLogFiles([])
           setLogRefreshLocked(false)
-          setLogFileActionId(null)
+          setLogFileActionKey(null)
         }}
         onRefresh={handleRecollectLogs}
         onViewContent={handleViewLogContent}
         onRecollectFile={handleRecollectLogFile}
+        onDownloadFile={handleDownloadLogFile}
       />
 
       <Modal
@@ -1252,53 +1342,48 @@ const renderLogStatus = (status) => {
   return <Tag color={config.color}>{config.text}</Tag>
 }
 
-const AgentLogModal = ({ visible, agent, collection, files, loading, refreshLocked, fileActionId, onClose, onRefresh, onViewContent, onRecollectFile }) => {
+const AgentLogModal = ({ visible, agent, collection, files, loading, refreshLocked, fileActionKey, onClose, onRefresh, onViewContent, onRecollectFile, onDownloadFile }) => {
   const columns = [
     {
       title: '日志文件',
       dataIndex: 'fileName',
       key: 'fileName',
-      render: (text, record) => (
-        <div>
-          <Text strong>{text}</Text>
-          <div className="text-xs text-gray-500">{record.relativePath}</div>
-        </div>
-      ),
+      render: (text) => <Text strong>{text}</Text>,
     },
     {
       title: '大小',
       dataIndex: 'fileSize',
       key: 'fileSize',
-      width: 120,
+      width: 80,
       render: (value) => formatFileSize(value),
     },
     {
       title: '更新时间',
       dataIndex: 'modifiedAt',
       key: 'modifiedAt',
-      width: 180,
+      width: 160,
       render: (value) => value ? new Date(value).toLocaleString('zh-CN') : '-',
     },
     {
       title: '收集状态',
       dataIndex: 'uploadStatus',
       key: 'uploadStatus',
-      width: 120,
+      width: 90,
       render: (value) => renderLogStatus(value),
     },
     {
       title: '上传时间',
       dataIndex: 'uploadedAt',
       key: 'uploadedAt',
-      width: 180,
+      width: 160,
       render: (value) => value ? new Date(value).toLocaleString('zh-CN') : '-',
     },
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 200,
       render: (_, record) => (
-        <Space size="small">
+        <Space size={0}>
           <Button
             type="link"
             size="small"
@@ -1310,7 +1395,16 @@ const AgentLogModal = ({ visible, agent, collection, files, loading, refreshLock
           <Button
             type="link"
             size="small"
-            loading={fileActionId === record.id}
+            loading={fileActionKey === `download-${record.id}`}
+            disabled={record.uploadStatus !== 'SUCCESS'}
+            onClick={() => onDownloadFile(record)}
+          >
+            下载
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            loading={fileActionKey === `recollect-${record.id}`}
             disabled={record.uploadStatus === 'QUEUED' || record.uploadStatus === 'UPLOADING'}
             onClick={() => onRecollectFile(record)}
           >

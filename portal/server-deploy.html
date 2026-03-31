@@ -7,235 +7,240 @@
     <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
     <link rel="stylesheet" href="styles.css">
     <style>
-        .deploy-card {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            border: 1px solid var(--border-color);
-            margin-bottom: 2rem;
-            transition: all 0.3s ease;
-        }
-        
-        .deploy-card:hover {
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-            transform: translateY(-2px);
-        }
-        
-        .deploy-method {
-            display: flex;
-            gap: 2rem;
-            margin-bottom: 3rem;
-        }
-        
-        .method-card {
-            flex: 1;
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: var(--shadow-md);
-            border: 2px solid var(--border-color);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-        
-        .method-card:hover {
-            border-color: var(--primary-color);
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-        }
-        
-        .method-card.selected {
-            border-color: var(--primary-color);
-            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-        }
-        
-        .method-icon {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 12px;
-            font-size: 2rem;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
-            color: white;
-        }
-        
-        .code-block {
-            background: #1e293b;
-            color: #e2e8f0;
-            padding: 1.5rem;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            overflow-x: auto;
-            position: relative;
-            margin: 1rem 0;
-        }
-        
-        .copy-btn {
-            position: absolute;
-            top: 0.75rem;
-            right: 0.75rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.3s ease;
-        }
-        
-        .copy-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-        
-        .copy-btn.copied {
-            background: var(--success-color);
-            border-color: var(--success-color);
-        }
-        
-        .step-number {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 2rem;
-            height: 2rem;
-            background: var(--primary-color);
-            color: white;
-            border-radius: 50%;
-            font-weight: bold;
-            margin-right: 1rem;
-        }
-        
-        .requirements-list {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .requirements-list li {
-            padding: 0.5rem 0;
-            display: flex;
-            align-items: center;
-        }
-        
-        .requirements-list li::before {
-            content: "✓";
-            color: var(--success-color);
-            font-weight: bold;
-            margin-right: 0.5rem;
-        }
-        
-        .warning-box {
-            background: #fef3cd;
-            border: 1px solid #fecaca;
-            border-radius: 8px;
-            padding: 1rem;
-            margin: 1rem 0;
-        }
-        
-        .warning-box .warning-title {
-            color: #92400e;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-        
-        .warning-box .warning-text {
-            color: #a16207;
-        }
-        
-        /* 修复 hero 区域样式 */
         .hero-section {
             padding: 6rem 0 3rem;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
         }
-        
+
         .hero-title {
             font-size: 2.5rem;
             font-weight: 700;
             color: var(--text-primary);
             text-align: center;
-            margin-bottom: 0;
+            margin-bottom: 1rem;
         }
-        
-        /* 部署方式选择样式优化 */
-        .deploy-method {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1.5rem;
-            margin-bottom: 3rem;
-            max-width: 900px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        
-        .method-card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-md);
-            border: 2px solid var(--border-color);
-            cursor: pointer;
-            transition: all 0.3s ease;
+
+        .hero-subtitle {
+            max-width: 880px;
+            margin: 0 auto;
             text-align: center;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.75;
         }
-        
-        .method-card:hover {
-            border-color: var(--primary-color);
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
+
+        .deploy-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
         }
-        
-        .method-card.selected {
-            border-color: var(--primary-color);
-            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-        }
-        
-        .method-icon {
-            font-size: 2.25rem;
-            margin-bottom: 0.75rem;
-            display: block;
-        }
-        
-        .method-card h3 {
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-bottom: 0.375rem;
+
+        .deploy-card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
             color: var(--text-primary);
         }
-        
-        .method-card p {
+
+        .deploy-card h3 {
+            font-size: 1.125rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .deploy-card p,
+        .deploy-card li {
             color: var(--text-secondary);
-            font-size: 0.8125rem;
+            line-height: 1.8;
         }
-        
-        .info-box {
-            background: #dbeafe;
-            border: 1px solid #93c5fd;
-            border-radius: 8px;
+
+        .deploy-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .status-item {
+            border-radius: 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
             padding: 1rem;
-            margin: 1rem 0;
         }
-        
-        .info-box .info-title {
-            color: #1e40af;
+
+        .status-item-label {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-bottom: 0.35rem;
+        }
+
+        .status-item-value {
+            font-size: 1rem;
             font-weight: 600;
-            margin-bottom: 0.5rem;
+            color: #0f172a;
+            word-break: break-all;
         }
-        
-        .info-box .info-text {
+
+        .code-block {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 1.25rem;
+            border-radius: 12px;
+            font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+            font-size: 13px;
+            line-height: 1.65;
+            overflow-x: auto;
+            position: relative;
+            margin: 1rem 0 0;
+        }
+
+        .code-block pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.45rem 0.75rem;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.16);
+        }
+
+        .copy-btn.copied {
+            background: #16a34a;
+            border-color: #16a34a;
+        }
+
+        .step-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .step-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .step-number {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 999px;
+            background: var(--primary-color);
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            flex-shrink: 0;
+            margin-top: 0.15rem;
+        }
+
+        .info-box,
+        .warning-box,
+        .success-box {
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
             color: #1d4ed8;
+        }
+
+        .warning-box {
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            color: #c2410c;
+        }
+
+        .success-box {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #15803d;
+        }
+
+        .env-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .env-table th,
+        .env-table td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0.875rem 0.75rem;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .env-table th {
+            color: #0f172a;
+            font-size: 0.95rem;
+            width: 28%;
+        }
+
+        .env-table td {
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        .download-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .muted {
+            color: #64748b;
+            font-size: 0.95rem;
+        }
+
+        @media (max-width: 768px) {
+            .deploy-card {
+                padding: 1.25rem;
+            }
+
+            .hero-title {
+                font-size: 2rem;
+            }
+
+            .env-table th,
+            .env-table td {
+                display: block;
+                width: 100%;
+                padding-left: 0;
+                padding-right: 0;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- 导航栏 -->
     <nav class="navbar">
         <div class="container">
             <a href="index.html" class="nav-brand">
@@ -247,361 +252,214 @@
                 <a href="client-install.html" class="nav-link">安装客户端</a>
                 <a href="server-deploy.html" class="nav-link active">服务端部署</a>
                 <a href="docs.html" class="nav-link">文档</a>
-                <a href="http://8.138.114.34:3000/dashboard" class="nav-link">管理后台</a>
+                <a href="#" class="nav-link" data-dashboard-link>管理后台</a>
             </div>
         </div>
     </nav>
 
-    <!-- 主要内容 -->
     <main class="main-content">
         <section class="hero-section">
             <div class="container">
-                <div class="hero-content">
-                    <h1 class="hero-title">VibeRemote 服务端部署</h1>
-                </div>
+                <h1 class="hero-title">Linux 服务端手工部署</h1>
+                <p class="hero-subtitle">
+                    适用于公司内网、不可直连发布环境的场景。先从门户下载服务端部署包，再上传到目标 Linux 服务器解压，
+                    修改一份配置文件并执行部署脚本，即可完成门户、控制台前端、后端和 Agent 安装资源的统一部署。
+                </p>
             </div>
         </section>
 
-        <!-- 部署方式选择 -->
         <section class="section">
             <div class="container">
-                <div class="deploy-method">
-                    <div class="method-card" onclick="selectMethod('docker')">
-                        <div class="method-icon">
-                            <span>🐳</span>
+                <div class="deploy-card">
+                    <h2>1. 下载服务端部署包</h2>
+                    <p>推荐先从当前门户下载最新版部署包，再传到目标服务器进行离线部署。页面会优先显示最新构建信息；如果清单不可用，也可以直接使用固定下载地址。</p>
+
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <div class="status-item-label">部署包文件</div>
+                            <div class="status-item-value" id="package-file-name">viberemote-server-deploy-package-latest.tar.gz</div>
                         </div>
-                        <h3>Docker 部署</h3>
-                        <p>推荐方式，快速简单</p>
+                        <div class="status-item">
+                            <div class="status-item-label">构建时间</div>
+                            <div class="status-item-value" id="package-built-at">待加载</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-item-label">后端版本</div>
+                            <div class="status-item-value" id="server-version">待加载</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-item-label">Agent 资源版本</div>
+                            <div class="status-item-value" id="agent-version">待加载</div>
+                        </div>
                     </div>
-                    
-                    <div class="method-card" onclick="selectMethod('manual')">
-                        <div class="method-icon">
-                            <span>⚙️</span>
-                        </div>
-                        <h3>手动部署</h3>
-                        <p>传统方式，完全控制</p>
+
+                    <div class="download-actions">
+                        <a id="package-download-link" class="btn btn-primary" href="/downloads/viberemote-server-deploy-package-latest.tar.gz">下载部署包</a>
+                        <a class="btn btn-secondary" href="#manual-steps">查看部署步骤</a>
                     </div>
-                    
-                    <div class="method-card" onclick="selectMethod('cloud')">
-                        <div class="method-icon">
-                            <span>☁️</span>
+
+                    <div class="info-box" id="package-manifest-message">
+                        部署包下载入口为固定地址：<code>/downloads/viberemote-server-deploy-package-latest.tar.gz</code>。如门户已同步构建清单，页面会自动显示最新版本信息。
+                    </div>
+
+                    <p class="muted">服务端部署脚本执行完成后，也会在目标环境门户中同步发布当前部署包和清单，便于后续复用。</p>
+                </div>
+
+                <div class="deploy-grid">
+                    <div class="deploy-card">
+                        <h2>2. 环境准备</h2>
+                        <ul>
+                            <li>一台 Linux 服务器，预装 <code>Java 8</code></li>
+                            <li>同一台服务器预装 <code>Nginx</code></li>
+                            <li>一个可访问的 MySQL 数据库</li>
+                            <li>数据库只需要先建库，不需要手工建表</li>
+                        </ul>
+                    </div>
+
+                    <div class="deploy-card">
+                        <h2>3. 数据库初始化说明</h2>
+                        <div class="success-box">
+                            服务端首次启动时会自动创建表结构和基础数据。
                         </div>
-                        <h3>云服务部署</h3>
-                        <p>一键部署到云平台</p>
+                        <ul>
+                            <li>业务表结构：自动创建</li>
+                            <li>默认管理员：<code>admin / admin123</code></li>
+                            <li>系统参数：自动初始化</li>
+                            <li>前提：数据库账号需要有建表和改表权限</li>
+                        </ul>
                     </div>
                 </div>
-            </div>
-        </section>
 
-        <!-- Docker 部署 -->
-        <section class="section" id="docker-deploy">
-            <div class="container">
+                <div class="deploy-card" id="manual-steps">
+                    <h2>4. 手工部署步骤</h2>
+                    <ol class="step-list">
+                        <li>
+                            <span class="step-number">1</span>
+                            <div>
+                                <h3>上传并解压部署包</h3>
+                                <p>先从门户下载部署包，再上传到目标 Linux 服务器。以下示例假定部署包已位于当前目录。</p>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyToClipboard('step-upload')">复制</button>
+                                    <pre id="step-upload">tar -xzf viberemote-server-deploy-package-latest.tar.gz
+cd viberemote-server-deploy-package-*</pre>
+                                </div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="step-number">2</span>
+                            <div>
+                                <h3>复制并修改部署配置</h3>
+                                <p>部署包里自带 <code>deploy.env.example</code>。你只需要复制为 <code>deploy.env</code> 并填写目标环境信息。</p>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyToClipboard('step-config')">复制</button>
+                                    <pre id="step-config">cp deploy.env.example deploy.env
+vi deploy.env</pre>
+                                </div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="step-number">3</span>
+                            <div>
+                                <h3>执行服务端部署脚本</h3>
+                                <p>脚本会自动检测 Java、Nginx、数据库连通性、部署用户、部署包完整性，并完成门户、前端、后端与 Agent 安装资源发布。</p>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyToClipboard('step-install')">复制</button>
+                                    <pre id="step-install">bash install-server.sh</pre>
+                                </div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="step-number">4</span>
+                            <div>
+                                <h3>执行部署后验证</h3>
+                                <p>如需单独再次验证，可以重复执行验证脚本。</p>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyToClipboard('step-verify')">复制</button>
+                                    <pre id="step-verify">bash verify-deploy.sh</pre>
+                                </div>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+
                 <div class="deploy-card">
-                    <h2 class="text-2xl font-bold mb-6 flex items-center">
-                        <span class="step-number">1</span>
-                        Docker 部署
-                    </h2>
+                    <h2>5. deploy.env 关键配置项</h2>
+                    <p>以下字段是首次部署时最需要确认的配置。其余字段部署包已提供默认值，可按需调整。</p>
+                    <table class="env-table">
+                        <tr>
+                            <th><code>PORTAL_PUBLIC_BASE_URL</code></th>
+                            <td>门户公网或内网访问地址，例如 <code>http://10.10.10.20</code></td>
+                        </tr>
+                        <tr>
+                            <th><code>ADMIN_PUBLIC_BASE_URL</code></th>
+                            <td>控制台前端地址，例如 <code>http://10.10.10.20:3000</code></td>
+                        </tr>
+                        <tr>
+                            <th><code>API_PUBLIC_BASE_URL</code></th>
+                            <td>后端地址，例如 <code>http://10.10.10.20:8080</code></td>
+                        </tr>
+                        <tr>
+                            <th><code>DB_URL</code></th>
+                            <td>MySQL JDBC 地址，库需要你提前建好</td>
+                        </tr>
+                        <tr>
+                            <th><code>DB_USERNAME</code> / <code>DB_PASSWORD</code></th>
+                            <td>数据库账号与密码，建议具备建表和改表权限</td>
+                        </tr>
+                        <tr>
+                            <th><code>REGISTER_TOKEN</code></th>
+                            <td>Agent 注册令牌，一键安装脚本会自动写入客户端配置</td>
+                        </tr>
+                        <tr>
+                            <th><code>WEB_ENCRYPTION_KEY</code></th>
+                            <td>控制台前后端通信加密密钥，建议使用随机生成值</td>
+                        </tr>
+                    </table>
 
-                    <h3 class="text-xl font-semibold mb-4">系统要求</h3>
-                    <ul class="requirements-list mb-6">
-                        <li>Docker 20.10+ 和 Docker Compose 2.0+</li>
-                        <li>2GB+ 可用内存</li>
-                        <li>10GB+ 可用磁盘空间</li>
-                        <li>开放端口：8080 (Web服务), 3000 (前端)</li>
-                    </ul>
-
-                    <h3 class="text-xl font-semibold mb-4">快速启动</h3>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('docker-quick')">复制</button>
-                        <pre id="docker-quick"># 下载 docker-compose.yml
-curl -O https://raw.githubusercontent.com/viberemote/viberemote/main/docker-compose.yml
-
-# 启动服务
-docker-compose up -d
-
-# 查看状态
-docker-compose ps</pre>
-                    </div>
-
-                    <h3 class="text-xl font-semibold mb-4">完整部署步骤</h3>
-                    
-                    <h4 class="font-semibold mb-2">1. 创建部署目录</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('docker-setup')">复制</button>
-                        <pre id="docker-setup">mkdir viberemote-server
-cd viberemote-server</pre>
-                    </div>
-
-                    <h4 class="font-semibold mb-2">2. 创建 docker-compose.yml</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('docker-compose')">复制</button>
-                        <pre id="docker-compose">version: '3.8'
-
-services:
-  viberemote-server:
-    image: viberemote/server:latest
-    container_name: viberemote-server
-    ports:
-      - "8080:8080"
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - DATABASE_URL=jdbc:h2:file:/data/viberemote
-    volumes:
-      - ./data:/data
-      - ./logs:/app/logs
-    restart: unless-stopped
-    depends_on:
-      - viberemote-web
-
-  viberemote-web:
-    image: viberemote/web:latest
-    container_name: viberemote-web
-    ports:
-      - "3000:80"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8080
-    restart: unless-stopped
-
-volumes:
-  data:
-  logs:</pre>
-                    </div>
-
-                    <h4 class="font-semibold mb-2">3. 启动服务</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('docker-start')">复制</button>
-                        <pre id="docker-start"># 启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down</pre>
+                    <div class="info-box">
+                        <div><code>AGENT_PACKAGE_BASE_URL</code> 留空时，会按 <code>PORTAL_PUBLIC_BASE_URL/agent/release</code> 自动推导。</div>
+                        <div><code>JWT_SECRET</code> 留空时，会自动生成并保存到部署目录下的 <code>deploy-generated.env</code>。</div>
                     </div>
 
                     <div class="warning-box">
-                        <div class="warning-title">⚠️ 注意事项</div>
-                        <div class="warning-text">
-                            • 首次启动可能需要几分钟下载镜像<br>
-                            • 确保端口 8080 和 3000 未被占用<br>
-                            • 数据将保存在 ./data 目录中
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- 手动部署 -->
-        <section class="section" id="manual-deploy">
-            <div class="container">
-                <div class="deploy-card">
-                    <h2 class="text-2xl font-bold mb-6 flex items-center">
-                        <span class="step-number">2</span>
-                        手动部署
-                    </h2>
-
-                    <h3 class="text-xl font-semibold mb-4">系统要求</h3>
-                    <ul class="requirements-list mb-6">
-                        <li>Java 8+ (推荐 Java 11)</li>
-                        <li>Node.js 16+ 和 npm/yarn</li>
-                        <li>2GB+ 可用内存</li>
-                        <li>10GB+ 可用磁盘空间</li>
-                    </ul>
-
-                    <h3 class="text-xl font-semibold mb-4">部署步骤</h3>
-                    
-                    <h4 class="font-semibold mb-2">1. 下载服务端</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('manual-download')">复制</button>
-                        <pre id="manual-download"># 下载服务端
-wget https://github.com/viberemote/viberemote/releases/latest/download/viberemote-server.jar
-
-# 下载前端
-wget https://github.com/viberemote/viberemote/releases/latest/download/viberemote-web.tar.gz
-tar -xzf viberemote-web.tar.gz</pre>
-                    </div>
-
-                    <h4 class="font-semibold mb-2">2. 配置服务端</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('manual-config')">复制</button>
-                        <pre id="manual-config"># 创建配置文件 application.yml
-cat > application.yml << EOF
-server:
-  port: 8080
-
-spring:
-  datasource:
-    url: jdbc:h2:file:./data/viberemote
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
-
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-
-logging:
-  level:
-    com.example.viberemote: INFO
-  file:
-    name: logs/viberemote-server.log
-EOF</pre>
-                    </div>
-
-                    <h4 class="font-semibold mb-2">3. 启动服务端</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('manual-start-server')">复制</button>
-                        <pre id="manual-start-server"># 创建必要目录
-mkdir -p data logs
-
-# 启动服务端
-java -jar viberemote-server.jar --spring.config.location=application.yml
-
-# 后台运行
-nohup java -jar viberemote-server.jar --spring.config.location=application.yml > logs/server.log 2>&1 &</pre>
-                    </div>
-
-                    <h4 class="font-semibold mb-2">4. 部署前端</h4>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('manual-start-web')">复制</button>
-                        <pre id="manual-start-web"># 安装依赖
-cd viberemote-web
-npm install
-
-# 构建生产版本
-npm run build
-
-# 使用 nginx 或其他 web 服务器部署 build 目录
-# 或者使用 serve 快速启动
-npx serve -s build -l 3000</pre>
-                    </div>
-
-                    <div class="warning-box">
-                        <div class="warning-title">⚠️ 生产环境建议</div>
-                        <div class="warning-text">
-                            • 使用 systemd 或其他进程管理器管理服务<br>
-                            • 配置 nginx 反向代理<br>
-                            • 使用外部数据库（MySQL/PostgreSQL）<br>
-                            • 配置 SSL 证书
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- 云服务部署 -->
-        <section class="section" id="cloud-deploy">
-            <div class="container">
-                <div class="deploy-card">
-                    <h2 class="text-2xl font-bold mb-6 flex items-center">
-                        <span class="step-number">3</span>
-                        云服务部署
-                    </h2>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- 阿里云 -->
-                        <div class="deploy-card">
-                            <h3 class="text-xl font-semibold mb-4">🚀 阿里云 ECS</h3>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('aliyun-deploy')">复制</button>
-                                <pre id="aliyun-deploy"># 一键部署脚本
-curl -fsSL https://viberemote.com/scripts/deploy-aliyun.sh | bash</pre>
-                            </div>
-                            <p class="text-sm text-gray-600 mt-2">
-                                自动配置安全组、安装 Docker 并启动服务
-                            </p>
-                        </div>
-
-                        <!-- 腾讯云 -->
-                        <div class="deploy-card">
-                            <h3 class="text-xl font-semibold mb-4">☁️ 腾讯云 CVM</h3>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('tencent-deploy')">复制</button>
-                                <pre id="tencent-deploy"># 一键部署脚本
-curl -fsSL https://viberemote.com/scripts/deploy-tencent.sh | bash</pre>
-                            </div>
-                            <p class="text-sm text-gray-600 mt-2">
-                                自动配置防火墙、安装依赖并启动服务
-                            </p>
-                        </div>
-
-                        <!-- AWS -->
-                        <div class="deploy-card">
-                            <h3 class="text-xl font-semibold mb-4">🌐 AWS EC2</h3>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('aws-deploy')">复制</button>
-                                <pre id="aws-deploy"># 一键部署脚本
-curl -fsSL https://viberemote.com/scripts/deploy-aws.sh | bash</pre>
-                            </div>
-                            <p class="text-sm text-gray-600 mt-2">
-                                自动配置安全组、安装 Docker 并启动服务
-                            </p>
-                        </div>
-
-                        <!-- Kubernetes -->
-                        <div class="deploy-card">
-                            <h3 class="text-xl font-semibold mb-4">⚓ Kubernetes</h3>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('k8s-deploy')">复制</button>
-                                <pre id="k8s-deploy"># 使用 Helm 部署
-helm repo add viberemote https://charts.viberemote.com
-helm install viberemote viberemote/viberemote</pre>
-                            </div>
-                            <p class="text-sm text-gray-600 mt-2">
-                                支持高可用部署和自动扩缩容
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- 验证部署 -->
-        <section class="section bg-gray-50">
-            <div class="container">
-                <div class="text-center mb-8">
-                    <h2 class="text-3xl font-bold mb-4">验证部署</h2>
-                </div>
-
-                <div class="deploy-card max-w-4xl mx-auto">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <h4 class="font-semibold mb-2">服务状态检查</h4>
-                            <div class="code-block">
-                                <button class="copy-btn" onclick="copyToClipboard('check-services')">复制</button>
-                                <pre id="check-services"># 检查服务端
-curl http://localhost:8080/health
-
-# 检查前端
-curl http://localhost:3000
-
-# Docker 方式检查
-docker-compose ps</pre>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 class="font-semibold mb-2">访问管理后台</h4>
-                            <p class="text-gray-600 mb-4">
-                                1. 打开浏览器访问 <code>http://your-server:3000</code><br>
-                                2. 使用默认账号登录：<br>
-                                   用户名：<code>admin</code><br>
-                                   密码：<code>admin123</code><br>
-                                3. 首次登录请修改默认密码
-                            </p>
-                        </div>
+                        本页只关注服务端首次部署。Agent 自动升级属于后续运维维护工作，不在首次部署步骤内。
                     </div>
                 </div>
 
-                <div class="text-center mt-8">
-                    <a href="http://8.138.114.34:3000/dashboard" class="btn btn-primary">进入管理后台</a>
+                <div class="deploy-grid">
+                    <div class="deploy-card">
+                        <h2>6. 部署脚本会自动完成什么</h2>
+                        <ul>
+                            <li>检测 Java 8、Nginx、数据库连通性</li>
+                            <li>生成 <code>application-prod.yml</code></li>
+                            <li>部署后端 <code>server.jar</code></li>
+                            <li>部署控制台前端到 Nginx 管理端口</li>
+                            <li>部署门户静态站点</li>
+                            <li>发布 Agent 安装包与一键安装脚本</li>
+                            <li>生成 Nginx 配置和后端启停脚本</li>
+                            <li>创建备份、启动服务并执行健康检查</li>
+                        </ul>
+                    </div>
+
+                    <div class="deploy-card">
+                        <h2>7. 部署后如何验证</h2>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('step-check')">复制</button>
+                            <pre id="step-check">bash /opt/viberemote/bin/status-backend.sh
+nginx -t
+
+curl http://127.0.0.1:8080/actuator/health
+curl http://127.0.0.1:3000/
+curl http://127.0.0.1/agent/release/version.json</pre>
+                        </div>
+
+                        <p class="muted">首次登录控制台后，请尽快修改默认管理员密码。</p>
+                    </div>
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- 页脚 -->
     <footer class="footer">
         <div class="container">
             <div class="footer-content">
@@ -609,49 +467,92 @@ docker-compose ps</pre>
                     <img src="assets/logo.svg" alt="VibeRemote" class="logo">
                     <span>VibeRemote</span>
                 </div>
-                <p class="footer-text">
-                    强大的分布式脚本执行平台
-                </p>
+                <p class="footer-text">面向内网环境的可复用服务端部署方案</p>
             </div>
         </div>
     </footer>
 
+    <script src="runtime-config.js"></script>
     <script>
-        function selectMethod(method) {
-            // 移除所有选中状态
-            document.querySelectorAll('.method-card').forEach(card => {
-                card.classList.remove('selected');
+        function getRuntimeConfig() {
+            return window.VIBE_REMOTE_CONFIG || {};
+        }
+
+        function trimTrailingSlash(value) {
+            return typeof value === 'string' ? value.replace(/\/+$/, '') : '';
+        }
+
+        function resolveDashboardUrl() {
+            const runtimeConfig = getRuntimeConfig();
+            const configuredDashboardUrl = trimTrailingSlash(runtimeConfig.dashboardUrl);
+            if (configuredDashboardUrl) {
+                return configuredDashboardUrl;
+            }
+
+            const configuredAdminBaseUrl = trimTrailingSlash(runtimeConfig.adminPublicBaseUrl);
+            if (configuredAdminBaseUrl) {
+                return `${configuredAdminBaseUrl}/dashboard`;
+            }
+
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            const currentPort = window.location.port;
+
+            let dashboardPort = '3000';
+            if (currentPort === '8002') {
+                dashboardPort = '3001';
+            } else if (currentPort === '3000' || currentPort === '3001') {
+                dashboardPort = currentPort;
+            }
+
+            return `${protocol}//${hostname}:${dashboardPort}/dashboard`;
+        }
+
+        function copyToClipboard(id) {
+            const element = document.getElementById(id);
+            const text = element.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const button = document.querySelector(`[onclick="copyToClipboard('${id}')"]`);
+                const original = button.textContent;
+                button.textContent = '已复制';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.textContent = original;
+                    button.classList.remove('copied');
+                }, 2000);
             });
-            
-            // 选中当前方法
-            event.target.closest('.method-card').classList.add('selected');
-            
-            // 滚动到对应部署方式
-            const targetSection = document.getElementById(method + '-deploy');
-            if (targetSection) {
-                targetSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function loadPackageManifest() {
+            const manifestMessage = document.getElementById('package-manifest-message');
+            try {
+                const portalBaseUrl = trimTrailingSlash(getRuntimeConfig().portalPublicBaseUrl);
+                const manifestUrl = portalBaseUrl
+                    ? `${portalBaseUrl}/downloads/server-deploy-manifest.json`
+                    : '/downloads/server-deploy-manifest.json';
+                const response = await fetch(manifestUrl, { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const manifest = await response.json();
+                document.getElementById('package-file-name').textContent = manifest.fileName || 'viberemote-server-deploy-package-latest.tar.gz';
+                document.getElementById('package-built-at').textContent = manifest.builtAt || '未知';
+                document.getElementById('server-version').textContent = manifest.serverVersion || '未知';
+                document.getElementById('agent-version').textContent = manifest.agentVersion || '未知';
+                document.getElementById('package-download-link').href = manifest.downloadUrl || '/downloads/viberemote-server-deploy-package-latest.tar.gz';
+                manifestMessage.textContent = '已加载最新部署包清单，可直接下载最新版服务端部署包。';
+            } catch (error) {
+                manifestMessage.textContent = '当前未检测到部署包清单，仍可使用固定地址 /downloads/viberemote-server-deploy-package-latest.tar.gz 下载。';
             }
         }
 
-        function copyToClipboard(elementId) {
-            const element = document.getElementById(elementId);
-            const text = element.textContent;
-            
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = element.parentElement.querySelector('.copy-btn');
-                const originalText = btn.textContent;
-                btn.textContent = '已复制';
-                btn.classList.add('copied');
-                
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('复制失败:', err);
-                alert('复制失败，请手动选择文本复制');
+        document.addEventListener('DOMContentLoaded', () => {
+            const dashboardUrl = resolveDashboardUrl();
+            document.querySelectorAll('[data-dashboard-link]').forEach((link) => {
+                link.href = dashboardUrl;
             });
-        }
+            loadPackageManifest();
+        });
     </script>
 </body>
 </html>
