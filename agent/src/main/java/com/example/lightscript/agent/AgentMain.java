@@ -1,6 +1,7 @@
 package com.example.lightscript.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
@@ -78,8 +79,15 @@ public class AgentMain {
             osType = "LINUX";
         }
 
-        // 创建HTTP客户端
-        CloseableHttpClient client = HttpClients.createDefault();
+        // 创建HTTP客户端，设置超时避免网络中断时主线程永久阻塞
+        RequestConfig defaultRequestConfig = RequestConfig.custom()
+                .setConnectTimeout(10_000)       // 建立连接超时 10s
+                .setConnectionRequestTimeout(10_000) // 从连接池获取连接超时 10s
+                .setSocketTimeout(60_000)        // 读取响应超时 60s（心跳/拉任务正常在1s内完成）
+                .build();
+        CloseableHttpClient client = HttpClients.custom()
+                .setDefaultRequestConfig(defaultRequestConfig)
+                .build();
         AgentApi api = new AgentApi(server, client, MAPPER);
 
         // 初始化屏幕截图服务（仅 Windows / macOS）
